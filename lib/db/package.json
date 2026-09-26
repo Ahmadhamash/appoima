@@ -1,0 +1,32 @@
+{
+  "name": "@workspace/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "push": "drizzle-kit push --config ./drizzle.config.ts && node scripts/install-scheduling-guards.mjs && node scripts/install-inventory-guards.mjs",
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts && node scripts/install-scheduling-guards.mjs && node scripts/install-inventory-guards.mjs",
+    "generate": "node scripts/prepare-snapshots.mjs && drizzle-kit generate --config ./drizzle.config.ts",
+    "migrate": "drizzle-kit migrate --config ./drizzle.config.ts",
+    "adopt-phase1": "node scripts/adopt-phase1.mjs",
+    "prepare-snapshots": "node scripts/prepare-snapshots.mjs",
+    "install-scheduling-guards": "node scripts/install-scheduling-guards.mjs",
+    "install-inventory-guards": "node scripts/install-inventory-guards.mjs"
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "drizzle-zod": "^0.8.3",
+    "pg": "^8.23.0",
+    "zod": "catalog:",
+    "@workspace/service-definition": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10"
+  }
+}

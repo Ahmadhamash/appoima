@@ -1,0 +1,66 @@
+{
+  "scope": "Source/package validation only; not runtime/API/browser acceptance",
+  "javascriptSyntax": [
+    "artifacts/api-server/build.mjs",
+    "lib/db/scripts/adopt-phase1.mjs",
+    "lib/db/scripts/install-scheduling-guards.mjs",
+    "lib/db/scripts/prepare-snapshots.mjs",
+    "scripts/checks/phase2-offline.mjs",
+    "scripts/checks/phase3-browser.mjs",
+    "scripts/checks/phase3-offline.mjs"
+  ],
+  "shellSyntax": [
+    "scripts/checks/verify-phase2.sh",
+    "scripts/checks/verify-phase3.sh",
+    "scripts/post-merge.sh"
+  ],
+  "jsonParse": [
+    "artifacts/api-server/package.json",
+    "artifacts/api-server/tsconfig.json",
+    "artifacts/jormall/components.json",
+    "artifacts/jormall/package.json",
+    "artifacts/jormall/tsconfig.json",
+    "artifacts/mockup-sandbox/components.json",
+    "artifacts/mockup-sandbox/package.json",
+    "artifacts/mockup-sandbox/tsconfig.json",
+    "lib/api-client-react/package.json",
+    "lib/api-client-react/tsconfig.json",
+    "lib/api-spec/package.json",
+    "lib/api-zod/package.json",
+    "lib/api-zod/tsconfig.json",
+    "lib/db/migrations/meta/_journal.json",
+    "lib/db/package.json",
+    "lib/db/tsconfig.json",
+    "package.json",
+    "scripts/package.json",
+    "scripts/tsconfig.json",
+    "tsconfig.base.json",
+    "tsconfig.json",
+    "verification/phase3/changes-from-phase2.json",
+    "verification/phase3/package-checks.json"
+  ],
+  "priorMigrationHashes": {
+    "0000_phase1_baseline.sql": "df7794020f2552d55f817bb7ecaa78be923e532d99e48cbb3d674d0fe096d185",
+    "0001_phase2_manager_setup.sql": "151e0c4f7b387f27e3687a33445ec6835114f80650e7af8700282b9642c0bafe"
+  },
+  "phase3FrozenSchemaMatches": [
+    "audit.ts",
+    "setup.ts",
+    "scheduling.ts",
+    "users.ts",
+    "index.ts",
+    "clinics.ts"
+  ],
+  "warnings": [
+    "Hand-authored migrations and snapshot helper not executed.",
+    "Application typecheck, dependencies, API/DB, seed, build and browser checks remain blocked.",
+    "Old phase2 evidence/docs are historical, not a current acceptance result."
+  ],
+  "phase3ApiCasesDeclared": 33,
+  "migrationJournalTags": [
+    "0000_phase1_baseline",
+    "0001_phase2_manager_setup",
+    "0002_phase3_scheduling"
+  ],
+  "result": "passed source/package checks only"
+}

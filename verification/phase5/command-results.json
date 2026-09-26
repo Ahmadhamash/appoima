@@ -1,0 +1,52 @@
+{
+  "phase2-offline": {
+    "exitCode": 0,
+    "passed": true,
+    "log": "phase2-offline.txt"
+  },
+  "phase3-offline": {
+    "exitCode": 0,
+    "passed": true,
+    "log": "phase3-offline.txt"
+  },
+  "phase4-offline": {
+    "exitCode": 0,
+    "passed": true,
+    "log": "phase4-offline.txt"
+  },
+  "phase5-offline": {
+    "exitCode": 0,
+    "passed": true,
+    "log": "phase5-offline.txt"
+  },
+  "strict-dependency-free-types": {
+    "exitCode": 0,
+    "passed": true,
+    "log": "strict-dependency-free-types.txt"
+  },
+  "workspace-typecheck": {
+    "exitCode": 127,
+    "passed": false,
+    "log": "workspace-typecheck.txt"
+  },
+  "postgres-api-tests": {
+    "exitCode": 127,
+    "passed": false,
+    "log": "postgres-api-tests.txt"
+  },
+  "api-build": {
+    "exitCode": 127,
+    "passed": false,
+    "log": "api-build.txt"
+  },
+  "web-build": {
+    "exitCode": 127,
+    "passed": false,
+    "log": "web-build.txt"
+  },
+  "package-registry-probe": {
+    "exitCode": 6,
+    "passed": false,
+    "log": "package-registry-probe.txt"
+  }
+}

@@ -1,0 +1,26 @@
+PASS Exact beard-only service stays one service; unknown facts remain null
+PASS Templates never activate a service or prefill business facts
+PASS Stable-key correction updates one service and preserves unspecified facts
+PASS Scope change to all branches explicitly clears old branch key
+PASS Service-only boundary blocks every nonservice resource
+PASS Canonical duplicates and duplicate record IDs are rejected
+PASS New medical section and fields need no new template enum
+PASS Strict contract rejects code props, unknown keys and invalid versions
+PASS Field IDs, duplicate IDs, options and max-12 field cap are enforced
+PASS Medical review and unsupported capabilities block publication readiness
+PASS Public links become deduplicated opt-in suggestions, not draft mutations
+PASS Untrusted URL schemes/credentials never reach suggestion links
+PASS Manual source survives unrelated later AI turns
+PASS New wizard drafts require a service definition
+PASS Service wizard question focuses on missing facts, not new branches/staff
+PASS Required intake is enforced; explicit false is a valid boolean answer
+PASS Intake rejects unknown fields, invalid types, numbers and choices
+PASS Appointment snapshot retains old labels and values after service edits
+PASS Complete-record extractor handles partial Arabic JSON and escaped string lookalikes
+PASS SSE parser reconstructs split UTF-8/CRLF and requires a completed response
+PASS Provider failure/refusal/incomplete streams fail closed
+PASS Abort cancels a stalled reader instead of committing a draft
+PASS Real provider adapter emits valid service preview and validates final schema
+PASS Frontend stream API ignores stale previews and rejects missing commit
+
+24 offline tests passed.

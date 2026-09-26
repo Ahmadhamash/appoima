@@ -1,0 +1,13 @@
+{
+  "passed": 7,
+  "checks": [
+    "Actual service API schema accepts a reviewed medical definition",
+    "Actual service API schema rejects missing duration or price",
+    "Active service requires medical review and no unsupported capabilities",
+    "Legacy services remain valid without a definition; inactive drafts may await review",
+    "Actual booking API defaults legacy callers to empty intake",
+    "Actual booking API accepts bounded scalar answers and false",
+    "Actual booking API rejects nested answers and oversized payloads"
+  ],
+  "scope": "Actual API Zod schemas. Offline Zod runtime recovered from the original supplied server sourcemap; no database executed."
+}

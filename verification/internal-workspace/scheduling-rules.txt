@@ -1,0 +1,96 @@
+PASS manager can open permitted scheduling
+PASS other_staff can open permitted scheduling
+PASS doctor can open permitted scheduling
+PASS service_provider can open permitted scheduling
+PASS manager status alone does not bypass permissions
+PASS platform owner cannot operate clinic scheduling
+PASS unscoped doctor rejected
+PASS own assigned provider can read
+PASS provider cannot read another employee
+PASS explicit read allows other assignments
+PASS manage implies read
+PASS read does not imply booking permission
+PASS provider cannot book implicitly
+PASS manager cross-clinic denial
+PASS other_staff cross-clinic denial
+PASS doctor cross-clinic denial
+PASS service_provider cross-clinic denial
+PASS plain reader cannot see operational notes
+PASS assigned provider can write notes
+PASS provider with broader read cannot write others notes
+PASS manager can reschedule pending
+PASS manager can reschedule confirmed
+PASS cannot reschedule checked_in
+PASS cannot reschedule in_service
+PASS cannot reschedule completed
+PASS cannot reschedule cancelled
+PASS cannot reschedule no_show
+PASS provider cannot reschedule
+PASS all status edges known for pending
+PASS all status edges known for confirmed
+PASS all status edges known for checked_in
+PASS all status edges known for in_service
+PASS all status edges known for completed
+PASS all status edges known for cancelled
+PASS all status edges known for no_show
+PASS pending requires confirmation before check-in
+PASS provider can start checked-in service
+PASS provider can finish in-service appointment
+PASS provider cannot confirm own pending appointment
+PASS completed is terminal
+PASS cancelled is terminal
+PASS no_show is terminal
+PASS status actions cannot cross clinics
+PASS canonical command payload ignores object order and undefined
+PASS canonical command keeps array order
+PASS adjacent reservations do not overlap
+PASS partial reservations overlap
+PASS contained reservation overlaps
+PASS leap day validates
+PASS impossible day rejected
+PASS malformed date rejected
+PASS date shift crosses year boundary
+PASS new doctor preset has no all-appointments grant
+PASS new provider preset has no all-appointments grant
+PASS provider navigation retains appointments without global read
+PASS 15-minute grid returns 30 starts for 8h day and 45min service
+PASS first slot fits opening and service duration
+PASS last slot ends at closing
+PASS closed branch yields none
+PASS off-duty employee yields none
+PASS branch and employee hours intersect
+PASS service cannot span split shifts
+PASS break excludes intersecting slots but permits adjacent
+PASS UTC time off excludes intersecting appointments
+PASS all past starts excluded
+PASS exact current instant is not offered
+PASS employee busy removes overlap regardless of room
+PASS other employee irrelevant without room requirement
+PASS required room absent yields no slots
+PASS compatible room deterministic allocation
+PASS occupied first room falls back to compatible alternative
+PASS all rooms busy suppresses overlapping starts
+PASS adjacent employee reservation allowed
+PASS required room remains reserved for full service interval
+PASS invalid service duration produces none
+PASS too-long service produces none
+PASS invalid booking date produces none
+PASS non-hour duration preserved
+PASS UTC wall conversion round-trip
+PASS Asia/Amman branch-local slot round-trip
+PASS Asia/Kathmandu branch-local slot round-trip
+PASS Pacific/Kiritimati branch-local slot round-trip
+PASS DST spring nonexistent time skipped
+PASS DST repeated wall time skipped
+PASS DST transition never stretches real service duration
+PASS all literal UI translation keys exist in both dictionaries
+PASS all scheduling error codes have English and Arabic copy
+PASS custom scheduling validation messages are localized
+PASS both SQL exclusion declarations and guard wrapper present (source only)
+PASS guard SQL in migration matches runtime installation source
+{
+  "syntaxFiles": 274,
+  "phase3OfflineChecks": 90,
+  "result": "passed",
+  "limitation": "Pure rules and source checks only; full workspace typecheck, API/PostgreSQL tests, migrations and browser acceptance have not run."
+}

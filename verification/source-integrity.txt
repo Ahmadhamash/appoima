@@ -1,0 +1,11 @@
+PASS JavaScript syntax: artifacts/api-server/build.mjs
+PASS JavaScript syntax: lib/db/scripts/adopt-phase1.mjs
+PASS JavaScript syntax: lib/db/scripts/prepare-snapshots.mjs
+PASS JavaScript syntax: scripts/checks/phase2-offline.mjs
+PASS shell syntax: scripts/checks/verify-phase2.sh
+PASS included JSON files parse
+PASS pnpm-lock.yaml unchanged from uploaded source
+PASS frozen Phase 1 schema matches uploaded original
+PASS frozen Phase 2 schema matches delivered active schema
+PASS 2 original API test files unchanged (not executed here)
+These checks do not execute migrations, the app or browser tests.

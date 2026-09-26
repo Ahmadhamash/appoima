@@ -1,0 +1,8 @@
+/** Strict check for the provider-independent contract and workflow, not the full application. */
+import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';
+const require=createRequire(import.meta.url),ts=require(process.env.TYPESCRIPT_PATH||'typescript'),root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const roots=['lib/service-definition/src/index.ts','artifacts/api-server/src/domain/concierge-core.ts','artifacts/api-server/src/domain/service-wizard.ts','artifacts/api-server/src/domain/concierge-workflow.ts','artifacts/api-server/src/concierge/response-stream.ts','artifacts/jormall/src/components/concierge/api.ts'];
+const program=ts.createProgram(roots.map(f=>path.join(root,f)),{noEmit:true,strict:true,noImplicitReturns:true,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,moduleResolution:ts.ModuleResolutionKind.Bundler,lib:['lib.es2022.d.ts','lib.dom.d.ts','lib.dom.iterable.d.ts'],baseUrl:root,paths:{'@workspace/service-definition':['lib/service-definition/src/index.ts']}});
+const diagnostics=ts.getPreEmitDiagnostics(program).map(d=>({file:d.file?path.relative(root,d.file.fileName):null,message:ts.flattenDiagnosticMessageText(d.messageText,'\n')}));
+const report={roots,passed:diagnostics.length===0,diagnostics,scope:'Strict TypeScript for these six roots and their local imports. Full workspace typecheck/build is separate and requires installed dependencies.'};
+fs.mkdirSync(path.join(root,'verification/service-wizard'),{recursive:true});fs.writeFileSync(path.join(root,'verification/service-wizard/typecheck-results.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));process.exitCode=diagnostics.length?1:0;

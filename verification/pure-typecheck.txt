@@ -1,0 +1,4 @@
+Strict TypeScript check — dependency-free modules only
+Command: tsc --noEmit --strict --target es2022 --skipLibCheck artifacts/api-server/src/domain/setup-rules.ts artifacts/jormall/src/lib/branch-time.ts artifacts/jormall/src/lib/i18n/en.ts artifacts/jormall/src/lib/i18n/ar.ts
+Version 5.8.3
+Exit code: 0

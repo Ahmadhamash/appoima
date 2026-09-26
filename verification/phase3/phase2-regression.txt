@@ -1,0 +1,42 @@
+PASS legacy branch single range normalized without data loss
+PASS empty week has no operational hours
+PASS configured week has operational hours
+PASS split shifts accepted
+PASS overlapping shifts rejected
+PASS adjacent shifts accepted
+PASS overnight ranges rejected explicitly
+PASS malformed times rejected
+PASS out-of-range clock rejected
+PASS valid break accepted
+PASS break outside work rejected
+PASS break on closed day rejected
+PASS valid leave accepted
+PASS reversed leave rejected
+PASS overlapping leave rejected
+PASS invalid leave dates rejected
+PASS Amman is a valid zone
+PASS UTC accepted
+PASS unknown zone rejected
+PASS timezone abbreviation rejected
+PASS manage implies read
+PASS grant held access accepted
+PASS grant unheld access blocked
+PASS read cannot grant manage
+PASS no implicit manager role bypass
+PASS different branches rejected
+PASS clinic-wide service accepted
+PASS clinic-wide employee accepted
+PASS UTC wall time converts
+PASS Amman round-trip local time
+PASS fractional offset round-trip
+PASS DST spring gap rejected
+PASS DST fall ambiguous time rejected
+PASS invalid local date rejected
+PASS EN and AR dictionaries have identical keys
+PASS EN/AR placeholders agree
+{
+  "syntaxFiles": 196,
+  "offlineChecks": 36,
+  "result": "passed",
+  "limitation": "Syntax and pure business rules only. Full typecheck, PostgreSQL API tests and real browser acceptance are separate."
+}

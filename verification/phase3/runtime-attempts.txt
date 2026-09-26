@@ -1,0 +1,62 @@
+Execution attempts in editing container (not application acceptance)
+UTC timestamp: 2026-09-21T12:24:46.487410+00:00
+Application dependencies: False
+DATABASE_URL supplied: False
+SESSION_SECRET supplied: False
+
+$ node --version
+v22.16.0
+exit=0
+
+$ pnpm install --frozen-lockfile
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm run typecheck
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/api-server run test
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/db run push
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/db run generate
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/db run migrate
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/api-server run build
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/jormall run build
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ pnpm --filter @workspace/api-server run seed
+FileNotFoundError: [Errno 2] No such file or directory: 'pnpm'
+
+$ psql --version
+FileNotFoundError: [Errno 2] No such file or directory: 'psql'
+
+$ curl -I --max-time 8 https://registry.npmjs.org/pnpm/latest
+% Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0curl: (6) Could not resolve host: registry.npmjs.org
+exit=6
+
+$ node scripts/checks/phase3-browser.mjs
+file:///mnt/data/phase3-work/JorMall-Clinic-Staff-App/scripts/checks/phase3-browser.mjs:11
+if(process.env.E2E_ALLOW_WRITE!=='1')throw new Error('Use a disposable database. Explicit E2E_ALLOW_WRITE=1 is required; this creates test records.');
+                                           ^
+
+Error: Use a disposable database. Explicit E2E_ALLOW_WRITE=1 is required; this creates test records.
+    at file:///mnt/data/phase3-work/JorMall-Clinic-Staff-App/scripts/checks/phase3-browser.mjs:11:44
+    at ModuleJob.run (node:internal/modules/esm/module_job:274:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:644:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+
+Node.js v22.16.0
+exit=1
+
+API/web workflows were not restarted: no runnable dependencies/database. Browser script refusal is a prerequisite check, not a UI pass/fail. No production systems were contacted or modified.

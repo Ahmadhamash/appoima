@@ -1,0 +1,25 @@
+import type { WorkspaceDraft,WorkspaceFact } from '@workspace/service-definition';
+import type { ServiceDefinition } from '@workspace/service-definition';
+/** Browser DTOs only. Authoritative validation and authorization live on the server. */
+export type Language = 'ar'|'en';
+export type Stage='name'|'choice'|'conversation'|'complete'|'manual';
+export const DAYS=['mon','tue','wed','thu','fri','sat','sun'] as const;
+export type Week=Record<(typeof DAYS)[number],{open:string;close:string}[]>;
+export type BranchDraft={key:string;existingId:number|null;name:string|null;nameLang:Language|null;timeZone:string|null;openingHours:Week|null};
+export type ServiceDraft={definition?:ServiceDefinition|null;branchScope?:'all'|'branch'|null;employeeIds?:number[]|null;roomIds?:number[]|null;key:string;name:string|null;nameLang:Language|null;branchKey:string|null;durationMinutes:number|null;price:string|null;currency:string|null;category:'Hair'|'Nails'|'Skin'|'Laser'|'Massage'|'Makeup'|'Other'|null;requiresRoom:boolean|null};
+export type RoomDraft={key:string;name:string|null;nameLang:Language|null;branchKey:string|null;capacity:number|null;serviceKeys:string[]|null};
+export type StaffDraft={key:string;name:string|null;nameLang:Language|null;email:string|null;phone:string|null;jobTitle:string|null;branchKey:string|null;role:'secretary'|'doctor'|'service_provider'|'other_staff'|null;serviceKeys:string[]|null;workingHours:Week|null;breaks:Week|null};
+export type Draft={branches:BranchDraft[];services:ServiceDraft[];rooms:RoomDraft[];staff:StaffDraft[]};
+export type Kind=keyof Draft;
+export const KINDS:Kind[]=['branches','services','rooms','staff'];
+export type BusinessDetails={logoDataUrl:string|null;colors:string[];website:string|null;branches:{name:string;detail:string;sourceUrl:string}[];services:{name:string;detail:string;sourceUrl:string}[];status:'found'|'partial'|'unavailable'};
+export type CompanyCandidate={workspaceFacts?:WorkspaceFact[];linkWarnings?:{url:string;code:string}[];details?:BusinessDetails;name:string;summary:string;industry:string|null;location:string|null;website:string|null;sources:{title:string;url:string}[];found:boolean};
+export type SetupWorkflow={focus?:{resource:string;key:string;field:string}|null;step:'company'|'branches'|'services'|'rooms'|'staff'|'review';label:string;index:number;total:number;prompt:string;completed:string[]};
+export type ServiceSource={kind:'manual'|'conversation'|'public';label:string;url:string|null};
+export type ServiceSuggestion={key:string;name:string;detail:string;sourceUrl:string};
+export type ServiceOptions={branches:{id:number;key:string;name:string}[];employees:{id:number;name:string;branchId:number|null}[];rooms:{id:number;name:string;branchId:number;status:string}[]};
+export type Session={workspace?:WorkspaceDraft|null;serviceWizard?:boolean;entryMode?:'manual'|'voice'|'text';serviceSources?:Record<string,ServiceSource>;serviceSuggestions?:ServiceSuggestion[];sourceImport?:boolean;branding?:{name:string;details:BusinessDetails}|null;workflow?:SetupWorkflow;revision:number;stage:Stage;preferredName:string|null;language:Language;consented:boolean;draft:Draft;uploads:{id:string;name:string;size:number;status:'read'|'unreadable';summary:string}[];ui:'none'|'upload'|'review';navigation:string|null;companyCandidate:CompanyCandidate|null;companyCandidates?:CompanyCandidate[];companyProfile:CompanyCandidate|null;companyChecked:boolean;message:{id:string;role:'assistant';text:string};busy:boolean;applied:Record<string,number[]>|null};
+export type Capabilities={localText?:boolean;publicLinks?:boolean;enabled:boolean;llm:boolean;tts:boolean;stt:boolean;voice:boolean;configuredOnly:true;missing:string[];formats:string[];uploadMaxBytes:number;voiceSeconds:number};
+export type Bootstrap={capabilities:Capabilities;session:Session|null;consentVersion:string};
+export type Review={revision:number;draft:Draft;issues:{key:string;field:string;code:string}[];staffAccess:{key:string;permissions:string[]}[];grantablePermissions:string[];options:{branches:{key:string;id:number;name:string;nameLang:Language;timeZone:string;openingHours:Week}[];services:{key:string;id:number;name:string;branchId:number|null}[]}};
+export type Provision={key:string;initialPassword:string;permissions:string[]};

@@ -1,0 +1,285 @@
+{
+  "baseline": "JorMall-Clinic-Staff-App-Phase5.zip",
+  "baselineSHA256": "46cdd0cfaef258b90e15cac869286b410ffb25449eec298579b6b6328e4548ea",
+  "new": [
+    {
+      "path": ".env.concierge.example",
+      "sha256": "071f1f296db49df363f7cc00398430577e2f2e2bc3f97de7a7ec5e6525a0af35"
+    },
+    {
+      "path": "VOICE_ONBOARDING_HANDOFF.md",
+      "sha256": "1e28840fa1f39dfb13731afb95f9b2ccf6656b772f0cd0321bb0ea7bfec80797"
+    },
+    {
+      "path": "artifacts/api-server/src/concierge/config.ts",
+      "sha256": "7f58241c1055c8b78e6abdbce3301a355d7bf7186694df9da7786ba11fcff401"
+    },
+    {
+      "path": "artifacts/api-server/src/concierge/providers.ts",
+      "sha256": "08136bf5925633af3893d8507af3834faf0256d90c37eebaa53b9b459effafd9"
+    },
+    {
+      "path": "artifacts/api-server/src/domain/concierge-core.ts",
+      "sha256": "f8deea280060fccc702e02153961b5b4655cdd3ea3fbab7d334646521f77456f"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/concierge.ts",
+      "sha256": "ae5039cad208ba98c8cd60fee850a7e021659dce59ea45706589379edd7d1223"
+    },
+    {
+      "path": "artifacts/api-server/src/services/concierge-setup.ts",
+      "sha256": "f5f1574d4ffe1435fc80129dfab4630659652fcd62f592d50d4f9b7e843ecf9b"
+    },
+    {
+      "path": "artifacts/api-server/src/services/concierge.ts",
+      "sha256": "f36aaadb0e45802dc54c6fb1f829cc106a69c43bb8ee517555ed8ce6f28b047a"
+    },
+    {
+      "path": "artifacts/api-server/src/test/concierge.test.ts",
+      "sha256": "c510276a94936ae5c3f223d43349109358dbc5f4182506d2d5be26dc5619ed78"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/api.ts",
+      "sha256": "d403c42ec9e2b2482701c789fe21bd095b1614b8baa9bf7d047156cf6de50ba2"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/concierge.css",
+      "sha256": "1bed3355226c04232d1ffae5ed7dc9749bf90c095c873ed852e27a00d57fd3bc"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/contract.ts",
+      "sha256": "2592d7a66275a3473c76e689a8c0b0ada5c3170e72a7cf9bb386375632908cab"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/copy.ts",
+      "sha256": "dbbb2add3233e466809b79755ba54b96b731351152fe451e9cf2a5d70f35f969"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/dom.ts",
+      "sha256": "d159a16446cf8da1245c7f7de3fd881c0cccd5bea1d313839fcd941bf66d3a1b"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/manager-concierge.tsx",
+      "sha256": "8c0903ef7565ff1407065c8bcc5172fa0e267dcc168b4ea21f1d50218e7abef7"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/orb.ts",
+      "sha256": "10c92bda3768f1fdd25c08f71c40ce081fdf052f8d710ce2901e2d69365a339d"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/review.ts",
+      "sha256": "9cf807fa6e23a9f8ebec80643a3ca8c1c180d85ce931a05f96478da25699783c"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/view.ts",
+      "sha256": "abd41eaff1412e575190652c85ebf88886d87d1b6fefc86c048400f696f171db"
+    },
+    {
+      "path": "artifacts/jormall/src/components/concierge/voice.ts",
+      "sha256": "c90ad57ea10ac8b9f294d209db4dd6aeb6489a7e52db68771140d2f68200291b"
+    },
+    {
+      "path": "docs/concierge/SETUP.md",
+      "sha256": "c08ba24c66c9c8886c3edd413846374bc7e49337b1a5d209a2bb68728ea353fd"
+    },
+    {
+      "path": "docs/phase5/README.md",
+      "sha256": "ed2f721b779f98ee5f83a2ab0a28be1ac49f7c5f92ffe60b3b8f6124b3f42e9c"
+    },
+    {
+      "path": "docs/phase5/replit.md",
+      "sha256": "8f4846976c11792c0b590b0a8b0ab4558e71fdd0e8d2896e6bbec3bc5e135bc9"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/audit.ts",
+      "sha256": "4b95a63dcec46e39add67aff02de41b5c7cbeb0c01a394639b2d5a28fbda4722"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/clinics.ts",
+      "sha256": "3772eb464ae9653bca6af4ab61bb6d54f94e8747ffcd54dc2767f81fa87089ba"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/concierge.ts",
+      "sha256": "45236a20cec3f3f327d8fb7595f986829812c547bdb32f4172acfe4f28b02c8a"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/index.ts",
+      "sha256": "f84c010bf7a02e14e80d4c78c34d062cd3dd8379f088eabaa73ffa00aa163a1a"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/operations.ts",
+      "sha256": "bc30933dfb792c9895fcb655845604c214a987140570475a09a1244d203738d9"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/scheduling.ts",
+      "sha256": "4df0434b81eed8eff297c5cac786921549a0550eae7719446a0b34a79ff9f907"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/setup.ts",
+      "sha256": "356a8f93f454f16a4c928221e243381c5ce681be69bcbd34f59d18b3a8cf5e41"
+    },
+    {
+      "path": "lib/db/migration-baseline/concierge/users.ts",
+      "sha256": "281cbad347d070a03ec46d451686f3f52a1e0e90a7bfc868aef8c09dca68407c"
+    },
+    {
+      "path": "lib/db/migrations/0004_manager_voice_concierge.sql",
+      "sha256": "6fe563c538d301db4624f579ff61e8c7f8fce23e39ba071c1940b4e8877cbb90"
+    },
+    {
+      "path": "lib/db/src/schema/concierge.ts",
+      "sha256": "45236a20cec3f3f327d8fb7595f986829812c547bdb32f4172acfe4f28b02c8a"
+    },
+    {
+      "path": "scripts/checks/build-concierge-ui-test.mjs",
+      "sha256": "64fc89822beb7262a521ff59f70845b0f726ed6faa3833cec58c10b7c1bbce6d"
+    },
+    {
+      "path": "scripts/checks/concierge-component-browser.py",
+      "sha256": "edaeed6db925387fddc8b185929dfc05ca627bc1f5ee5abab865b57fbc9a6ea3"
+    },
+    {
+      "path": "scripts/checks/concierge-offline.mjs",
+      "sha256": "287a4bb05c7a8c0158c6b45744e0075fabb45f2ab8c562ca89ee2dea06e83237"
+    },
+    {
+      "path": "scripts/checks/concierge-ui-harness.py",
+      "sha256": "6c05cfd4c1986888f79bf693cd5f89fa6491aee9568a44d9695a803805a18c91"
+    },
+    {
+      "path": "scripts/checks/verify-concierge.sh",
+      "sha256": "869d4cda475ffb8897cb61c12e45e376580aa269232f275ef12ed10bb19b6eac"
+    },
+    {
+      "path": "scripts/concierge-preflight.mjs",
+      "sha256": "76449fee8e662b05d8f204e0fc7906eb14a46ddeb4379d42b6cdcf052aa76b69"
+    },
+    {
+      "path": "verification/concierge/component-browser-results.json",
+      "sha256": "3166b184e1ab76409cd8cbc2c29315daa73b978719472669efe3362fa73c050d"
+    },
+    {
+      "path": "verification/concierge/component-browser.log",
+      "sha256": "01e7ed7bb896dc29c33cde2c7a17940572eb0acced8e123da5958793c2106701"
+    },
+    {
+      "path": "verification/concierge/concierge-offline.log",
+      "sha256": "5de2f841414f0308408ac9ba23936cfb59d7ec31b02cf0954954c0b38a340a19"
+    },
+    {
+      "path": "verification/concierge/core-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "verification/concierge/environment-preflight.log",
+      "sha256": "c7011d638377cdd515a2fb136c1792f8127d9a017b560718adf9a5918cca5ca8"
+    },
+    {
+      "path": "verification/concierge/frontend-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "verification/concierge/retained-phase2.log",
+      "sha256": "ef931f52f52751b39899e03ae287ec0c596e1861b4e6625c322822ad15ca2d1b"
+    },
+    {
+      "path": "verification/concierge/retained-phase3.log",
+      "sha256": "059a56e683559e8eab3e178b35f86251833547ced7407ef28e73cfa86f0e7ca1"
+    },
+    {
+      "path": "verification/concierge/retained-phase4.log",
+      "sha256": "824aaedb25cc5531ac44f946a36353e2386098ff625fe04a326fa75a18cd423d"
+    },
+    {
+      "path": "verification/concierge/retained-phase5.log",
+      "sha256": "b90a7cf93698e7b28b651606c4a3de6e71c58724ec028eb54fbc6ffc2d1cf9c5"
+    },
+    {
+      "path": "verification/concierge/runtime-attempts.log",
+      "sha256": "00eee470aefd609c6059790ecaf44bba5b6e2d728d95ca2428ca4e253413db97"
+    },
+    {
+      "path": "verification/concierge/source-syntax.log",
+      "sha256": "d5fe74d62d21bd37cecb335d98f470b1bf2eb5667d5c8572a7faa791d8f85820"
+    },
+    {
+      "path": "verification/concierge/summary.json",
+      "sha256": "80824de039a313629eb3a6adca48155e734c945161fcab4ac6b523a2ecbfa468"
+    },
+    {
+      "path": "verification/concierge/test-tone.mp3",
+      "sha256": "3b35ced3e4d706958c74be7aad46c3ca6c4495605b669583f1530b16ca5a3d03"
+    },
+    {
+      "path": "verification/concierge/ui-choice-mobile-en.png",
+      "sha256": "5e0c1dac6834dc398bcf67c61a61947a97f51d979a9cff12f7a3a5619d5a4a87"
+    },
+    {
+      "path": "verification/concierge/ui-conversation-desktop.png",
+      "sha256": "575ca042d8c44bbe35af5ca51c18e15654ae5a69995c54a2e88e9d5a7ffeb675"
+    },
+    {
+      "path": "verification/concierge/ui-name-desktop.png",
+      "sha256": "5c5e98fafdee19beab70486f1c32bbc341e189f9c8e03a9ec7bb57573cca83a8"
+    },
+    {
+      "path": "verification/concierge/ui-name-mobile-ar.png",
+      "sha256": "79c7e9aee12681875603e5924e1d5dfd2ff8ad135fabaf2ded969fb9d5beccab"
+    }
+  ],
+  "changed": [
+    {
+      "path": "README.md",
+      "beforeSHA256": "ed2f721b779f98ee5f83a2ab0a28be1ac49f7c5f92ffe60b3b8f6124b3f42e9c",
+      "afterSHA256": "8a46c953d61cc43e5d17c09963ae1b8fd95c2058be3732e748f713e31a9f4949"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/index.ts",
+      "beforeSHA256": "9b8ba5ea2f439faf98c4d556db4da283abb53f9c21cfa091d2ccc098b086dbfa",
+      "afterSHA256": "a0ce733c0635b28a9e6fb8f805b56e5d3d393e2115bcdc4d6092fe965fdbf028"
+    },
+    {
+      "path": "artifacts/jormall/src/components/app-shell.tsx",
+      "beforeSHA256": "f3eb58141fad09ecc1ae9990bbc7038f4ebdfbce26837367b2c792dbaba2dbb3",
+      "afterSHA256": "41a799cb85ee5d41fba529169667e0533d81a58e7c72c2f31f20c05e21cb5fc9"
+    },
+    {
+      "path": "lib/db/migrations/README.md",
+      "beforeSHA256": "ccdb1a18b5fe640b2d0cb7490512b8255a6619f5fcbba227c4beb6a5b741cddc",
+      "afterSHA256": "70b9e9e33b3b856da3e38b4482b937a8e034564176681abe79d49988b691e278"
+    },
+    {
+      "path": "lib/db/migrations/meta/_journal.json",
+      "beforeSHA256": "b5beba2c543d7819726050b2682a99bbb5405238c8a7ad5b6294244a546cfd3c",
+      "afterSHA256": "3480da7de7e331d8e9041d27d110a838c13004a7c21d386b8439f37e6144412a"
+    },
+    {
+      "path": "lib/db/scripts/prepare-snapshots.mjs",
+      "beforeSHA256": "995b5aad931f81cd4751d3b490e9dcb638acac61c021ce4c4d2931535156b2d9",
+      "afterSHA256": "eeb24dea433b4af39ac79c97e90fe9e23cec80d3703238d0d25721ed0b54bb3a"
+    },
+    {
+      "path": "lib/db/src/schema/index.ts",
+      "beforeSHA256": "9bd6400d263974b386f075ec474a29de4482696393188b1d99460ba90befe722",
+      "afterSHA256": "f84c010bf7a02e14e80d4c78c34d062cd3dd8379f088eabaa73ffa00aa163a1a"
+    },
+    {
+      "path": "package.json",
+      "beforeSHA256": "0eee75b762d97c72cbe42fafdb2229dcfccb8bd11f4b4cdd01803eb8b52e9686",
+      "afterSHA256": "a941f8a7c189e3898373e51f53907690e040eea56801ef7282252866de462cdd"
+    },
+    {
+      "path": "replit.md",
+      "beforeSHA256": "8f4846976c11792c0b590b0a8b0ab4558e71fdd0e8d2896e6bbec3bc5e135bc9",
+      "afterSHA256": "758ef36d75f766147026970b56f6e27054319eb6e73ab43a3cc1e0d70f290222"
+    }
+  ],
+  "removed": [],
+  "selfExcluded": "verification/concierge/change-manifest.json",
+  "preserved": {
+    "allBaselineFiles": true,
+    "pnpmLockfile": true,
+    "existingMigrations0000to0003": true,
+    "applicationDependenciesChanged": false
+  }
+}

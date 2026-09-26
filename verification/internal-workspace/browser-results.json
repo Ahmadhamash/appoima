@@ -1,0 +1,30 @@
+{
+  "passed": 22,
+  "failed": 0,
+  "checks": [
+    "Actual identity editor and signed-in surface render",
+    "Editing changes only the private preview",
+    "Unsaved local status and dirty callback are visible",
+    "Save to draft survives rerender but does not change active workspace",
+    "Only explicit confirmed save changes active workspace",
+    "Discard restores saved identity, not the abandoned text",
+    "Invalid identity stays editable and reports a field error",
+    "Failed save retains owner input and shows recovery error",
+    "Retry saves the same pending identity",
+    "Source fact has a source URL and does not overwrite a field",
+    "Explicit source selection saves the one fact and updates preview",
+    "Private mobile preview toggle is accessible",
+    "Arabic owner preview uses RTL and real localized labels",
+    "Arabic identity form fits a narrow mobile screen",
+    "Invalid logo format is rejected with visible feedback",
+    "Active ar internal surface at 1440px fits without horizontal overflow",
+    "Active en internal surface at 1440px fits without horizontal overflow",
+    "Active ar internal surface at 390px fits without horizontal overflow",
+    "Active en internal surface at 390px fits without horizontal overflow",
+    "Booking entry targets existing authenticated route",
+    "Owner content renders as text, never executable HTML",
+    "No JavaScript errors in production components"
+  ],
+  "consoleErrors": [],
+  "scope": "Actual WorkspaceIdentityPanel and workspaceSurface components in Chromium, with synthetic callbacks/store. Not a React application build or real HTTP/PostgreSQL flow. Screenshots explicitly identify this scope."
+}

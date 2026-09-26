@@ -1,0 +1,19 @@
+{
+  "roots": [
+    "lib/service-definition/src/index.ts",
+    "artifacts/api-server/src/domain/concierge-core.ts",
+    "artifacts/api-server/src/domain/service-wizard.ts",
+    "artifacts/api-server/src/domain/concierge-workflow.ts",
+    "artifacts/api-server/src/concierge/response-stream.ts",
+    "artifacts/jormall/src/components/concierge/api.ts",
+    "artifacts/api-server/src/domain/local-concierge.ts",
+    "artifacts/jormall/src/components/workspace/identity-panel.ts",
+    "artifacts/jormall/src/components/workspace/surface.ts",
+    "artifacts/api-server/src/concierge/linked-clinic.ts",
+    "artifacts/api-server/src/concierge/public-business-site.ts",
+    "artifacts/api-server/src/concierge/config.ts"
+  ],
+  "passed": true,
+  "diagnostics": [],
+  "scope": "Strict TypeScript for these listed roots and their local imports. Full workspace typecheck/build is separate and requires installed dependencies."
+}

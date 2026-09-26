@@ -1,0 +1,4 @@
+$ node /usr/local/slides_js/node_modules/typescript/bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution Bundler --skipLibCheck --noImplicitReturns --lib ES2022,DOM artifacts/api-server/src/domain/operations-rules.ts artifacts/api-server/src/domain/scheduling-rules.ts artifacts/api-server/src/domain/setup-rules.ts artifacts/api-server/src/domain/scheduling-time.ts artifacts/jormall/src/lib/i18n/en.ts artifacts/jormall/src/lib/i18n/ar.ts artifacts/jormall/src/lib/branch-time.ts
+
+exit=0
+Scope: seven dependency-free source files; no stubs, no full-workspace assertion.

@@ -1,0 +1,84 @@
+{
+  "delivery": "Manager voice onboarding source implementation on supplied Phase5 archive",
+  "date": "2026-09-22",
+  "releaseStatus": "CANDIDATE — full runtime and live provider acceptance pending",
+  "tests": {
+    "retainedOffline": {
+      "phase2": 36,
+      "phase3": 90,
+      "phase4": 93,
+      "phase5": 112,
+      "total": 331
+    },
+    "newOffline": {
+      "pure": 59,
+      "stubbedHttp": 13,
+      "sourceAssertions": 6,
+      "total": 78
+    },
+    "chromiumComponent": {
+      "passed": 33,
+      "uncaughtErrors": 0,
+      "transport": "Synthetic HTTP fixture via test bridge; actual production UI controller/DOM/canvas",
+      "renderPath": "Canvas2D fallback",
+      "notExercised": [
+        "Full React application",
+        "real authentication",
+        "PostgreSQL",
+        "live provider",
+        "real secure-origin microphone/AudioWorklet",
+        "WebGL rendering"
+      ]
+    },
+    "strictTypeScript": {
+      "dependencyFreeUiModules": 8,
+      "coreProviderEntryFiles": 3,
+      "result": "passed",
+      "notWorkspaceTypecheck": true
+    },
+    "activeTsTsxSyntax": {
+      "files": 260,
+      "errors": 0
+    },
+    "newPostgresExpressTests": {
+      "written": 24,
+      "executed": 0
+    }
+  },
+  "runtimeAttempts": {
+    "pnpmTypecheck": {
+      "exit": 127,
+      "reason": "pnpm command not found"
+    },
+    "apiTests": {
+      "exit": 127,
+      "reason": "pnpm command not found"
+    },
+    "apiBuild": {
+      "exit": 127,
+      "reason": "pnpm command not found"
+    },
+    "webBuild": {
+      "exit": 127,
+      "reason": "pnpm command not found"
+    },
+    "projectDependencies": "absent",
+    "postgresql": "absent",
+    "providerSecrets": "absent",
+    "liveCallsMade": false
+  },
+  "migration": {
+    "added": "0004_manager_voice_concierge.sql",
+    "existing0000to0003": "unchanged",
+    "handAuthored": true,
+    "executed": false,
+    "snapshotsGenerated": false
+  },
+  "notes": [
+    "Source preservation does not establish runtime feature parity.",
+    "Provider configuration presence is not live connection verification.",
+    "Browser screenshots are component acceptance evidence with synthetic background, not generated UI images used in the product.",
+    "No new application dependencies or fonts.",
+    "Initial passwords are entered in explicit review and excluded from model/assistant persistence."
+  ]
+}

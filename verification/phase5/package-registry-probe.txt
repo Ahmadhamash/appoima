@@ -1,0 +1,8 @@
+$ curl -I --max-time 5 https://registry.npmjs.org/pnpm
+
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0curl: (6) Could not resolve host: registry.npmjs.org
+
+Exit code: 6

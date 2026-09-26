@@ -1,0 +1,30 @@
+import { Router, type IRouter } from 'express';
+import { z } from 'zod';
+import { requireAuth, requirePasswordChanged } from '../middlewares/auth';
+import { waitingCreateSchema, waitingListSchema, waitingDecisionSchema, suggestionSchema, confirmReplacementSchema,
+  inventoryCreateSchema, inventoryListSchema, movementSchema, consumptionSchema } from '../domain/operations-validation';
+import { addWaitingEntry, listWaitingEntries, replacementView, suggestReplacement, declineWaitingEntry, confirmReplacement, refreshWaiting } from '../services/waiting-list';
+import { inventoryCatalog, createInventoryItem, listInventory, inventoryDetail, recordMovement, appointmentConsumption, recordAppointmentConsumption, serviceActualUse } from '../services/inventory';
+const router:IRouter=Router();
+const id=(v:unknown)=>z.coerce.number().int().positive().parse(v);
+const pagination=z.object({page:z.coerce.number().int().min(1).max(100000).default(1),pageSize:z.coerce.number().int().min(1).max(50).default(20)}).strict();
+router.use('/clinic/waiting-list',requireAuth,requirePasswordChanged);
+router.use('/clinic/inventory',requireAuth,requirePasswordChanged);
+router.get('/clinic/waiting-list',async(req,res)=>{res.json(await listWaitingEntries(req.user!,waitingListSchema.parse(req.query)));});
+router.post('/clinic/waiting-list',async(req,res)=>{res.status(201).json(await addWaitingEntry(req.user!,waitingCreateSchema.parse(req.body)));});
+router.post('/clinic/waiting-list/refresh',async(req,res)=>{res.json(await refreshWaiting(req.user!,suggestionSchema.parse(req.body)));});
+router.post('/clinic/waiting-list/:id/decline',async(req,res)=>{res.json(await declineWaitingEntry(req.user!,id(req.params.id),waitingDecisionSchema.parse(req.body)));});
+router.post('/clinic/waiting-list/offers/:id/confirm',async(req,res)=>{
+  const result=await confirmReplacement(req.user!,id(req.params.id),confirmReplacementSchema.parse(req.body));res.status('error' in result?409:200).json(result);
+});
+router.get('/clinic/appointments/:id/replacement',requireAuth,requirePasswordChanged,async(req,res)=>{res.json(await replacementView(req.user!,id(req.params.id)));});
+router.post('/clinic/appointments/:id/replacement/suggest',requireAuth,requirePasswordChanged,async(req,res)=>{res.json(await suggestReplacement(req.user!,id(req.params.id),suggestionSchema.parse(req.body)));});
+router.get('/clinic/inventory/catalog',async(req,res)=>{res.json(await inventoryCatalog(req.user!));});
+router.get('/clinic/inventory/items',async(req,res)=>{res.json(await listInventory(req.user!,inventoryListSchema.parse(req.query)));});
+router.post('/clinic/inventory/items',async(req,res)=>{res.status(201).json(await createInventoryItem(req.user!,inventoryCreateSchema.parse(req.body)));});
+router.get('/clinic/inventory/items/:id',async(req,res)=>{const q=pagination.parse(req.query);res.json(await inventoryDetail(req.user!,id(req.params.id),q.page,q.pageSize));});
+router.post('/clinic/inventory/items/:id/movements',async(req,res)=>{res.status(201).json(await recordMovement(req.user!,id(req.params.id),movementSchema.parse(req.body)));});
+router.get('/clinic/appointments/:id/consumption',requireAuth,requirePasswordChanged,async(req,res)=>{res.json(await appointmentConsumption(req.user!,id(req.params.id)));});
+router.post('/clinic/appointments/:id/consumption',requireAuth,requirePasswordChanged,async(req,res)=>{res.json(await recordAppointmentConsumption(req.user!,id(req.params.id),consumptionSchema.parse(req.body)));});
+router.get('/clinic/services/:id/actual-use',requireAuth,requirePasswordChanged,async(req,res)=>{const q=pagination.parse(req.query);res.json(await serviceActualUse(req.user!,id(req.params.id),q.page,q.pageSize));});
+export default router;

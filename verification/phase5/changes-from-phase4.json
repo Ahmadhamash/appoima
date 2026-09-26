@@ -1,0 +1,91 @@
+{
+  "comparison": "SHA-256 of actual Phase 4 archive vs Phase 5",
+  "changedExistingFiles": [
+    {
+      "path": ".gitignore",
+      "beforeSha256": "7250c3cdf2ae18f986199262ac47c832e438867b83a0185fcfbf0c1e0e12b04a",
+      "afterSha256": "e3eb962453d61513aa3584e575499a0eb2d39164e7fee44b8230cf11bea6068c"
+    },
+    {
+      "path": "README.md",
+      "beforeSha256": "c36e980a2b0092532f8f3345eb3b7dcdb7bd96d1af80da60e31d88368d039398",
+      "afterSha256": "ed2f721b779f98ee5f83a2ab0a28be1ac49f7c5f92ffe60b3b8f6124b3f42e9c"
+    },
+    {
+      "path": "artifacts/api-server/package.json",
+      "beforeSha256": "29e3708c7edfdbeb33140b369bc01b8aef39115b505a012fd233b54bc541d797",
+      "afterSha256": "9a128ec797fee1929ef20cd324d7491fd02536c88824cbbc375aa1fccd60d3eb"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/index.ts",
+      "beforeSha256": "bcd9a7a1533ebc990618e6e7004f497b381eb9cd20b5dfba452dc6dfa2cde7ca",
+      "afterSha256": "9b8ba5ea2f439faf98c4d556db4da283abb53f9c21cfa091d2ccc098b086dbfa"
+    },
+    {
+      "path": "artifacts/jormall/src/components/app-shell.tsx",
+      "beforeSha256": "ccd7e11cc8fea0bab21740e8e908fcd52d640093b5e7ce311c39b0c524c1e53c",
+      "afterSha256": "f3eb58141fad09ecc1ae9990bbc7038f4ebdfbce26837367b2c792dbaba2dbb3"
+    },
+    {
+      "path": "artifacts/jormall/src/lib/i18n/ar.ts",
+      "beforeSha256": "f06c112c24933a6b4e290b6d7f2d4694b6f210873e29cc6bced867479e37be13",
+      "afterSha256": "33afa838826458ebac42f49d4d24a66d9a59ea6271610d93a618f8077d32426b"
+    },
+    {
+      "path": "artifacts/jormall/src/lib/i18n/en.ts",
+      "beforeSha256": "fd5ebff37785f758f7e7e31b5d9632114f7a9c6b7f83850289a856f00745cace",
+      "afterSha256": "fe43b089e0168bed06447d40fec093c6d8f4f8a53daee6c7aa176d53d16dfb45"
+    },
+    {
+      "path": "artifacts/jormall/src/pages/clinic/booking-page.tsx",
+      "beforeSha256": "55caa911b25fde9b8a1b052e2001eb6d0f3c5c066129ce61a09b3d53b535d229",
+      "afterSha256": "2796cb0c154cc5057eb579085936624f7e449e49291e94809cde67c236ba63d2"
+    },
+    {
+      "path": "replit.md",
+      "beforeSha256": "db8992f028f03a7a28db51fd015be0fd751a02fc41ad50ed33c895296e43b8a0",
+      "afterSha256": "8f4846976c11792c0b590b0a8b0ab4558e71fdd0e8d2896e6bbec3bc5e135bc9"
+    },
+    {
+      "path": "scripts/checks/phase4-offline.mjs",
+      "beforeSha256": "b7fdf5dd846235f4faef4dbe21ca6bb66ab16716bf86a0be42cc2cfefad766e6",
+      "afterSha256": "f74bb8c6842471070338cc9e3a0f85307e74b9dd09634eca69328628116c2baf"
+    }
+  ],
+  "newSourceAndDocumentationFiles": [
+    ".env.assistant.example",
+    "BROWSER_ACCEPTANCE_PHASE5.md",
+    "PHASE5_HANDOFF.md",
+    "artifacts/api-server/src/ai/config.ts",
+    "artifacts/api-server/src/ai/disabled.ts",
+    "artifacts/api-server/src/ai/index.ts",
+    "artifacts/api-server/src/ai/openai.ts",
+    "artifacts/api-server/src/ai/types.ts",
+    "artifacts/api-server/src/domain/assistant-budget.ts",
+    "artifacts/api-server/src/domain/assistant-format.ts",
+    "artifacts/api-server/src/domain/assistant-help.ts",
+    "artifacts/api-server/src/domain/assistant-rules.ts",
+    "artifacts/api-server/src/domain/assistant-validation.ts",
+    "artifacts/api-server/src/routes/assistant.ts",
+    "artifacts/api-server/src/scripts/verify-assistant-provider.ts",
+    "artifacts/api-server/src/services/assistant-context.ts",
+    "artifacts/api-server/src/services/assistant.ts",
+    "artifacts/api-server/src/test/assistant.test.ts",
+    "artifacts/jormall/src/components/assistant/assistant-panel.tsx",
+    "artifacts/jormall/src/components/assistant/assistant-tools.tsx",
+    "artifacts/jormall/src/lib/assistant-api.ts",
+    "artifacts/jormall/src/lib/assistant-booking-context.ts",
+    "docs/ASSISTANT_PHASE5.md",
+    "docs/phase4/README.md",
+    "docs/phase4/replit.md",
+    "scripts/checks/phase5-browser.mjs",
+    "scripts/checks/phase5-offline.mjs",
+    "scripts/checks/verify-phase5.sh"
+  ],
+  "removedFiles": [],
+  "unchangedProtectedFiles": 49,
+  "databaseSchemaMigrationsGuardsUnchanged": true,
+  "pnpmLockfileAndDependencyDeclarationsUnchanged": true,
+  "seedUnchanged": true,
+  "note": "Phase 5 verification artifacts are inventoried separately; self-referential hashes are excluded."
+}

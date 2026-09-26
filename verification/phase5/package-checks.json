@@ -1,0 +1,138 @@
+{
+  "result": "passed",
+  "typescriptSourceFiles": 265,
+  "typescriptParseDiagnostics": [],
+  "javascriptSyntaxFiles": 12,
+  "shellSyntaxFiles": 5,
+  "jsonFiles": 21,
+  "jsonFailures": [],
+  "scriptResults": [
+    {
+      "path": "artifacts/api-server/build.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "lib/db/scripts/adopt-phase1.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "lib/db/scripts/install-inventory-guards.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "lib/db/scripts/install-scheduling-guards.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "lib/db/scripts/prepare-snapshots.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase2-offline.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase3-browser.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase3-offline.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase4-browser.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase4-offline.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase5-browser.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/phase5-offline.mjs",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/verify-phase2.sh",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/verify-phase3.sh",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/verify-phase4.sh",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/checks/verify-phase5.sh",
+      "exitCode": 0,
+      "diagnostic": null
+    },
+    {
+      "path": "scripts/post-merge.sh",
+      "exitCode": 0,
+      "diagnostic": null
+    }
+  ],
+  "newPostgresApiCases": 37,
+  "newPostgresApiCaseNames": [
+    "requires sign-in",
+    "blocks initial-password users",
+    "local help needs no AI account and responses are private",
+    "returns Arabic FAQ answers",
+    "matches local text without a provider call",
+    "provider role receives assigned-work help without manager setup",
+    "rejects explicitly requested unauthorized FAQ topic",
+    "owner gets local owner help but no clinic tools",
+    "unprivileged staff retain help, not operational data",
+    "summary is live operational data without private notes/contacts",
+    "assigned doctor can summarize own appointment only",
+    "explicit appointment read can summarize others in same clinic",
+    "cross-clinic appointment is not visible",
+    "choices contain only assigned appointments for a doctor",
+    "choices reject caller clinic override and invalid date/page",
+    "checks permission again after access is revoked",
+    "reader cannot request slots, replies or waiting explanations",
+    "slots reuse schedules and are capped at eight",
+    "slots reject a foreign branch",
+    "pending reply is a draft rather than false confirmation",
+    "explains recorded waiting offer without refreshing or booking",
+    "waiting explanation rejects non-cancelled source",
+    "no mutation action, confirmation, SQL or tools can be smuggled into input",
+    "assistant has no confirmation/write endpoint",
+    "malformed and oversized questions fail",
+    "disabled provider returns clear unavailable and makes no HTTP call",
+    "provider consent is mandatory and not coerced",
+    "disabled provider path still denies underlying forbidden actions",
+    "actions flag blocks local tools but never disables help",
+    "records failed and successful audit metadata, not chat contents",
+    "external packet removes identity, clinical and free-text fields",
+    "configured adapter labels configuration as unverified",
+    "stubbed successful AI call returns reviewed wording and token metadata without writes",
+    "stubbed provider failure is sanitized and audited",
+    "model-supplied function calls cannot mutate data",
+    "permission revocation during provider latency suppresses generated output",
+    "record change during provider latency rejects stale generated output"
+  ],
+  "newPostgresApiCasesExecuted": false,
+  "scope": "Syntax/JSON only. Not full typechecking, builds, SQL or runtime API/browser validation."
+}

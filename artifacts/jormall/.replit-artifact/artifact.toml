@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "JorMall"
+description = "Internal staff web application for beauty and wellness clinics. Platform owner manages clinics and their managers; clinic managers set up branches, staff, services and rooms; secretaries book appointments; doctors and service providers work their schedules. English and Arabic (RTL)."
+version = "1.0.0"
+id = "artifacts/jormall"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19880
+
+[services.development]
+run = "pnpm --filter @workspace/jormall run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jormall", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/jormall/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19880"
+BASE_PATH = "/"

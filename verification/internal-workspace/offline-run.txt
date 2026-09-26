@@ -1,0 +1,32 @@
+PASS Identity starts from existing account name; optional facts stay unknown and colors are suggestions
+PASS Profile rejects executable fields, unsupported versions, missing names, malformed colors, SVG and credentials
+PASS No-op profile save is not dirty; explicit removal stays owner-confirmed
+PASS Source fact is opt-in, preserves unrelated owner values, and records provenance
+PASS Two identity drafts and records do not share mutable objects
+PASS Readable foreground has at least 4.5 contrast over sampled brand colors
+PASS Local text creates exactly the requested beard service with no assumed price, duration or room
+PASS Focused local answers and Arabic digits continue the same draft
+PASS Local identity correction preserves services; unknown prose never invents facts
+PASS Custom service remains custom, with medical scope unresolved for owner review
+PASS Unstructured text cannot rename a completed service
+PASS Manual deletion tombstones a service; old assistant patches cannot resurrect it
+PASS Links extract only supported metadata and explicitly declared services, never prose instructions
+PASS A directory containing multiple identities is ambiguous, not merged
+PASS Unavailable and conflicting source pages leave missing facts unresolved
+PASS Cross-host redirects do not establish clinic identity
+PASS Local SSRF policy rejects private, loopback, metadata and reserved IPv4 destinations
+PASS Public-link reader refuses non-HTTPS, credentials, IP URLs and custom ports before any fetch
+PASS Page raster signature rejects HTML/SVG payloads disguised as logos
+PASS Actual start/mode controllers resume isolated provider-free owner drafts
+PASS Actual local text controller saves one draft and identical request retries are idempotent
+PASS Switching manual and local-text modes and language retains all saved service/identity values
+PASS Saved setup identity never changes active workspace until owner confirmation
+PASS Identity-only save has idempotent confirmation and no new business records
+PASS Owner reopens and edits active identity without creating public URLs or publication objects
+PASS A stale identity revision from a second manager is rejected and remains recoverable
+PASS Staff management attempts, stale actor tenant IDs and disabled actors are rejected
+PASS Saved workspace service groups are tenant/branch scoped and permission filtered
+PASS Service-only setup blocks branch/staff mutations and stale draft writes
+PASS Expired conversation retention removes messages without dropping a saved service draft
+
+30 tests passed; see explicit scope in report.

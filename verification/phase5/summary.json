@@ -1,0 +1,49 @@
+{
+  "status": "source_implementation_candidate_not_verified_release",
+  "checkedAt": "2026-09-21T13:57:15.736618+00:00",
+  "baseArchive": "JorMall-Clinic-Staff-App-Phase4.zip",
+  "phase": "5 — optional assistant",
+  "passed": {
+    "offlineSuites": {
+      "phase2": 36,
+      "phase3": 90,
+      "phase4": 93,
+      "phase5": 112
+    },
+    "offlineTotal": 331,
+    "phase5Breakdown": {
+      "executablePureRulesAndContracts": 92,
+      "stubbedProviderHttpContracts": 11,
+      "sourceAssertions": 9
+    },
+    "typescriptSyntaxFiles": 265,
+    "strictDependencyFreeSubset": true,
+    "strictSubsetExplicitEntryFiles": 17,
+    "javascriptSyntaxFiles": 12,
+    "shellSyntaxFiles": 5,
+    "jsonSyntaxFiles": 21
+  },
+  "addedNotExecuted": {
+    "postgresApiCases": 37,
+    "browserRunner": "scripts/checks/phase5-browser.mjs",
+    "providerSmoke": "Explicit opt-in only, synthetic packet, not run"
+  },
+  "blocked": {
+    "fullWorkspaceTypecheck": "Attempted: pnpm missing (exit 127).",
+    "apiAndWebBuilds": "Attempted: pnpm missing (exit 127).",
+    "postgresApiTests": "Attempted command blocked by missing pnpm; no app dependencies or configured disposable PostgreSQL.",
+    "realBrowser": "Not run: API/web workflows not available. Runner syntax checked only.",
+    "liveProvider": "Not run: no authorized configured provider/model; no paid external request was made.",
+    "dependencyInstallation": "Registry probe failed DNS resolution.",
+    "migrationsAndGeneratedSnapshots": "Inherited four SQL migrations are hand-authored; no PostgreSQL/Drizzle migration or snapshot generation executed."
+  },
+  "unchangedByDesign": [
+    "database schema",
+    "four SQL migrations and journals",
+    "custom scheduling/inventory guards",
+    "pnpm lockfile/dependencies",
+    "seed and previously implemented business services"
+  ],
+  "phase5SchemaChange": false,
+  "nextStep": "Environment-backed full acceptance of all implemented phases; no unrequested Phase 6."
+}

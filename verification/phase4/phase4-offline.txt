@@ -1,0 +1,100 @@
+PASS RULE exact decimal parse 0
+PASS RULE exact decimal parse 1
+PASS RULE exact decimal parse 0.001
+PASS RULE exact decimal parse 12.34
+PASS RULE exact decimal parse -12.345
+PASS RULE exact decimal parse 9000000000
+PASS RULE exact decimal parse -0
+PASS RULE reject quantity "1e3"
+PASS RULE reject quantity "NaN"
+PASS RULE reject quantity "Infinity"
+PASS RULE reject quantity " 1"
+PASS RULE reject quantity "1 "
+PASS RULE reject quantity "01"
+PASS RULE reject quantity "+1"
+PASS RULE reject quantity ".1"
+PASS RULE reject quantity "1."
+PASS RULE reject quantity "0.0001"
+PASS RULE reject quantity "-01"
+PASS RULE reject quantity "9000000000.001"
+PASS RULE reject quantity ""
+PASS RULE reject quantity "1,5"
+PASS RULE decimal roundtrip 0
+PASS RULE decimal roundtrip 1
+PASS RULE decimal roundtrip -1
+PASS RULE decimal roundtrip 1000
+PASS RULE decimal roundtrip -1999
+PASS RULE decimal roundtrip 9000000000000
+PASS RULE decimal sum is exact, not floating point
+PASS RULE positive-only consumption excludes zero and negative
+PASS RULE signed adjustments exclude zero
+PASS RULE semantic material normalization sorts and fixes precision
+PASS RULE normalization does not mutate caller array
+PASS RULE duplicate material rejected
+PASS RULE negative material rejected
+PASS RULE 100 material lines accepted
+PASS RULE 101 material lines rejected
+PASS RULE same service fits whole vacancy
+PASS RULE shorter current service may fit
+PASS RULE longer service rejected
+PASS RULE zero duration rejected
+PASS RULE other branch rejected
+PASS RULE other service rejected
+PASS RULE matching preferred employee accepted
+PASS RULE other preferred employee rejected
+PASS RULE start before requested window rejected
+PASS RULE finish after requested window rejected
+PASS RULE exact requested boundaries accepted
+PASS RULE full preferred day converts to next local midnight
+PASS RULE assigned doctor with stock permission can record actual use
+PASS RULE assigned provider with stock permission can record
+PASS RULE other assigned doctor denied
+PASS RULE global appointment read does not authorize consuming for others
+PASS RULE inventory read alone cannot consume
+PASS RULE unprivileged manager denied
+PASS RULE authorized appointment manager can consume
+PASS RULE manager without inventory permission denied
+PASS RULE cross-clinic consumption denied
+PASS RULE platform owner cannot consume even with grants
+PASS RULE unit localized piece
+PASS RULE unit localized pair
+PASS RULE unit localized box
+PASS RULE unit localized ml
+PASS RULE unit localized l
+PASS RULE unit localized g
+PASS RULE unit localized kg
+PASS RULE waiting status localized waiting
+PASS RULE waiting status localized offered
+PASS RULE waiting status localized booked
+PASS RULE waiting status localized declined
+PASS RULE waiting status localized expired
+PASS RULE movement kind localized receipt
+PASS RULE movement kind localized adjustment
+PASS RULE movement kind localized consumption
+PASS SOURCE phase4 error codes have both localized dictionaries
+PASS SOURCE phase4 validation messages localized
+PASS SOURCE confirmation schema requires explicit true
+PASS SOURCE stale confirmation returns instead of rolling back decisions
+PASS SOURCE replacement shares booking slot implementation
+PASS SOURCE queue filters first and sorts by creation then id
+PASS SOURCE next offer not an automatic appointment write
+PASS SOURCE auth refreshed before operations idempotency replay
+PASS SOURCE inventory balance is not a writable model column
+PASS SOURCE consumption unique per appointment and line item
+PASS SOURCE immutable SQL guards cover update/delete/truncate
+PASS SOURCE deferred line-count checks cover header and lines
+PASS SOURCE database negative stock guard and stable item unit
+PASS SOURCE all phase4 constraint names represented in migration
+PASS SOURCE versioned migration embeds exactly the installed guards
+PASS SOURCE development push installs both guard sets
+PASS SOURCE service totals derive only from actual movement group
+PASS SOURCE completion invokes stock recording in same transaction
+PASS SOURCE operations routes precede generic scheduling routes
+PASS SOURCE phase5 provider not added
+{
+  "result": "passed",
+  "phase4RuleChecks": 73,
+  "phase4SourceAssertions": 20,
+  "total": 93,
+  "limitation": "These do not execute application dependencies, SQL, migrations, API requests, or a browser."
+}

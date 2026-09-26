@@ -1,0 +1,2 @@
+$ tsc --noEmit --strict --target es2022 --module commonjs --skipLibCheck artifacts/api-server/src/domain/setup-rules.ts artifacts/api-server/src/domain/scheduling-rules.ts artifacts/api-server/src/domain/scheduling-time.ts artifacts/jormall/src/lib/branch-time.ts artifacts/jormall/src/lib/i18n/en.ts artifacts/jormall/src/lib/i18n/ar.ts
+exit=0

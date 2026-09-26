@@ -1,0 +1,5 @@
+$ bash -c PORT=19880 BASE_PATH=/ pnpm --filter @workspace/jormall run build
+
+bash: line 1: pnpm: command not found
+
+Exit code: 127

@@ -1,0 +1,63 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
+import { PageHeader } from '@/components/app-shell';
+import { Button } from '@/components/ui/button';
+import { FormField, FormError } from '@/components/form-field';
+import { SelectField, CheckField } from '@/components/setup/controls';
+import { AppointmentList, Pagination } from '@/components/scheduling/appointment-list';
+import { DayBoard } from '@/components/scheduling/day-board';
+import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import {useManagerBranch} from '@/lib/manager-branch';
+import { useI18n, useErrorMessage } from '@/lib/i18n';
+import { useCatalog, queryString, localDate, STATUSES, type AppointmentList as ListResult } from '@/lib/scheduling-api';
+
+type View='day'|'week'|'calendar'|'allHistory';
+export default function AppointmentsView() {
+  const {t,lang,dir}=useI18n(),{user}=useAuth(),errorMessage=useErrorMessage();
+  const {selectedBranchId}=useManagerBranch();
+  const provider=user?.role==='doctor'||user?.role==='service_provider';
+  const [view,setView]=useState<View>('day'),[branchId,setBranchId]=useState(''),[serviceId,setServiceId]=useState(''),[employeeId,setEmployeeId]=useState(''),[status,setStatus]=useState(''),[mine,setMine]=useState(provider),[page,setPage]=useState(1);
+  useEffect(()=>{setBranchId(selectedBranchId?String(selectedBranchId):'');},[selectedBranchId]);
+  const [date,setDate]=useState(''),[month,setMonth]=useState('');
+  const catalog=useCatalog();
+  const zone=catalog.data?.branches.find((b)=>b.id===Number(branchId))?.timeZone??catalog.data?.branches.find((b)=>b.id===user?.branchId)?.timeZone??catalog.data?.branches[0]?.timeZone??'UTC';
+  useEffect(()=>{if(catalog.data&&!date){const today=localDate(zone);setDate(today);setMonth(today.slice(0,7));}},[catalog.data,date,zone]);
+  useEffect(()=>{setPage(1);},[view,branchId,serviceId,employeeId,status,mine,date]);
+  const filters={branchId:branchId||undefined,serviceId:serviceId||undefined,employeeId:employeeId||undefined,status:status||undefined,mine};
+  const q=useQuery({queryKey:['scheduling','list',view,filters,date,page],queryFn:()=>api<ListResult>(`/clinic/appointments?${queryString({...filters,date:view==='day'?date:undefined,page,pageSize:20})}`),enabled:(view==='day'||view==='allHistory')&&Boolean(date),refetchInterval:30000,refetchOnWindowFocus:true});
+  const validMonth=/^\d{4}-\d{2}$/.test(month), first=validMonth?`${month}-01`:'';
+  const last=validMonth?new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0,12)).toISOString().slice(0,10):'';
+  const counts=useQuery({queryKey:['scheduling','calendar',filters,month],queryFn:()=>api<{days:{date:string;count:number}[]}>(`/clinic/scheduling/calendar?${queryString({...filters,date:first,through:last})}`),enabled:view==='calendar'&&validMonth,refetchInterval:30000});
+  const days=validMonth?Array.from({length:Number(last.slice(8))},(_,i)=>`${month}-${String(i+1).padStart(2,'0')}`):[];
+  const blanks=validMonth?(new Date(`${first}T12:00:00Z`).getUTCDay()+6)%7:0;
+  const currentDate=/^\d{4}-\d{2}-\d{2}$/.test(date)?new Date(`${date}T12:00:00Z`):new Date();
+  const weekMonday=new Date(currentDate);weekMonday.setUTCDate(currentDate.getUTCDate()-(currentDate.getUTCDay()+6)%7);
+  const weekDays=Array.from({length:7},(_,i)=>{const day=new Date(weekMonday);day.setUTCDate(weekMonday.getUTCDate()+i);return day.toISOString().slice(0,10);});
+  const weekCounts=useQuery({queryKey:['scheduling','week',filters,weekDays[0]],queryFn:()=>api<{days:{date:string;count:number}[]}>(`/clinic/scheduling/calendar?${queryString({...filters,date:weekDays[0],through:weekDays[6]})}`),enabled:view==='week'&&Boolean(date),refetchInterval:30000});
+  return <div className="space-y-5">
+    <Link href="/home" className="focus-ring inline-block rounded text-sm text-[#7b8aa0] hover:text-[#80632d]" data-testid="view-back-section">{t('nav.home')}</Link>
+    <div className="flex flex-wrap items-start justify-between gap-3"><PageHeader title={t('p3.title')} description={t('sections.appointments.viewHint')}/>{catalog.data?.canBook&&<Link href="/appointments/new" className="focus-ring inline-flex min-h-10 items-center rounded-xl bg-[#80632d] px-5 py-2 text-sm font-semibold text-white hover:bg-[#6c5225]" data-testid="view-create-appointment">{t('p3.create')}</Link>}</div>
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('p3.view')}>{(['day','week','calendar'] as View[]).map((v)=><Button key={v} type="button" variant={view===v?'default':'outline'} aria-pressed={view===v} onClick={()=>setView(v)} data-testid={`appointments-tab-${v}`}>{v==='week'?(lang==='ar'?'الأسبوع':'Week'):v==='calendar'?(lang==='ar'?'الشهر':'Month'):t('p3.day')}</Button>)}<button type="button" onClick={()=>setView('allHistory')} className="ms-auto text-sm font-semibold text-[#80632d] underline" data-testid="appointments-tab-allHistory">{t('p3.allHistory')}</button></div>
+    {catalog.isError&&<FormError message={errorMessage(catalog.error)}/>}
+    <div className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <SelectField label={t('p3.branch')} value={branchId} onChange={setBranchId} testId="appointments-branch"><option value="">{t('p3.all')}</option>{catalog.data?.branches.map((b)=><option key={b.id} value={b.id} lang={b.nameLang} dir={b.nameLang==='ar'?'rtl':'ltr'}>{b.name}</option>)}</SelectField>
+      <SelectField label={t('p3.service')} value={serviceId} onChange={setServiceId} testId="appointments-service"><option value="">{t('p3.all')}</option>{catalog.data?.services.map((s)=><option key={s.id} value={s.id} lang={s.nameLang} dir={s.nameLang==='ar'?'rtl':'ltr'}>{s.name}</option>)}</SelectField>
+      {catalog.data?.canReadAll&&!mine&&<SelectField label={t('p3.employee')} value={employeeId} onChange={setEmployeeId} testId="appointments-employee"><option value="">{t('p3.all')}</option>{catalog.data.employees.map((e)=><option key={e.id} value={e.id} lang={e.nameLang} dir={e.nameLang==='ar'?'rtl':'ltr'}>{e.name}</option>)}</SelectField>}
+      <SelectField label={t('p3.status')} value={status} onChange={setStatus} testId="appointments-status"><option value="">{t('p3.all')}</option>{STATUSES.map((s)=><option key={s} value={s}>{t(`p3.statuses.${s}`)}</option>)}</SelectField>
+      {provider&&catalog.data?.canReadAll&&<CheckField label={t('p3.mine')} checked={mine} onChange={(v)=>{setMine(v);setEmployeeId('');}} testId="appointments-mine"/>}
+    </div>
+    {(view==='day'||view==='week')&&<div className="flex flex-wrap items-end gap-3"><FormField label={t('p3.date')} type="date" value={date} onChange={(e)=>setDate(e.target.value)} testId="appointments-date"/><Button type="button" variant="outline" onClick={()=>setDate(localDate(zone))} data-testid="appointments-today">{t('p3.today')}</Button></div>}
+    <p className="text-xs text-muted-foreground">{t('p3.branchTimes')}</p>
+    {view==='week'?<section className="rounded-2xl border border-[#e0e6ef] bg-white p-5 shadow-sm"><h2 className="mb-4 font-bold text-[#1b2d48]">{lang==='ar'?'مواعيد الأسبوع':'This week'} · {weekDays[0]} – {weekDays[6]}</h2>{weekCounts.isPending?<p role="status">{t('common.loading')}</p>:weekCounts.isError?<FormError message={errorMessage(weekCounts.error)}/>:<div className="grid gap-2 sm:grid-cols-7">{weekDays.map((day,i)=><button key={day} type="button" onClick={()=>{setDate(day);setView('day');}} className="focus-ring rounded-xl border border-[#e7ebf1] bg-[#fbfcfe] p-4 text-center hover:border-[#b5975c] hover:bg-[#fff9ee]"><span className="block text-xs text-[#7c899c]">{t('p2.days.'+['mon','tue','wed','thu','fri','sat','sun'][i])}</span><strong className="mt-2 block text-lg text-[#1b2d48]">{Number(day.slice(-2))}</strong><span className="mt-2 block text-xs text-[#80632d]">{weekCounts.data?.days.find(item=>item.date===day)?.count??0} {lang==='ar'?'موعد':'appointments'}</span></button>)}</div>}</section>:view==='calendar'?<section className="space-y-4">
+      <FormField label={t('p3.month')} type="month" value={month} onChange={(e)=>setMonth(e.target.value)} testId="appointments-month"/>
+      <p className="text-sm text-muted-foreground">{t('p3.calendarHint')}</p>
+      {counts.isPending?<p role="status">{t('common.loading')}</p>:counts.isError?<FormError message={errorMessage(counts.error)}/>:<div className="grid grid-cols-7 gap-1 rounded-lg border p-2 sm:gap-2 sm:p-3" data-testid="appointment-calendar">
+        {['mon','tue','wed','thu','fri','sat','sun'].map((d)=><div key={d} className="min-w-0 break-words py-2 text-center text-[10px] font-medium sm:text-xs">{t(`p2.days.${d}`)}</div>)}
+        {Array.from({length:blanks},(_,i)=><div key={`blank-${i}`} aria-hidden/>)}
+        {days.map((d)=>{const count=counts.data?.days.find((item)=>item.date===d)?.count??0;return <button key={d} type="button" onClick={()=>{setDate(d);setView('day');}} aria-label={t('p3.calendarDay',{date:d,count})} data-testid={`calendar-day-${d}`} className={`focus-ring flex min-h-16 min-w-0 flex-col items-center justify-center rounded-md border p-1 text-sm ${d===date?'border-primary bg-primary/5':''}`}><span>{Number(d.slice(8))}</span><span className="mt-1 text-[10px] text-muted-foreground">{count}</span></button>;})}
+      </div>}
+    </section>:q.isPending?<p role="status">{t('common.loading')}</p>:q.isError?<div className="space-y-3"><FormError message={errorMessage(q.error)}/><Button variant="outline" onClick={()=>void q.refetch()} data-testid="retry-appointments">{t('common.retry')}</Button></div>:q.data&&<>{view==='day'?<div dir="ltr" className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(265px,300px)]"><div dir={dir} className="min-w-0"><DayBoard items={q.data.items} staff={catalog.data?.employees??[]}/></div><aside dir={dir} className="space-y-4"><section className="rounded-2xl border border-[#e0e6ef] bg-white p-4 shadow-sm"><h2 className="font-bold text-[#1b2d48]">{lang==='ar'?'ملخص اليوم':'Today at a glance'}</h2><p className="mt-1 text-xs text-[#7c899c]">{date}</p><div className="mt-4 grid grid-cols-2 gap-2">{([[lang==='ar'?'المواعيد المؤكدة':'Confirmed',q.data.items.filter(item=>item.status==='confirmed').length,'#eafff2'],[lang==='ar'?'قائمة الانتظار':'Pending',q.data.items.filter(item=>item.status==='pending').length,'#fff8ed'],[lang==='ar'?'إجمالي اليوم':'Total today',q.data.total,'#ebf5ff'],[lang==='ar'?'المواعيد الملغاة':'Cancelled',q.data.items.filter(item=>item.status==='cancelled').length,'#f4f6f9']] as const).map(([label,value,color])=><div key={label} className="rounded-xl p-3 text-center" style={{backgroundColor:color}}><p className="text-2xl font-bold text-[#1b2d48]">{value}</p><p className="text-xs text-[#67768d]">{label}</p></div>)}</div></section><section className="rounded-2xl border border-[#e0e6ef] bg-white p-4 shadow-sm"><h2 className="mb-3 font-bold text-[#1b2d48]">{lang==='ar'?'مواعيد اليوم':'Today’s appointments'}</h2><div className="space-y-2">{q.data.items.slice(0,5).map(item=><Link key={item.id} href={'/appointments/'+item.id} className="block rounded-xl bg-[#f8f9fb] p-3 text-sm hover:bg-[#fff8ed]"><strong className="block truncate">{item.customer.name}</strong><span className="block truncate text-xs text-[#78879a]">{item.service.name} · {t('p3.statuses.'+item.status)}</span></Link>)}{!q.data.items.length&&<p className="text-sm text-[#78879a]">{t('p3.noAppointments')}</p>}</div></section></aside></div>:<AppointmentList items={q.data.items}/>}<Pagination page={page} pageSize={20} total={q.data.total} onPage={setPage}/></>}
+  </div>;
+}

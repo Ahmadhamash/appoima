@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-09-21T13:57:15.736618+00:00",
+  "node": "v22.16.0",
+  "typescript": "Version 5.8.3",
+  "pnpmAvailable": false,
+  "psqlAvailable": false,
+  "postgresAvailable": false,
+  "workspaceNodeModulesPresent": false,
+  "databaseUrlPresent": false,
+  "sessionSecretPresent": false,
+  "liveWorkflows": {
+    "5000": {
+      "acceptingConnections": false
+    },
+    "19880": {
+      "acceptingConnections": false
+    }
+  },
+  "providerLiveTest": "not attempted: no authorized configured provider/model; no paid request",
+  "migrationExecution": "not attempted: no configured disposable PostgreSQL; no Phase 5 schema migration",
+  "browserAcceptance": "not run: no live app workflows/project dependencies; runner syntax checked separately"
+}

@@ -1,0 +1,23 @@
+{
+  "passed": 16,
+  "checks": [
+    "Existing canvas orb and live wizard render together",
+    "Template does not invent duration or price",
+    "Custom booking field renders in actual live preview",
+    "Manual save sends no AI turn and keeps exactly one service",
+    "Original core sections unchanged",
+    "Approval is disabled until explicit manager confirmation",
+    "Only approval calls publication and app cache invalidation",
+    "Arabic mobile RTL and no horizontal overflow",
+    "Switching manual to links preserves saved service",
+    "Public service needs a separate opt-in",
+    "Explicit opt-in adds just the selected service",
+    "Streaming service preview appears before committed draft",
+    "Final commit replaces preview with exactly one persisted draft service",
+    "Missing prices and duration prevent publication even after checkbox",
+    "Interrupted stream clears speculative service and never publishes",
+    "No uncaught browser errors"
+  ],
+  "errors": [],
+  "scope": "Actual new React19 service components and existing ConciergeView in Chromium; synthetic HTTP and model stream. Not a full application build or DB/auth/live AI/voice test."
+}

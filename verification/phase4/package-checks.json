@@ -1,0 +1,52 @@
+{
+  "phase2-offline.mjs": {
+    "exit": 0
+  },
+  "phase3-offline.mjs": {
+    "exit": 0
+  },
+  "phase4-offline.mjs": {
+    "exit": 0
+  },
+  "strictDependencyFreeTypecheck": {
+    "exit": 0,
+    "files": [
+      "artifacts/api-server/src/domain/operations-rules.ts",
+      "artifacts/api-server/src/domain/scheduling-rules.ts",
+      "artifacts/api-server/src/domain/setup-rules.ts",
+      "artifacts/api-server/src/domain/scheduling-time.ts",
+      "artifacts/jormall/src/lib/i18n/en.ts",
+      "artifacts/jormall/src/lib/i18n/ar.ts",
+      "artifacts/jormall/src/lib/branch-time.ts"
+    ]
+  },
+  "result": "static_checks_passed_runtime_pending",
+  "phase2Offline": 36,
+  "phase3Offline": 90,
+  "phase4Rules": 73,
+  "phase4SourceAssertions": 20,
+  "offlineTotal": 219,
+  "activeTypeScriptSyntaxFiles": 214,
+  "newApiCasesWritten": 39,
+  "newApiCasesExecuted": 0,
+  "javascriptSyntaxFiles": 10,
+  "shellSyntaxFiles": 4,
+  "jsonParsedFiles": 23,
+  "localImportsResolved": 474,
+  "missingLocalImports": [],
+  "preservedFiles": {
+    "pnpm-lock.yaml": "fd3d70f1102d87eee7808f74f59732b6eb00e45477c6b0f718443702c99a2cd6",
+    "package.json": "0eee75b762d97c72cbe42fafdb2229dcfccb8bd11f4b4cdd01803eb8b52e9686",
+    "pnpm-workspace.yaml": "2ecf4185d3d428e21f0e5af59554c93ed5cadf6186100085aa23f9231d2762ae",
+    "JORMALL_REPLIT_SPEC.md": "089d899412bd65367a2052bbba9c3481dba3124af99cffe540211f713eb4fef3",
+    "CODEX_PROMPT_PHASES_2-5.md": "b4978b93e20443d0e292e4ed8e397dddab5568073a8c3624a21b78501799f6dc",
+    "lib/db/migrations/0000_phase1_baseline.sql": "df7794020f2552d55f817bb7ecaa78be923e532d99e48cbb3d674d0fe096d185",
+    "lib/db/migrations/0001_phase2_manager_setup.sql": "151e0c4f7b387f27e3687a33445ec6835114f80650e7af8700282b9642c0bafe",
+    "lib/db/migrations/0002_phase3_scheduling.sql": "c74cd1543bdec980748e4684be78802ce0bf9efabb074f0cac5825f8e3b0c603"
+  },
+  "phase3JournalEntriesPreserved": true,
+  "phase4FrozenSchemaMatches": true,
+  "dependencyChanges": false,
+  "phase5Started": false,
+  "runtimeAcceptance": "NOT RUN: missing pnpm/application dependencies, DATABASE_URL and SESSION_SECRET. No running app/database or browser evidence."
+}

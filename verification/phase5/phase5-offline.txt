@@ -1,0 +1,124 @@
+$ node scripts/checks/phase5-offline.mjs
+
+PASS RULE manager may use suggest_slots
+PASS RULE manager may use summarize_appointment
+PASS RULE manager may use draft_reply
+PASS RULE manager may use explain_waiting
+PASS RULE denied platform_owner/null/7: suggest_slots
+PASS RULE denied platform_owner/null/7: summarize_appointment
+PASS RULE denied platform_owner/null/7: draft_reply
+PASS RULE denied platform_owner/null/7: explain_waiting
+PASS RULE denied manager/null/7: suggest_slots
+PASS RULE denied manager/null/7: summarize_appointment
+PASS RULE denied manager/null/7: draft_reply
+PASS RULE denied manager/null/7: explain_waiting
+PASS RULE denied manager/1/0: suggest_slots
+PASS RULE denied manager/1/0: summarize_appointment
+PASS RULE denied manager/1/0: draft_reply
+PASS RULE denied manager/1/0: explain_waiting
+PASS RULE doctor implicit assignment access only offers summary
+PASS RULE reader only offers summary
+PASS RULE unknown action is not allowed
+PASS RULE role FAQ en/manager
+PASS RULE role FAQ en/doctor
+PASS RULE role FAQ en/other_staff
+PASS RULE role FAQ en/platform_owner
+PASS RULE role FAQ ar/manager
+PASS RULE role FAQ ar/doctor
+PASS RULE role FAQ ar/other_staff
+PASS RULE role FAQ ar/platform_owner
+PASS RULE local keyword how do I book an appointment
+PASS RULE local keyword how to check in
+PASS RULE local keyword I need to cancel
+PASS RULE local keyword إِلْغَاء موعد
+PASS RULE local keyword كيف أسجل حضور العميل
+PASS RULE local keyword قائمة انتظار
+PASS RULE local keyword record materials used
+PASS RULE local keyword change time
+PASS RULE unknown or injection text never triggers a write
+PASS RULE unavailable topic cannot expose management copy
+PASS RULE safe local route /appointments/new
+PASS RULE safe local route /appointments/42
+PASS RULE safe local route /appointments/42/reschedule
+PASS RULE safe local route /business/inventory
+PASS RULE safe local route /clinics
+PASS RULE untrusted route denied https://evil.test
+PASS RULE untrusted route denied //evil.test
+PASS RULE untrusted route denied javascript:alert(1)
+PASS RULE untrusted route denied /api/clinic/appointments
+PASS RULE untrusted route denied /appointments/1?confirm=true
+PASS RULE untrusted route denied /appointments/../clinics
+PASS RULE untrusted route denied /appointments/0
+PASS RULE untrusted route denied /appointments/1#x
+PASS RULE untrusted route denied /appointments/%31
+PASS RULE provider facts exclude names/notes/contact en
+PASS RULE provider facts exclude names/notes/contact ar
+PASS RULE pending draft is not a confirmation
+PASS RULE state-specific unsent draft en/pending
+PASS RULE state-specific unsent draft en/confirmed
+PASS RULE state-specific unsent draft en/checked_in
+PASS RULE state-specific unsent draft en/in_service
+PASS RULE state-specific unsent draft en/completed
+PASS RULE state-specific unsent draft en/cancelled
+PASS RULE state-specific unsent draft en/no_show
+PASS RULE state-specific unsent draft ar/pending
+PASS RULE state-specific unsent draft ar/confirmed
+PASS RULE state-specific unsent draft ar/checked_in
+PASS RULE state-specific unsent draft ar/in_service
+PASS RULE state-specific unsent draft ar/completed
+PASS RULE state-specific unsent draft ar/cancelled
+PASS RULE state-specific unsent draft ar/no_show
+PASS RULE waiting explanation distinguishes absence/offer/booked en
+PASS RULE waiting explanation distinguishes absence/offer/booked ar
+PASS RULE default config is disabled and local tools available
+PASS RULE secrets alone never enable external AI
+PASS RULE false and invalid env flags fail closed
+PASS RULE secret and model must both be present
+PASS RULE configured is never claimed verified
+PASS RULE timeouts/tokens have hard bounds
+PASS RULE disabled provider returns clear unavailable result
+PASS RULE per-user throttling expires
+PASS RULE concurrency is two, release is idempotent
+PASS RULE six calls per user per minute
+PASS RULE clinic hour budget bounded
+PASS HTTP_CONTRACT HTTP envelope uses secret server-side and no store/tools/state/history
+PASS HTTP_CONTRACT sanitized provider HTTP 401
+PASS HTTP_CONTRACT sanitized provider HTTP 403
+PASS HTTP_CONTRACT sanitized provider HTTP 429
+PASS HTTP_CONTRACT sanitized provider HTTP 500
+PASS HTTP_CONTRACT network failures do not expose exception
+PASS HTTP_CONTRACT timeout aborts transport
+PASS HTTP_CONTRACT bounded body length header
+PASS HTTP_CONTRACT bounded streamed bytes without header
+PASS HTTP_CONTRACT oversized context is not transmitted
+PASS HTTP_CONTRACT disabled adapter makes no HTTP call
+PASS RULE malformed/incomplete/tool response rejected
+PASS RULE malformed/incomplete/tool response rejected
+PASS RULE malformed/incomplete/tool response rejected
+PASS RULE malformed/incomplete/tool response rejected
+PASS RULE malformed/incomplete/tool response rejected
+PASS RULE malformed/incomplete/tool response rejected
+PASS RULE provider refusal not shown as working integration
+PASS RULE booking choices transfer once without reserving a slot
+PASS RULE booking choices cannot cross a user or clinic
+PASS RULE old or malformed booking hint is not reused
+PASS RULE open booking wizard receives one-use suggestion and can unsubscribe
+PASS SOURCE all guarded action variants have strict schemas
+PASS SOURCE no assistant business mutations, SQL or external tool loop
+PASS SOURCE every read takes clinic lock and refreshes permission
+PASS SOURCE latency does not bypass revocation or version check
+PASS SOURCE no technical or sensitive data in audit details
+PASS SOURCE private endpoints not cacheable and require signed-in changed-password
+PASS SOURCE provider module cannot import database or mutations
+PASS SOURCE new error codes in both dictionaries
+PASS SOURCE UI keeps assistant text inert and ephemeral
+{
+  "result": "passed",
+  "phase5PureChecks": 92,
+  "phase5HttpContractChecks": 11,
+  "phase5SourceAssertions": 9,
+  "total": 112,
+  "limitation": "HTTP is stubbed. No live provider, real database/API, app build or browser acceptance was run."
+}
+
+Exit code: 0

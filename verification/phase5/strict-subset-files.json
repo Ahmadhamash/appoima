@@ -1,0 +1,19 @@
+[
+  "artifacts/api-server/src/domain/setup-rules.ts",
+  "artifacts/api-server/src/domain/scheduling-rules.ts",
+  "artifacts/api-server/src/domain/scheduling-time.ts",
+  "artifacts/api-server/src/domain/operations-rules.ts",
+  "artifacts/api-server/src/domain/assistant-rules.ts",
+  "artifacts/api-server/src/domain/assistant-help.ts",
+  "artifacts/api-server/src/domain/assistant-format.ts",
+  "artifacts/api-server/src/domain/assistant-budget.ts",
+  "artifacts/api-server/src/ai/types.ts",
+  "artifacts/api-server/src/ai/config.ts",
+  "artifacts/api-server/src/ai/disabled.ts",
+  "artifacts/api-server/src/ai/openai.ts",
+  "artifacts/api-server/src/ai/index.ts",
+  "artifacts/api-server/src/scripts/verify-assistant-provider.ts",
+  "artifacts/jormall/src/lib/assistant-booking-context.ts",
+  "artifacts/jormall/src/lib/i18n/en.ts",
+  "artifacts/jormall/src/lib/i18n/ar.ts"
+]

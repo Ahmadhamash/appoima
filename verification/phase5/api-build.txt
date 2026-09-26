@@ -1,0 +1,5 @@
+$ bash -c pnpm --filter @workspace/api-server run build
+
+bash: line 1: pnpm: command not found
+
+Exit code: 127

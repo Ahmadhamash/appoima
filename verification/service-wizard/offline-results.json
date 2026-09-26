@@ -1,0 +1,30 @@
+{
+  "passed": 24,
+  "checks": [
+    "Exact beard-only service stays one service; unknown facts remain null",
+    "Templates never activate a service or prefill business facts",
+    "Stable-key correction updates one service and preserves unspecified facts",
+    "Scope change to all branches explicitly clears old branch key",
+    "Service-only boundary blocks every nonservice resource",
+    "Canonical duplicates and duplicate record IDs are rejected",
+    "New medical section and fields need no new template enum",
+    "Strict contract rejects code props, unknown keys and invalid versions",
+    "Field IDs, duplicate IDs, options and max-12 field cap are enforced",
+    "Medical review and unsupported capabilities block publication readiness",
+    "Public links become deduplicated opt-in suggestions, not draft mutations",
+    "Untrusted URL schemes/credentials never reach suggestion links",
+    "Manual source survives unrelated later AI turns",
+    "New wizard drafts require a service definition",
+    "Service wizard question focuses on missing facts, not new branches/staff",
+    "Required intake is enforced; explicit false is a valid boolean answer",
+    "Intake rejects unknown fields, invalid types, numbers and choices",
+    "Appointment snapshot retains old labels and values after service edits",
+    "Complete-record extractor handles partial Arabic JSON and escaped string lookalikes",
+    "SSE parser reconstructs split UTF-8/CRLF and requires a completed response",
+    "Provider failure/refusal/incomplete streams fail closed",
+    "Abort cancels a stalled reader instead of committing a draft",
+    "Real provider adapter emits valid service preview and validates final schema",
+    "Frontend stream API ignores stale previews and rejects missing commit"
+  ],
+  "scope": "Real shared validation, domain workflow, provider and browser stream adapter; synthetic transports. No database, live AI or full application build."
+}
