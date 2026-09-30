@@ -1,24 +1,24 @@
 import type { Language } from './contract';
 
-/** Optional second transcript. One finalize barrier per OpenAI turn prevents double submissions.
- * On delay, overlap or provider failure, discard the companion stream for this session.
- * OpenAI audio never waits for this stream; no recording is persisted. */
+/** Streaming Soniox transcripts for clinic setup, with the original manual-finalize
+ * mode retained for the in-app assistant. Audio is never stored in the browser. */
 export class SonioxAssist {
  private socket:WebSocket|null=null;
  private recorder:MediaRecorder|null=null;
  private alive=true;private ready=false;private text='';private confidence:number[]=[];
  private timer=0;private pending:((text:string|null)=>void)|null=null;private language:Language='ar';
- async start(requestKey:()=>Promise<{enabled:boolean;apiKey?:string}>,stream:MediaStream,language:Language){
+ private onEndpoint:((text:string)=>void)|null=null;private onPartial:((text:string)=>void)|null=null;
+ async start(requestKey:()=>Promise<{enabled:boolean;apiKey?:string}>,stream:MediaStream,language:Language,onEndpoint?:((text:string)=>void),onPartial?:((text:string)=>void)){
   try{
-   this.language=language;
+   this.language=language;this.onEndpoint=onEndpoint??null;this.onPartial=onPartial??null;
    if(!window.MediaRecorder||!window.WebSocket)return;
    const credentials=await requestKey();
    if(!this.alive||!credentials.enabled||!credentials.apiKey)return;
    const socket=new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket');this.socket=socket;
    await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('timeout')),3000);socket.onopen=()=>{clearTimeout(timeout);resolve();};socket.onerror=()=>{clearTimeout(timeout);reject(new Error('socket'));};socket.onclose=()=>{clearTimeout(timeout);reject(new Error('closed'));};});
    if(!this.alive){socket.close();return;}
-   socket.send(JSON.stringify({api_key:credentials.apiKey,model:'stt-rt-v5',audio_format:'auto',language_hints:language==='ar'?['ar','en']:['en','ar'],enable_endpoint_detection:false,context:{general:[{key:'domain',value:'Beauty center and salon appointment setup in Jordan'}],text:'Jordanian Arabic; preserve proper names, no translation.',terms:['بيوتي سنتر','مركز تجميل','أخصائية','مناكير','بديكير','سشوار','ليزر','فروع']}}));
-   socket.onmessage=e=>{if(!this.alive||typeof e.data!=='string'||e.data.length>100000)return;try{const message=JSON.parse(e.data);if(message.error_code||message.finished){this.stop();return;}for(const token of message.tokens??[]){if(!token.is_final||typeof token.text!=='string')continue;if(token.text==='<fin>'){const value=this.text.trim(),confidence=this.confidence.length?this.confidence.reduce((sum,n)=>sum+n,0)/this.confidence.length:0;this.text='';this.confidence=[];const done=this.pending;this.pending=null;clearTimeout(this.timer);done?.(value&&confidence>=.7?value:null);}else if(!/^<[^>]+>$/.test(token.text)){this.text+=token.text;if(/[\p{L}\p{N}]/u.test(token.text))this.confidence.push(typeof token.confidence==='number'?token.confidence:0);if(this.text.length>6000){this.stop();return;}}}}catch{this.stop();}};
+   socket.send(JSON.stringify({api_key:credentials.apiKey,model:'stt-rt-v5',audio_format:'auto',language_hints:language==='ar'?['ar','en']:['en','ar'],enable_endpoint_detection:!!this.onEndpoint,...(this.onEndpoint?{endpoint_latency_adjustment_level:1,endpoint_sensitivity:0,max_endpoint_delay_ms:1800}:{}),context:{general:[{key:'domain',value:'Beauty center and salon appointment setup in Jordan'}],text:'Jordanian Arabic; preserve proper names, no translation.',terms:['بيوتي سنتر','مركز تجميل','أخصائية','مناكير','بديكير','سشوار','ليزر','فروع']}}));
+   socket.onmessage=e=>{if(!this.alive||typeof e.data!=='string'||e.data.length>100000)return;try{const message=JSON.parse(e.data);if(message.error_code||message.finished){this.stop();return;}let provisional='';for(const token of message.tokens??[]){if(typeof token.text!=='string')continue;if(!token.is_final){if(!/^<[^>]+>$/.test(token.text))provisional+=token.text;continue;}if(token.text==='<end>'||token.text==='<fin>'){const value=this.text.trim(),confidence=this.confidence.length?this.confidence.reduce((sum,n)=>sum+n,0)/this.confidence.length:0;this.text='';this.confidence=[];this.onPartial?.('');if(token.text==='<end>'){if(value&&value.length<=6000)this.onEndpoint?.(value);}else{const done=this.pending;this.pending=null;clearTimeout(this.timer);done?.(value&&confidence>=.7?value:null);}continue;}if(!/^<[^>]+>$/.test(token.text)){this.text+=token.text;if(/[\p{L}\p{N}]/u.test(token.text))this.confidence.push(typeof token.confidence==='number'?token.confidence:0);if(this.text.length>6000){this.stop();return;}}}if(this.onEndpoint)this.onPartial?.((this.text+provisional).slice(0,6000));}catch{this.stop();}};
    socket.onerror=()=>this.stop();socket.onclose=()=>this.stop();
    const mime=['audio/webm;codecs=opus','audio/mp4'].find(value=>MediaRecorder.isTypeSupported(value));
    if(!mime){this.stop();return;}
@@ -28,7 +28,7 @@ export class SonioxAssist {
   }catch{this.stop();}
  }
  get isReady(){return this.ready;}
- speechStarted(){if(!this.ready||this.pending)this.stop();}
+ speechStarted(){if(!this.ready||(!this.onEndpoint&&this.pending))this.stop();}
  async refine(original:string):Promise<string>{
   if(!this.ready||!this.recorder||this.recorder.state!=='recording'||this.socket?.readyState!==WebSocket.OPEN)return original;
   if(this.pending){this.stop();return original;}

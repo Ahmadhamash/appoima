@@ -115,12 +115,13 @@ describe("Phase 2 access and account controls",()=>{
 describe("Phase 2 validation, persistence and checklist",()=>{
   it("creates a main service with subservices together and rolls back invalid batches",async()=>{
     const definition={...createDefinition('custom','ar'),section:'الليزر',medicalScope:'medical' as const};
-    const first={...serviceBody(branchA,[employeeA]),name:'ليزر الوجه',nameLang:'ar',definition};
-    const second={...serviceBody(branchA,[employeeA]),name:'ليزر اليدين',nameLang:'ar',definition};
+    const first={...serviceBody(branchA,[employeeA]),name:'ليزر الوجه',nameLang:'ar',definition,requiredEquipment:['Laser Device']};
+    const second={...serviceBody(branchA,[employeeA]),name:'ليزر اليدين',nameLang:'ar',definition,requiredEquipment:['Laser Device','Skin Analysis Device']};
     const created=await a.post('/api/clinic/services/batch').send({services:[first,second]});
     expect(created.status).toBe(201);expect(created.body.ids).toHaveLength(2);
     const saved=await db.select().from(servicesTable).where(eq(servicesTable.clinicId,clinicA));
     expect(saved.filter(row=>created.body.ids.includes(row.id)).map(row=>row.name).sort()).toEqual(['ليزر اليدين','ليزر الوجه'].sort());
+    expect(created.body.ids.map((id:number)=>saved.find(row=>row.id===id)!.requiredEquipment)).toEqual([['Laser Device'],['Laser Device','Skin Analysis Device']]);
     const before=saved.length;
     const invalid=await a.post('/api/clinic/services/batch').send({services:[first,{...second,employeeIds:[employeeB]}]});
     expect(invalid.status).toBe(404);
@@ -138,7 +139,8 @@ describe("Phase 2 validation, persistence and checklist",()=>{
     expect((await a.post('/api/clinic/employees').send({...employeeBody(branchA),timeOff:[{startsAt:'2026-10-01T11:00:00Z',endsAt:'2026-10-01T10:00:00Z',note:''}] })).status).toBe(400);
   });
   it("does not fabricate history or inventory usage",async()=>{
-    const service=await a.get(`/api/clinic/services/${serviceA}`);expect(service.body.item.actualConsumption).toEqual([]);expect(service.body.item.actualConsumptionAvailable).toBe(false);
+    const service=await a.get(`/api/clinic/services/${serviceA}`);expect(service.body.item.actualConsumptionAvailable).toBe(true);
+    const usage=await a.get(`/api/clinic/services/${serviceA}/actual-use`);expect(usage.status).toBe(200);expect(usage.body.items).toEqual([]);
     const customer=await a.get(`/api/clinic/customers/${customerA}`);expect(customer.body.item.historyAvailable).toBe(true);
     const history=await a.get(`/api/clinic/customers/${customerA}/appointments`);expect(history.status).toBe(200);expect(history.body.items).toEqual([]);
   });
@@ -163,7 +165,11 @@ describe("Phase 2 validation, persistence and checklist",()=>{
     expect((await a.get('/api/clinic/customers').query({search:`${mark.toLowerCase()}.0@test.local`})).body.items.length).toBe(1);
     expect(first.body.items[0].sensitiveNotes).toBeUndefined();
   });
-  it("uses real setup data and leaves first booking incomplete in Phase 2",async()=>{
-    const r=await a.get('/api/me/clinic');expect(r.status).toBe(200);expect(r.body.clinic.progress).toMatchObject({hasBranchHours:true,hasCatalog:true,hasStaff:true,hasFirstAppointment:false});
+  it("requires actual room equipment and service links for catalog readiness",async()=>{
+    const r=await a.get('/api/me/clinic');expect(r.status).toBe(200);expect(r.body.clinic.progress).toMatchObject({hasBranchHours:true,hasCatalog:false,hasStaff:true,hasFirstAppointment:false});
+    const services=await db.select().from(servicesTable).where(eq(servicesTable.clinicId,clinicA));
+    const ids=services.filter(s=>s.isActive&&(!s.branchId||s.branchId===branchA)).map(s=>s.id);
+    const linked=await a.put(`/api/clinic/rooms/${roomA}`).send({...roomBody(branchA,ids),extra:{equipment:['Laser Device','Skin Analysis Device']}});expect(linked.status).toBe(200);
+    expect((await a.get('/api/me/clinic')).body.clinic.progress.hasCatalog).toBe(true);
   });
 });

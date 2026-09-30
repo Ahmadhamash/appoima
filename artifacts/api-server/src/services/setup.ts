@@ -6,7 +6,9 @@ import {
 import { forbidden, notFound, conflict, badRequest } from "../lib/errors";
 import { hasPermission, ROLE_PRESETS, ALL_PERMISSIONS, type Permission } from "../domain/permissions";
 import { normalizeWeek, withinGrantCeiling, compatibleBranch } from "../domain/setup-rules";
+import { roomHasEquipment } from "../domain/equipment";
 import type { BranchInput, ServiceInput, ServiceBatchInput, RoomInput, CustomerInput, EmployeeInput, NewEmployeeInput, PageInput, EmployeePageInput } from "../domain/setup-validation";
+import { employeeSchema } from "../domain/setup-validation";
 import { createStaffAccount, hashPassword } from "./auth";
 import { recordAudit } from "./audit";
 
@@ -60,11 +62,12 @@ async function validateServices(tx: Tx, clinicId: number, ids: number[], branchI
   if (rows.length !== ids.length) throw notFound("record_not_found");
   if (rows.some((s) => !compatibleBranch(s.branchId, branchId))) throw badRequest("branch_mismatch");
 }
-async function validateEmployees(tx: Tx, clinicId: number, ids: number[], branchId: number | null) {
+async function validateEmployees(tx: Tx, clinicId: number, ids: number[], branchId: number | null, providersOnly = false) {
   if (!ids.length) return;
-  const rows = await tx.select({ id: usersTable.id, branchId: usersTable.branchId }).from(usersTable).where(and(eq(usersTable.clinicId, clinicId), inArray(usersTable.id, ids)));
+  const rows = await tx.select({ id: usersTable.id, branchId: usersTable.branchId, role: usersTable.role }).from(usersTable).where(and(eq(usersTable.clinicId, clinicId), inArray(usersTable.id, ids)));
   if (rows.length !== ids.length) throw notFound("record_not_found");
   if (rows.some((u) => !compatibleBranch(branchId, u.branchId))) throw badRequest("branch_mismatch");
+  if (providersOnly && rows.some((u) => !['doctor', 'service_provider'].includes(u.role))) throw badRequest("employee_not_eligible");
 }
 const audit = (tx: Tx, actor: User, action: string, entityType: string, entityId: number, details?: Record<string, unknown>) =>
   recordAudit({ clinicId: actor.clinicId, actorUserId: actor.id, action, entityType, entityId, details }, tx);
@@ -114,7 +117,7 @@ export async function saveService(actor: User, input: ServiceInput, id?: number)
   return write(actor, "services.manage", async (tx, clinicId, fresh) => {
     const { employeeIds, ...fields } = input;
     await branchExists(tx, clinicId, fields.branchId);
-    await validateEmployees(tx, clinicId, employeeIds, fields.branchId);
+    await validateEmployees(tx, clinicId, employeeIds, fields.branchId, true);
     if (id) {
       const linked = await tx.select({ branchId: roomsTable.branchId }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), eq(roomsTable.clinicId, clinicId))).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.serviceId, id)));
       if (linked.some((r) => !compatibleBranch(fields.branchId, r.branchId))) throw badRequest("branch_mismatch");
@@ -136,7 +139,7 @@ export async function saveServicesBatch(actor: User, input: ServiceBatchInput) {
     for (const service of input.services) {
       const { employeeIds, ...fields } = service;
       await branchExists(tx, clinicId, fields.branchId);
-      await validateEmployees(tx, clinicId, employeeIds, fields.branchId);
+      await validateEmployees(tx, clinicId, employeeIds, fields.branchId, true);
       const [row] = await tx.insert(servicesTable).values({ ...fields, clinicId }).returning({ id: servicesTable.id });
       if (!row) throw badRequest("record_not_found");
       if (employeeIds.length) await tx.insert(serviceEmployeesTable).values(employeeIds.map(employeeId => ({ clinicId, employeeId, serviceId: row.id })));
@@ -167,11 +170,18 @@ export async function getRoom(actor: User, id: number) {
 export async function saveRoom(actor: User, input: RoomInput, id?: number) {
   return write(actor, "rooms.manage", async (tx, clinicId, fresh) => {
     const { serviceIds, ...fields } = input;
+    const [existingRoom] = id ? await tx.select({extra:roomsTable.extra}).from(roomsTable).where(and(eq(roomsTable.id,id),eq(roomsTable.clinicId,clinicId))) : [];
+    const roomFields = { ...fields, extra: { ...existingRoom?.extra, ...fields.extra, openingHours: null, breaks: null } };
     await branchExists(tx, clinicId, fields.branchId);
     await validateServices(tx, clinicId, serviceIds, fields.branchId);
+    if (serviceIds.length) {
+      const services = await tx.select({requiredEquipment:servicesTable.requiredEquipment}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),inArray(servicesTable.id,serviceIds)));
+      if (services.some(service=>!roomHasEquipment(service.requiredEquipment,roomFields.extra['equipment']))) throw badRequest('room_missing_equipment');
+    }
+    if(input.extra?.employeeIds)await validateEmployees(tx,clinicId,input.extra.employeeIds,fields.branchId);
     const [row] = id
-      ? await tx.update(roomsTable).set(fields).where(and(eq(roomsTable.id, id), eq(roomsTable.clinicId, clinicId))).returning()
-      : await tx.insert(roomsTable).values({ ...fields, clinicId }).returning();
+      ? await tx.update(roomsTable).set(roomFields).where(and(eq(roomsTable.id, id), eq(roomsTable.clinicId, clinicId))).returning()
+      : await tx.insert(roomsTable).values({ ...roomFields, clinicId }).returning();
     if (!row) throw notFound("record_not_found");
     await tx.delete(roomServicesTable).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.roomId, row.id)));
     if (serviceIds.length) await tx.insert(roomServicesTable).values(serviceIds.map((serviceId) => ({ clinicId, serviceId, roomId: row.id })));
@@ -246,8 +256,11 @@ export async function addEmployee(actor: User, input: NewEmployeeInput) {
     if (!withinGrantCeiling(fresh.permissions, input.permissions)) throw forbidden("permission_escalation");
     await branchExists(tx, clinicId, input.branchId);
     await validateServices(tx, clinicId, input.serviceIds, input.branchId);
-    const user = await createStaffAccount({ ...input, clinicId, actorUserId: fresh.id }, tx);
-    await tx.update(usersTable).set({ workingHours: input.workingHours, breaks: input.breaks, timeOff: input.timeOff, isActive: input.isActive }).where(and(eq(usersTable.id, user.id), eq(usersTable.clinicId, clinicId)));
+    const { initialPassword, ...fields } = input;
+    const branches = input.workingHours === undefined ? await tx.select({openingHours:branchesTable.openingHours}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId),input.branchId === null ? undefined : eq(branchesTable.id,input.branchId))).limit(2) : [];
+    const resolved = employeeSchema.parse({...fields,workingHours:input.workingHours ?? normalizeWeek(branches.length === 1 ? branches[0]!.openingHours : null)});
+    const user = await createStaffAccount({ ...resolved, initialPassword, clinicId, actorUserId: fresh.id }, tx);
+    await tx.update(usersTable).set({ workingHours: resolved.workingHours, breaks: resolved.breaks, timeOff: resolved.timeOff, isActive: resolved.isActive }).where(and(eq(usersTable.id, user.id), eq(usersTable.clinicId, clinicId)));
     await replaceEmployeeServices(tx, clinicId, user.id, input.serviceIds);
     return { id: user.id }; // Password and hash are never returned.
   });
@@ -296,9 +309,9 @@ export async function setEmployeeActive(actor: User, id: number, isActive: boole
 export async function setupOptions(actor: User, resource: SetupResource) {
   ensure(actor, `${resourceArea[resource]}.read`);
   const clinicId = clinicOf(actor);
-  const branches = await db.select({ id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone }).from(branchesTable).where(eq(branchesTable.clinicId, clinicId)).orderBy(asc(branchesTable.name));
-  const services = ["rooms", "employees"].includes(resource) ? await db.select({ id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId, isActive: servicesTable.isActive, definition: servicesTable.definition }).from(servicesTable).where(eq(servicesTable.clinicId, clinicId)).orderBy(asc(servicesTable.name)) : [];
-  const employees = resource === "services" ? await db.select({ id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang, branchId: usersTable.branchId, isActive: usersTable.isActive }).from(usersTable).where(eq(usersTable.clinicId, clinicId)).orderBy(asc(usersTable.name)) : [];
+  const branches = await db.select({ id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone, openingHours: branchesTable.openingHours }).from(branchesTable).where(eq(branchesTable.clinicId, clinicId)).orderBy(asc(branchesTable.name));
+  const services = ["rooms", "employees"].includes(resource) ? await db.select({ id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId, isActive: servicesTable.isActive, definition: servicesTable.definition, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(eq(servicesTable.clinicId, clinicId)).orderBy(asc(servicesTable.name)) : [];
+  const employees = resource === "services" ? await db.select({ id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang, branchId: usersTable.branchId, isActive: usersTable.isActive }).from(usersTable).where(and(eq(usersTable.clinicId, clinicId), inArray(usersTable.role, ['doctor', 'service_provider']))).orderBy(asc(usersTable.name)) : [];
   const canManageStaff = resource === "employees" && hasPermission(actor, "employees.manage");
   return { branches, services, employees,
     timeZones: resource === "branches" ? [...new Set(["Asia/Amman", "UTC", ...(Intl as unknown as {supportedValuesOf(k: string): string[]}).supportedValuesOf("timeZone")])] : [],

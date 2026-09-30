@@ -6,7 +6,7 @@ import { db, branchesTable, servicesTable, roomsTable, usersTable, serviceEmploy
 import { ROLE_PRESETS, ALL_PERMISSIONS, hasPermission } from '../domain/permissions';
 import { withinGrantCeiling, compatibleBranch } from '../domain/setup-rules';
 import { branchSchema, serviceSchema, roomSchema, newEmployeeSchema } from '../domain/setup-validation';
-import { parseDraft, draftIssues, nameLanguage, type Draft, type Issue } from '../domain/concierge-core';
+import { parseDraft, withDefaultStaffHours, draftIssues, nameLanguage, type Draft, type Issue } from '../domain/concierge-core';
 import { badRequest, forbidden, conflict } from '../lib/errors';
 import { createStaffAccount } from './auth';
 import { recordAudit } from './audit';
@@ -18,17 +18,18 @@ function parseIssues(key:string,result:{success:boolean;error?:{issues:{path:(st
 export function previewConciergeSetup(actor:User,draft:Draft) {
   const issues:Issue[]=[];
   for(const b of draft.branches)issues.push(...parseIssues(b.key,branchSchema.safeParse({name:b.name,nameLang:language(b),timeZone:b.timeZone,openingHours:b.openingHours})));
-  for(const s of draft.services)issues.push(...parseIssues(s.key,serviceSchema.safeParse({name:s.name,nameLang:language(s),branchId:null,durationMinutes:s.durationMinutes,price:s.price,currency:s.currency,category:s.category,requiresRoom:s.requiresRoom,isActive:true,employeeIds:s.employeeIds??[],definition:s.definition??null})));
+  for(const s of draft.services)issues.push(...parseIssues(s.key,serviceSchema.safeParse({name:s.name,nameLang:language(s),branchId:null,durationMinutes:s.durationMinutes,price:s.price,currency:s.currency,category:s.category,requiresRoom:s.requiresRoom,followUpEnabled:s.followUpEnabled ?? false,isActive:true,employeeIds:s.employeeIds??[],definition:s.definition??null})));
   for(const r of draft.rooms)issues.push(...parseIssues(r.key,roomSchema.safeParse({name:r.name,nameLang:language(r),branchId:1,capacity:r.capacity,status:'available',serviceIds:[]})));
   for(const p of draft.staff)issues.push(...parseIssues(p.key,newEmployeeSchema.safeParse({name:p.name,nameLang:language(p),email:p.email,phone:p.phone,jobTitle:p.jobTitle,role:p.role,branchId:null,workingHours:p.workingHours,breaks:p.breaks,serviceIds:[],permissions:p.role?preset(actor,p.role):[],initialPassword:'Validation-only-placeholder-NEVER-stored',isActive:true,timeOff:[]})));
   for(const [kind,permission] of Object.entries({branches:'settings.manage',services:'services.manage',rooms:'rooms.manage',staff:'employees.manage'} as const))if(draft[kind as keyof Draft].length&&!hasPermission(actor,permission))issues.push({key:kind,field:'permission',code:'forbidden'});
   return {issues,staffAccess:draft.staff.map(p=>({key:p.key,permissions:p.role?preset(actor,p.role):[]})),grantablePermissions:ALL_PERMISSIONS.filter(p=>actor.permissions.includes(p))};
 }
 export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Record<string,string>,provision:StaffProvision[]) {
-  const draft=parseDraft(raw),clinicId=actor.clinicId!;
+  let draft=parseDraft(raw);const clinicId=actor.clinicId!;
   if(actor.role!=='manager'||!clinicId)throw forbidden();
   for(const [kind,permission] of Object.entries({branches:'settings.manage',services:'services.manage',rooms:'rooms.manage',staff:'employees.manage'} as const))if(draft[kind as keyof Draft].length&&!hasPermission(actor,permission))throw forbidden();
   const existingBranches=await tx.select().from(branchesTable).where(eq(branchesTable.clinicId,clinicId));
+  draft=withDefaultStaffHours(draft,existingBranches.map(b=>({...b,key:`branch_${b.id}`})));
   const existingServices=await tx.select().from(servicesTable).where(eq(servicesTable.clinicId,clinicId));
   const branchMap=new Map(existingBranches.map(b=>[`branch_${b.id}`,b.id]));
   const serviceMap=new Map(existingServices.map(s=>[`existing_service_${s.id}`,{id:s.id,branchId:s.branchId}]));
@@ -40,7 +41,7 @@ export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Recor
   const resolveBranch=(key:string|null):number|null=>{if(key===null)return null;const id=branchMap.get(key);if(!id)throw badRequest('concierge_invalid_reference');return id;};
   const resolveServices=(keys:string[],branchId:number|null)=>keys.map(key=>{const s=serviceMap.get(key);if(!s)throw badRequest('concierge_invalid_reference');if(!compatibleBranch(s.branchId,branchId))throw badRequest('branch_mismatch');return s.id;});
   for(const b of draft.branches){
-    const fields=branchSchema.parse({name:b.name,nameLang:language(b),timeZone:b.timeZone,openingHours:b.openingHours});let id:number;
+    const fields=branchSchema.parse({... (b.address!==undefined?{address:b.address}:{}),... (b.mapUrl!==undefined?{mapUrl:b.mapUrl}:{}),name:b.name,nameLang:language(b),timeZone:b.timeZone,openingHours:b.openingHours});let id:number;
     if(b.existingId!==null){
       const existing=existingBranches.find(x=>x.id===b.existingId);if(!existing)throw forbidden('concierge_invalid_reference');
       const actual=createHash('sha256').update(JSON.stringify({name:existing.name,nameLang:existing.nameLang,timeZone:existing.timeZone,openingHours:existing.openingHours})).digest('hex');
@@ -55,7 +56,7 @@ export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Recor
   }
   for(const s of draft.services){
     if(serviceMap.has(s.key))throw badRequest('concierge_invalid_reference');
-    const input=serviceSchema.parse({name:s.name,nameLang:language(s),branchId:resolveBranch(s.branchKey),durationMinutes:s.durationMinutes,price:s.price,currency:s.currency,category:s.category,requiresRoom:s.requiresRoom,isActive:true,employeeIds:s.employeeIds??[],definition:s.definition??null});
+    const input=serviceSchema.parse({name:s.name,nameLang:language(s),branchId:resolveBranch(s.branchKey),durationMinutes:s.durationMinutes,price:s.price,currency:s.currency,category:s.category,requiresRoom:s.requiresRoom,followUpEnabled:s.followUpEnabled ?? false,isActive:true,employeeIds:s.employeeIds??[],definition:s.definition??null});
     if(existingServices.some(v=>v.branchId===input.branchId&&normalizeServiceName(v.name)===normalizeServiceName(input.name)))throw conflict('concierge_duplicate');
     const [duplicate]=await tx.select({id:servicesTable.id}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),sql`lower(trim(${servicesTable.name})) = lower(${input.name})`,input.branchId===null?sql`${servicesTable.branchId} is null`:eq(servicesTable.branchId,input.branchId))).limit(1);if(duplicate)throw conflict('concierge_duplicate');
     const {employeeIds,...fields}=input;const [created]=await tx.insert(servicesTable).values({...fields,clinicId}).returning();

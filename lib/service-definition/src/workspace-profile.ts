@@ -1,5 +1,7 @@
 /** Tenant workspace identity, not a public website or an executable theme. */
 export const WORKSPACE_FIELDS = ['nameAr','nameEn','subtitleAr','subtitleEn','phone','email','address','website','logoDataUrl','primaryColor','accentColor'] as const;
+export const JORMALL_PRIMARY = '#087CB8';
+export const JORMALL_ACCENT = '#D94B3D';
 export type WorkspaceField = typeof WORKSPACE_FIELDS[number];
 export type WorkspaceProfile = {version:1} & Record<WorkspaceField,string|null>;
 export type FactSource = {kind:'clinic'|'owner'|'public'|'suggestion';url:string|null;confidence:'confirmed'|'extracted'|'suggested';evidence:string|null};
@@ -37,7 +39,7 @@ export function parseWorkspaceProfile(value:unknown):WorkspaceProfile {
  return out;
 }
 export function defaultWorkspace(name:string,language:'ar'|'en'):WorkspaceRecord {
- const profile=parseWorkspaceProfile({version:1,nameAr:language==='ar'?name:null,nameEn:language==='en'?name:null,subtitleAr:null,subtitleEn:null,phone:null,email:null,address:null,website:null,logoDataUrl:null,primaryColor:'#765E2D',accentColor:'#D8B96A'});
+ const profile=parseWorkspaceProfile({version:1,nameAr:language==='ar'?name:null,nameEn:language==='en'?name:null,subtitleAr:null,subtitleEn:null,phone:null,email:null,address:null,website:null,logoDataUrl:null,primaryColor:JORMALL_PRIMARY,accentColor:JORMALL_ACCENT});
  return {revision:0,profile,sources:{[language==='ar'?'nameAr':'nameEn']:{kind:'clinic',url:null,confidence:'confirmed',evidence:null},primaryColor:{kind:'suggestion',url:null,confidence:'suggested',evidence:null},accentColor:{kind:'suggestion',url:null,confidence:'suggested',evidence:null}}};
 }
 export const beginWorkspaceDraft=(record:WorkspaceRecord):WorkspaceDraft=>({profile:structuredClone(record.profile),sources:structuredClone(record.sources),baseRevision:record.revision,dirty:false,proposals:[]});

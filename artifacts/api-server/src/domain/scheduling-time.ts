@@ -35,6 +35,7 @@ export type SlotInput = {
   date: string; timeZone: string; branchHours: unknown; workingHours: unknown; breaks: unknown;
   timeOff: Leave[]; durationMinutes: number; employeeId: number; requiresRoom: boolean;
   roomIds: number[]; busy: BusyInterval[]; now: number;
+  roomHours?: Record<number,unknown>; roomBreaks?: Record<number,unknown>;
 };
 export const SLOT_STEP_MINUTES = 15;
 export function computeSlots(input: SlotInput): Slot[] {
@@ -56,7 +57,12 @@ export function computeSlots(input: SlotInput): Slot[] {
     if (start === null || end === null || start <= input.now || end - start !== input.durationMinutes * 60000) continue;
     if (leave.some((l) => overlaps(start, end, l.start, l.end))) continue;
     if (busy.some((b) => b.employeeId === input.employeeId && overlaps(start, end, b.start, b.end))) continue;
-    const room = input.requiresRoom ? [...input.roomIds].sort((a, b) => a - b).find((id) => !busy.some((b) => b.roomId === id && overlaps(start, end, b.start, b.end))) : null;
+    const room = input.requiresRoom ? [...input.roomIds].sort((a, b) => a - b).find((id) => {
+      const hours=input.roomHours?.[id],roomBreaks=input.roomBreaks?.[id];
+      return (!hours||contains(normalizeWeek(hours)[day],minute,endMinute))&&
+        (!roomBreaks||!normalizeWeek(roomBreaks)[day].some((b)=>overlaps(minute,endMinute,minutes(b.open),minutes(b.close))))&&
+        !busy.some((b) => b.roomId === id && overlaps(start, end, b.start, b.end));
+    }) : null;
     if (input.requiresRoom && room === undefined) continue;
     slots.push({ startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(), roomId: room ?? null });
   }

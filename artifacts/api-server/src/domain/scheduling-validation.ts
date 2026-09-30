@@ -1,4 +1,5 @@
 import { consumptionPayloadSchema } from './operations-validation';
+import {productSelectionsSchema} from './patient-billing';
 import { z } from 'zod';
 import { APPOINTMENT_STATUSES, validDate } from './scheduling-rules';
 const id = z.number().int().positive();
@@ -8,16 +9,19 @@ const instant = z.string().datetime({ offset: true });
 const key = z.string().uuid();
 const notes = z.string().max(5000);
 const lang = z.enum(['en', 'ar']);
-export const bookingSchema = z.object({ branchId: id, customerId: id, serviceId: id, employeeId: id, startsAt: instant, notes: notes.default(''), notesLang: lang.default('en'), intakeAnswers: z.record(z.union([z.string().max(2000),z.number().finite(),z.boolean(),z.null()])).refine(v=>Object.keys(v).length<=12,'service_intake_invalid').default({}), idempotencyKey: key }).strict();
+export const seriesSchema=z.object({count:z.number().int().min(1).max(50),intervalDays:z.number().int().min(1).max(365)}).strict();
+export const bookingPreviewSchema=z.object({branchId:id,customerId:id,serviceId:id,employeeId:id,startsAt:instant,packageId:id.optional(),series:seriesSchema.optional()}).strict();
+export const appointmentChargeSchema = z.object({ price: z.string().regex(/^\d{1,9}(?:\.\d{1,3})?$/), expectedVersion: id, idempotencyKey: key }).strict();
+export const bookingSchema = z.object({ packageId:id.optional(),series:seriesSchema.optional(),overrideReason:z.string().trim().max(1000).default(''),branchId: id, customerId: id, serviceId: id, employeeId: id, startsAt: instant, notes: notes.default(''), notesLang: lang.default('en'), appointmentType: z.enum(['standard','follow_up']).default('standard'), followUpOfId: id.optional(), chargePrice: z.string().regex(/^\d{1,9}(?:\.\d{1,3})?$/).optional(), productItems: productSelectionsSchema.optional(), expectedServicePrice:z.string().regex(/^\d{1,9}(?:\.\d{1,3})?$/).optional(), intakeAnswers: z.record(z.union([z.string().max(2000),z.number().finite(),z.boolean(),z.null()])).refine(v=>Object.keys(v).length<=12,'service_intake_invalid').default({}), idempotencyKey: key }).strict().refine(v => v.appointmentType==='follow_up' ? !!v.followUpOfId&&!v.packageId&&(!v.series||v.series.count===1) : v.followUpOfId===undefined, 'follow_up_parent_required');
 export const availabilitySchema = z.object({ branchId: z.coerce.number().int().positive(), serviceId: z.coerce.number().int().positive(), employeeId: z.coerce.number().int().positive(), date, excludeAppointmentId: queryId }).strict();
 export const calendarSchema = z.object({
   branchId: queryId, employeeId: queryId, serviceId: queryId, customerId: queryId,
-  date: date.optional(), through: date.optional(), status: z.enum(APPOINTMENT_STATUSES).optional(),
+  date: date.optional(), through: date.optional(), from: instant.optional(), to: instant.optional(), status: z.enum(APPOINTMENT_STATUSES).optional(),
   mine: z.enum(['true', 'false']).optional(), page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
-}).strict().refine((v) => !v.through || (v.date && v.through >= v.date && Date.parse(v.through) - Date.parse(v.date) <= 31 * 86400000), 'invalid_date_range');
+}).strict().refine((v) => !v.through || (v.date && v.through >= v.date && Date.parse(v.through) - Date.parse(v.date) <= 31 * 86400000), 'invalid_date_range').refine((v) => !v.from || !v.to || Date.parse(v.from) <= Date.parse(v.to), 'invalid_time_range');
 export const catalogSchema = z.object({ branchId: queryId, serviceId: queryId }).strict();
-export const transitionSchema = z.object({ status: z.enum(APPOINTMENT_STATUSES), expectedVersion: id, reason: z.string().trim().max(1000).default(''), notes: notes.optional(), notesLang: lang.optional(), consumption: consumptionPayloadSchema.optional(), idempotencyKey: key }).strict().refine((v) => !v.consumption || v.status === 'completed', 'consumption_requires_completed').refine((v) => !['cancelled','no_show'].includes(v.status) || v.reason.length > 0, 'reason_required').refine((v) => v.notes === undefined || v.notesLang !== undefined, 'notes_language_required');
+export const transitionSchema = z.object({ overrideReason:z.string().trim().max(1000).default(''),status: z.enum(APPOINTMENT_STATUSES), expectedVersion: id, reason: z.string().trim().max(1000).default(''), notes: notes.optional(), notesLang: lang.optional(), consumptionApproved:z.literal(true).optional(),consumption: consumptionPayloadSchema.optional(), idempotencyKey: key }).strict().refine((v) => !v.consumption || v.status === 'completed', 'consumption_requires_completed').refine((v) => !['cancelled','no_show'].includes(v.status) || v.reason.length > 0, 'reason_required').refine((v) => v.notes === undefined || v.notesLang !== undefined, 'notes_language_required');
 export const rescheduleSchema = z.object({ employeeId: id, startsAt: instant, expectedVersion: id, reason: z.string().trim().min(1).max(1000), idempotencyKey: key }).strict();
 export const appointmentNotesSchema = z.object({ notes, notesLang: lang, expectedVersion: id, idempotencyKey: key }).strict();
 export const bookingCustomerSchema = z.object({ name: z.string().trim().min(1).max(120), nameLang: lang, branchId: id.nullable().default(null), phone: z.string().trim().max(50).nullable().default(null), email: z.union([z.string().trim().email().max(200), z.literal(''), z.null()]).default(null), idempotencyKey: key }).strict().refine((v) => Boolean(v.phone || v.email), 'contact_required');

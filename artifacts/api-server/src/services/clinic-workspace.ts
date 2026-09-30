@@ -1,5 +1,5 @@
 import {and,eq,sql,asc} from 'drizzle-orm';
-import {db,clinicsTable,clinicWorkspacesTable,usersTable,servicesTable,type User} from '@workspace/db';
+import {db,clinicsTable,clinicWorkspacesTable,managerOnboardingTable,usersTable,servicesTable,type User} from '@workspace/db';
 import {defaultWorkspace,parseWorkspaceProfile,type WorkspaceRecord,type WorkspaceDraft} from '@workspace/service-definition';
 import {forbidden,conflict,notFound} from '../lib/errors';
 import {hasPermission} from '../domain/permissions';
@@ -29,7 +29,10 @@ export async function getMyWorkspace(actor:User){
  const services=hasPermission(fresh,'services.read')?await db.select({id:servicesTable.id,name:servicesTable.name,definition:servicesTable.definition,branchId:servicesTable.branchId}).from(servicesTable).where(and(eq(servicesTable.clinicId,fresh.clinicId!),eq(servicesTable.isActive,true),fresh.branchId===null?undefined:sql`(${servicesTable.branchId} is null or ${servicesTable.branchId}=${fresh.branchId})`)).orderBy(asc(servicesTable.id)).limit(201):[];
  const map=new Map<string,{name:string;serviceIds:number[];serviceNames:string[]}>();
  for(const s of services.slice(0,200)){const name=s.definition?.section??'';const group=map.get(name)??{name,serviceIds:[],serviceNames:[]};group.serviceIds.push(s.id);group.serviceNames.push(s.name);map.set(name,group);}
- return {...record,sections:[...map.values()],truncated:services.length>200};
+ const [onboarding]=fresh.role==='manager'?await db.select({state:managerOnboardingTable.state}).from(managerOnboardingTable).where(and(eq(managerOnboardingTable.clinicId,fresh.clinicId!),eq(managerOnboardingTable.userId,fresh.id))).limit(1):[];
+ const state=onboarding?.state as {importApproved?:boolean;draft?:{services?:{name?:string|null}[]}}|undefined;
+ const pendingServices=state?.importApproved?state.draft?.services?.map(item=>item.name?.trim()).filter((name):name is string=>!!name).slice(0,50)??[]:[];
+ return {...record,sections:[...map.values()],truncated:services.length>200,pendingServices};
 }
 /** Caller holds the same tenant setup advisory lock. This transaction includes service apply. */
 export async function applyWorkspace(tx:Tx,actor:User,draft:WorkspaceDraft):Promise<WorkspaceRecord> {

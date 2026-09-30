@@ -11,6 +11,8 @@ import conciergeRouter from './concierge';
 import operationsRouter from './operations';
 
 import workspaceRouter from './workspace';
+import costingRouter from './costing';
+import packagesRouter from './packages';
 
 const router: IRouter = Router();
 
@@ -19,6 +21,8 @@ router.use(authRouter);
 router.use(clinicsRouter);
 router.use(meRouter);
 router.use(workspaceRouter);
+router.use(costingRouter);
+router.use(packagesRouter);
 router.use(conciergeRouter);
 router.use(assistantRouter);
 router.use(operationsRouter);

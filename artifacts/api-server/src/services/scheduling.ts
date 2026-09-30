@@ -1,4 +1,12 @@
 import { intakeSnapshot, ServiceDefinitionError } from '@workspace/service-definition';
+import {paymentSummary,type ProductSelection} from '../domain/patient-billing';
+import {patientProductOptions,plannedProductSelections,resolveProductCharges} from './patient-billing';
+import {milli} from '../domain/costing';
+import {seriesDates} from '../domain/packages';
+import {ensurePackageReservation,enforcePackagePayment,packagePaymentCheck,packageAppointmentTransition,appointmentPackage,cancelAppointmentDeposit,syncAppointmentInvoice} from './packages';
+import {withOperations} from './operations-context';
+import {bookingPreviewSchema} from '../domain/scheduling-validation';
+import {z} from 'zod';
 import { mapOperationsError } from './operations-context';
 import { canRecordConsumption } from '../domain/operations-rules';
 import { offerNextReplacement } from './waiting-list';
@@ -6,11 +14,13 @@ import { recordConsumptionInTx } from './inventory';
 import { slotContext, selectedSlot } from './scheduling-slots';
 import { recordAppointmentHistory as history } from './scheduling-history';
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, ne, gte, lt, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ne, gte, lte, lt, inArray, or, sql } from 'drizzle-orm';
 import {
   db, usersTable, clinicsTable, branchesTable, servicesTable, roomsTable, customersTable,
   serviceEmployeesTable, roomServicesTable, appointmentsTable, appointmentStatusHistoryTable,
   schedulingCommandsTable, type User, type Appointment,
+  appointmentCostSnapshotsTable,
+  packageBookingsTable,
 } from '@workspace/db';
 import { hasPermission } from '../domain/permissions';
 import {
@@ -19,7 +29,7 @@ import {
 } from '../domain/scheduling-rules';
 import { branchDate, computeSlots } from '../domain/scheduling-time';
 import type { BookingInput, AvailabilityInput, CalendarInput, TransitionInput, RescheduleInput, AppointmentNotesInput, BookingCustomerInput } from '../domain/scheduling-validation';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { badRequest, conflict, forbidden, notFound, HttpError } from '../lib/errors';
 import { recordAudit } from './audit';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -29,6 +39,7 @@ export function scheduleClinic(actor: User): number {
   return actor.clinicId;
 }
 function requireScheduler(actor: User) { scheduleClinic(actor); if (!canSchedule(actor)) throw forbidden(); }
+function canChangeCharge(actor:User,a:Appointment){return ['manager','secretary'].includes(actor.role)?hasPermission(actor,'appointments.manage'):isProvider(actor)&&a.employeeId===actor.id;}
 const snapshot = (a: Appointment) => ({ startsAt: a.startsAt.toISOString(), endsAt: a.endsAt.toISOString(), employeeId: a.employeeId, roomId: a.roomId });
 function mapDatabaseError(error: unknown): never {
   const e = error as {code?: string; cause?: {code?: string}};
@@ -86,7 +97,7 @@ export async function availability(actor: User, input: AvailabilityInput) {
     if (existing && (!canReschedule(fresh, existing) || existing.branchId !== input.branchId || existing.serviceId !== input.serviceId)) throw badRequest('invalid_reschedule');
     const result = await slotContext(tx, fresh, input, existing);
     return {date: input.date, timeZone: result.branch.timeZone, durationMinutes: result.durationMinutes, slots: result.slots,
-      roomRequired: result.requiresRoom, stepMinutes: 15};
+      roomRequired: result.requiresRoom, emptyReason: result.slots.length ? null : result.availabilityReason, stepMinutes: 15};
   });
 }
 export async function createAppointment(actor: User, input: BookingInput) {
@@ -94,17 +105,89 @@ export async function createAppointment(actor: User, input: BookingInput) {
     const clinicId = scheduleClinic(fresh);
     const [customer] = await tx.select({id: customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId, clinicId), eq(customersTable.id, input.customerId)));
     if (!customer) throw notFound('record_not_found');
-    const context = await selectedSlot(tx, fresh, input);
-    const [service]=await tx.select({definition:servicesTable.definition}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),eq(servicesTable.id,input.serviceId)));
+    const dates=seriesDates(input.startsAt,input.series?.count??1,input.series?.intervalDays??7);
+    if(input.packageId){await ensurePackageReservation(tx,fresh,input.packageId,input.customerId,input.serviceId,dates.length);await enforcePackagePayment(tx,fresh,input.packageId,input.overrideReason);}
+    let firstId=0;
+    for(const startsAt of dates){
+    const context = await selectedSlot(tx, fresh, {...input,startsAt});
+    const [service]=await tx.select({definition:servicesTable.definition,price:servicesTable.price,currency:servicesTable.currency,followUpEnabled:servicesTable.followUpEnabled}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),eq(servicesTable.id,input.serviceId)));
     if(!service)throw notFound('record_not_found');
+    if(input.expectedServicePrice!==undefined&&milli(input.expectedServicePrice)!==milli(service.price))throw conflict('billing_price_changed');
+    const productSelections=input.productItems??(input.appointmentType==='follow_up'?[]:await plannedProductSelections(tx,clinicId,input.branchId,input.serviceId));
+    const productCharges=await resolveProductCharges(tx,clinicId,input.branchId,productSelections);
+    if(input.appointmentType==='follow_up'){
+      if(!service.followUpEnabled)throw badRequest('follow_up_not_enabled');
+      const [parent]=await tx.select().from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,clinicId),eq(appointmentsTable.id,input.followUpOfId!),eq(appointmentsTable.customerId,input.customerId),eq(appointmentsTable.serviceId,input.serviceId)));
+      if(!parent||parent.status!=='completed'||parent.endsAt.getTime()>Date.parse(input.startsAt))throw badRequest('follow_up_invalid_parent');
+    }
+    if(input.chargePrice!==undefined&&!['manager','secretary','doctor','service_provider'].includes(fresh.role))throw forbidden();
     let serviceIntake;
     try{serviceIntake=intakeSnapshot(service.definition,input.intakeAnswers??{});}catch(e){if(e instanceof ServiceDefinitionError)throw badRequest('service_intake_invalid');throw e;}
     const [a] = await tx.insert(appointmentsTable).values({clinicId, branchId: input.branchId, customerId: input.customerId,
       serviceId: input.serviceId, employeeId: input.employeeId, roomId: context.selected.roomId,
       startsAt: new Date(context.selected.startsAt), endsAt: new Date(context.selected.endsAt),
       durationMinutes: context.durationMinutes, requiresRoom: context.requiresRoom, status: 'pending',
-      notes: input.notes, notesLang: input.notesLang, serviceIntake, createdBy: fresh.id}).returning();
-    await history(tx, fresh, 'created', null, a!); return a!.id;
+      notes: input.notes, notesLang: input.notesLang, serviceIntake, createdBy: fresh.id,
+      appointmentType:input.appointmentType,followUpOfId:input.followUpOfId??null,
+      chargePrice:input.packageId?'0':input.chargePrice??(input.appointmentType==='follow_up'?'0':service.price),chargeCurrency:service.currency,productCharges}).returning();
+    await history(tx, fresh, 'created', null, a!);if(input.packageId)await tx.insert(packageBookingsTable).values({clinicId,customerId:input.customerId,packageId:input.packageId,appointmentId:a!.id,serviceId:input.serviceId});if(!firstId)firstId=a!.id;
+    }return firstId;
+  });
+}
+export async function previewBookingSeries(actor:User,input:z.infer<typeof bookingPreviewSchema>){return withOperations(actor,false,async(tx,fresh)=>{
+ requireScheduler(fresh);const [customer]=await tx.select({id:customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId,scheduleClinic(fresh)),eq(customersTable.id,input.customerId)));if(!customer)throw notFound('record_not_found');
+ const dates=seriesDates(input.startsAt,input.series?.count??1,input.series?.intervalDays??7);if(input.packageId)await ensurePackageReservation(tx,fresh,input.packageId,input.customerId,input.serviceId,dates.length);
+ const sessions=[];for(const startsAt of dates){try{const context=await selectedSlot(tx,fresh,{...input,startsAt});sessions.push({startsAt,endsAt:context.selected.endsAt,available:true,error:null});}catch(error){if(!(error instanceof HttpError))throw error;sessions.push({startsAt,endsAt:null,available:false,error:error.code});}}
+ return {sessions,canBook:sessions.every(s=>s.available),payment:input.packageId?await packagePaymentCheck(tx,fresh,input.packageId):null};
+ });}
+export async function saveAppointmentCharge(actor:User,id:number,input:{price:string;expectedVersion:number;idempotencyKey:string}){
+  return command(actor,`charge:${id}`,input,async(tx,fresh)=>{if(!canChangeCharge(fresh,await findAppointment(tx,fresh,id)))throw forbidden();},async(tx,fresh)=>{
+    const a=await findAppointment(tx,fresh,id);
+    if(await appointmentPackage(tx,fresh,id))throw conflict('package_appointment_fee_locked');
+    if(a.version!==input.expectedVersion)throw conflict('appointment_changed');
+    if(['cancelled','no_show'].includes(a.status))throw conflict('invalid_transition');
+    const [frozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
+    if(frozen)throw conflict('costing_snapshot_locked');
+    await tx.update(appointmentsTable).set({chargePrice:input.price,chargeCurrency:'JOD',version:a.version+1,updatedAt:new Date()}).where(and(eq(appointmentsTable.clinicId,a.clinicId),eq(appointmentsTable.id,id)));
+    await syncAppointmentInvoice(tx,fresh,{...a,chargePrice:input.price});
+    await recordAudit({clinicId:a.clinicId,actorUserId:fresh.id,action:'appointment.price_changed',entityType:'appointment',entityId:id,details:{before:a.chargePrice,after:input.price,appointmentType:a.appointmentType}},tx);
+    return id;
+  });
+}
+export async function patientPricing(actor:User,input:{branchId:number;serviceId:number;appointmentType:'standard'|'follow_up'}){
+  const clinicId=scheduleClinic(actor);
+  return db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock_shared(7140002, ${clinicId})`);
+    await freshActor(tx,actor);
+    const [branch]=await tx.select({id:branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId),eq(branchesTable.id,input.branchId)));
+    const [service]=await tx.select({price:servicesTable.price,branchId:servicesTable.branchId}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),eq(servicesTable.id,input.serviceId)));
+    if(!branch||!service||service.branchId!==null&&service.branchId!==input.branchId)throw notFound('record_not_found');
+    const selections=input.appointmentType==='follow_up'?[]:await plannedProductSelections(tx,clinicId,input.branchId,input.serviceId);
+    const products=await resolveProductCharges(tx,clinicId,input.branchId,selections);
+    return {...paymentSummary(input.appointmentType==='follow_up'?'0.000':service.price,products),options:await patientProductOptions(tx,clinicId,input.branchId),servicePrice:service.price};
+  });
+}
+export async function appointmentProductOptions(actor:User,id:number){
+  const clinicId=scheduleClinic(actor);
+  return db.transaction(async tx=>{
+    await tx.execute(sql`select pg_advisory_xact_lock_shared(7140002, ${clinicId})`);
+    const fresh=await freshActor(tx,actor),a=await findAppointment(tx,fresh,id);
+    if(!canChangeCharge(fresh,a))throw forbidden();
+    return {options:await patientProductOptions(tx,clinicId,a.branchId)};
+  });
+}
+export async function saveAppointmentProducts(actor:User,id:number,input:{items:ProductSelection[];expectedVersion:number;idempotencyKey:string}){
+  return command(actor,`products:${id}`,input,async(tx,fresh)=>{if(!canChangeCharge(fresh,await findAppointment(tx,fresh,id)))throw forbidden();},async(tx,fresh)=>{
+    const a=await findAppointment(tx,fresh,id);
+    if(a.version!==input.expectedVersion)throw conflict('appointment_changed');
+    if(['cancelled','no_show'].includes(a.status))throw conflict('invalid_transition');
+    const [frozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
+    if(frozen)throw conflict('costing_snapshot_locked');
+    const products=await resolveProductCharges(tx,a.clinicId,a.branchId,input.items,a.productCharges);
+    await tx.update(appointmentsTable).set({productCharges:products,productChargesBasis:'manual',version:a.version+1,updatedAt:new Date()}).where(and(eq(appointmentsTable.clinicId,a.clinicId),eq(appointmentsTable.id,id)));
+    await syncAppointmentInvoice(tx,fresh,{...a,productCharges:products});
+    await recordAudit({clinicId:a.clinicId,actorUserId:fresh.id,action:'appointment.product_charges_changed',entityType:'appointment',entityId:id,details:{before:a.productCharges,after:products}},tx);
+    return id;
   });
 }
 export async function transitionAppointment(actor: User, id: number, input: TransitionInput) {
@@ -117,14 +200,16 @@ export async function transitionAppointment(actor: User, id: number, input: Tran
     const before = await findAppointment(tx, fresh, id);
     if (before.version !== input.expectedVersion) throw conflict('appointment_changed');
     if (!allowedTransitions(fresh, before).includes(input.status)) throw conflict('invalid_transition');
+    if(input.status==='completed'&&isProvider(fresh)&&canRecordConsumption(fresh,before)&&(!input.consumption||!input.consumptionApproved))throw badRequest('consumption_approval_required');
     if (input.status === 'no_show' && before.startsAt.getTime() > Date.now()) throw badRequest('too_early_no_show');
     if (input.notes !== undefined && !canWriteNotes(fresh, before)) throw forbidden();
+    await packageAppointmentTransition(tx,fresh,before,input.status,input.overrideReason);
     const [after] = await tx.update(appointmentsTable).set({status: input.status, version: before.version + 1, updatedAt: new Date(),
       ...(input.notes !== undefined ? {notes: input.notes, notesLang: input.notesLang!} : {})})
       .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.clinicId, scheduleClinic(fresh)), eq(appointmentsTable.version, before.version))).returning();
     if (!after) throw conflict('appointment_changed');
     await history(tx, fresh, 'status_changed', before, after, input.reason);
-    if (after.status === 'cancelled') await offerNextReplacement(tx, fresh, after);
+    if (after.status === 'cancelled') {await cancelAppointmentDeposit(tx,fresh,after);await offerNextReplacement(tx, fresh, after);}
     if (input.consumption) await recordConsumptionInTx(tx, fresh, after, input.consumption);
     return id;
   });
@@ -136,7 +221,7 @@ export async function rescheduleAppointment(actor: User, id: number, input: Resc
     if (!canReschedule(fresh, before)) throw conflict('invalid_reschedule');
     const context = await selectedSlot(tx, fresh, {branchId: before.branchId, serviceId: before.serviceId, employeeId: input.employeeId, startsAt: input.startsAt}, before);
     if (before.employeeId === input.employeeId && before.startsAt.getTime() === Date.parse(context.selected.startsAt) && before.roomId === context.selected.roomId) throw badRequest('reschedule_unchanged');
-    const [after] = await tx.update(appointmentsTable).set({employeeId: input.employeeId, roomId: context.selected.roomId,
+    const [after] = await tx.update(appointmentsTable).set({employeeId: input.employeeId, roomId: context.selected.roomId, requiresRoom:context.requiresRoom,
       startsAt: new Date(context.selected.startsAt), endsAt: new Date(context.selected.endsAt),
       status: 'pending', version: before.version + 1, updatedAt: new Date()})
       .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.clinicId, scheduleClinic(fresh)), eq(appointmentsTable.version, before.version))).returning();
@@ -174,7 +259,7 @@ export async function schedulingCatalog(actor: User, input: {branchId?: number; 
   const branches = await db.select({id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone}).from(branchesTable).where(eq(branchesTable.clinicId, clinicId)).orderBy(asc(branchesTable.name));
   if (input.branchId && !branches.some((b) => b.id === input.branchId)) throw notFound('record_not_found');
   const serviceRows = await db.select({id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId,
-    durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, definition:servicesTable.definition})
+    durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, followUpEnabled:servicesTable.followUpEnabled, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, definition:servicesTable.definition})
     .from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), eq(servicesTable.isActive, true),
       input.branchId ? or(eq(servicesTable.branchId, input.branchId), sql`${servicesTable.branchId} is null`) : undefined)).orderBy(asc(servicesTable.name));
   if (input.serviceId && !serviceRows.some((s) => s.id === input.serviceId)) throw notFound('record_not_found');
@@ -183,11 +268,14 @@ export async function schedulingCatalog(actor: User, input: {branchId?: number; 
     .from(usersTable).where(and(eq(usersTable.clinicId, clinicId), eq(usersTable.isActive, true),
       canReadAll(actor) ? undefined : eq(usersTable.id, actor.id),
       input.branchId ? or(eq(usersTable.branchId, input.branchId), sql`${usersTable.branchId} is null`) : undefined,
+      inArray(usersTable.role, ['doctor', 'service_provider']),
       input.serviceId ? (links.length ? inArray(usersTable.id, links.map((v) => v.employeeId)) : sql`false`) : undefined)).orderBy(asc(usersTable.name));
   return {branches, services: serviceRows, employees, canBook: canSchedule(actor), canReadAll: canReadAll(actor),
     canSearchCustomers: hasPermission(actor, 'customers.read'), canAddCustomer: hasPermission(actor, 'customers.manage')};
 }
 const listSelection = {
+  productCharges:appointmentsTable.productCharges,productChargesBasis:appointmentsTable.productChargesBasis,
+  appointmentType:appointmentsTable.appointmentType,followUpOfId:appointmentsTable.followUpOfId,chargePrice:appointmentsTable.chargePrice,chargeCurrency:appointmentsTable.chargeCurrency,
   id: appointmentsTable.id, branchId: appointmentsTable.branchId, clinicId: appointmentsTable.clinicId,
   customerId: appointmentsTable.customerId, serviceId: appointmentsTable.serviceId, employeeId: appointmentsTable.employeeId,
   roomId: appointmentsTable.roomId, startsAt: appointmentsTable.startsAt, endsAt: appointmentsTable.endsAt,
@@ -214,10 +302,12 @@ export async function listAppointments(actor: User, input: CalendarInput) {
     input.serviceId ? eq(appointmentsTable.serviceId, input.serviceId) : undefined,
     input.customerId ? eq(appointmentsTable.customerId, input.customerId) : undefined,
     input.status ? eq(appointmentsTable.status, input.status) : undefined,
-    input.date ? (input.through ? sql`${localDay} between ${input.date}::date and ${input.through}::date` : sql`${localDay} = ${input.date}::date`) : undefined);
-  const rows = await joinedAppointments().where(condition).orderBy(input.date ? asc(appointmentsTable.startsAt) : desc(appointmentsTable.startsAt), asc(appointmentsTable.id)).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    input.date ? (input.through ? sql`${localDay} between ${input.date}::date and ${input.through}::date` : sql`${localDay} = ${input.date}::date`) : undefined,
+    input.from ? gte(appointmentsTable.startsAt, new Date(input.from)) : undefined,
+    input.to ? lte(appointmentsTable.startsAt, new Date(input.to)) : undefined);
+  const rows = await joinedAppointments().where(condition).orderBy(input.date || input.from || input.to ? asc(appointmentsTable.startsAt) : desc(appointmentsTable.startsAt), asc(appointmentsTable.id)).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
   const [count] = await db.select({total: sql<number>`count(*)::int`}).from(appointmentsTable).innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), eq(branchesTable.clinicId, clinicId))).where(condition);
-  return {items: rows.map((a) => ({...a, nextActions: allowedTransitions(actor, a).filter((to) => to !== 'no_show' || a.startsAt.getTime() <= Date.now()), canReschedule: canReschedule(actor, a)})),
+  return {items: rows.map((a) => ({...a, billing:paymentSummary(a.chargePrice,a.productCharges,a.productChargesBasis), nextActions: allowedTransitions(actor, a).filter((to) => to !== 'no_show' || a.startsAt.getTime() <= Date.now()), canReschedule: canReschedule(actor, a)})),
     total: count!.total, page: input.page, pageSize: input.pageSize, ownOnly};
 }
 export async function getAppointment(actor: User, id: number) {
@@ -243,11 +333,15 @@ export async function getAppointment(actor: User, id: number) {
     actor: {id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang}}).from(appointmentStatusHistoryTable)
     .innerJoin(usersTable, and(eq(usersTable.id, appointmentStatusHistoryTable.actorId), eq(usersTable.clinicId, a.clinicId)))
     .where(and(eq(appointmentStatusHistoryTable.clinicId, a.clinicId), eq(appointmentStatusHistoryTable.appointmentId, id))).orderBy(asc(appointmentStatusHistoryTable.id));
-  return {...row, requiresRoom: a.requiresRoom, room: room ?? null, customerDetails,
+  const [costFrozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
+  const packageLink=await appointmentPackage(tx,actor,id);
+  const packagePayment=packageLink&&!['completed','cancelled','no_show'].includes(a.status)?await packagePaymentCheck(tx,actor,packageLink.packageId):null;
+  return {...row, billing:paymentSummary(a.chargePrice,a.productCharges,a.productChargesBasis), requiresRoom: a.requiresRoom, room: room ?? null, customerDetails,
+    packageId:packageLink?.packageId??null,packagePayment,
     ...(canWriteNotes(actor, a) ? {notes: a.notes, notesLang: a.notesLang, serviceIntake:a.serviceIntake} : {}),
     // General read access does not imply access to provider/operational notes or free-text reasons.
     history: events.map((e) => canWriteNotes(actor, a) ? e : {...e, reason: ''}),
-    canEditNotes: canWriteNotes(actor, a), canReschedule: canReschedule(actor, a),
+    canEditNotes: canWriteNotes(actor, a), canReschedule: canReschedule(actor, a), canEditCharge:!packageLink&&!costFrozen&&canChangeCharge(actor,a)&&!['cancelled','no_show'].includes(a.status),
     nextActions: allowedTransitions(actor, a).filter((to) => to !== 'no_show' || a.startsAt.getTime() <= Date.now())};
   });
 }
@@ -256,7 +350,10 @@ export async function customerAppointments(actor: User, customerId: number, inpu
   if (!hasPermission(actor, 'customers.read')) throw forbidden();
   const [customer] = await db.select({id: customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId, actor.clinicId!), eq(customersTable.id, customerId)));
   if (!customer) throw notFound('record_not_found');
-  return listAppointments(actor, {...input, customerId});
+  const result=await listAppointments(actor, {...input, customerId});
+  const allowed=result.items.filter(item=>canWriteNotes(actor,item));
+  const notes=allowed.length?await db.select({id:appointmentsTable.id,clinicalNotes:appointmentsTable.notes,notesLang:appointmentsTable.notesLang}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,actor.clinicId!),inArray(appointmentsTable.id,allowed.map(item=>item.id)))):[];
+  return {...result,items:result.items.map(item=>({...item,...notes.find(note=>note.id===item.id)}))};
 }
 export async function schedulingHome(actor: User, branchId?:number) {
   const clinicId = scheduleClinic(actor), mine = isProvider(actor);

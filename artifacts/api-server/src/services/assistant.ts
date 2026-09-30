@@ -121,7 +121,7 @@ export function assistantChat(actor:User,raw:unknown) {
     return {reply:parsed.reply.trim(),action:parsed.action==='book'?null:route?{href:route.href}:null,proposal:null};
   });
 }
-const chatBookingSchema=bookingSchema.pick({branchId:true,customerId:true,serviceId:true,employeeId:true,startsAt:true,idempotencyKey:true});
+const chatBookingSchema=bookingSchema.innerType().pick({branchId:true,customerId:true,serviceId:true,employeeId:true,startsAt:true,idempotencyKey:true});
 export function assistantBook(actor:User,raw:unknown){return audited(actor,'book',async fresh=>{
   const input=chatBookingSchema.parse(raw);
   return {id:await createAppointment(fresh,bookingSchema.parse({...input,notes:'',notesLang:'ar',intakeAnswers:{}}))};

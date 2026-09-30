@@ -1,3 +1,4 @@
+import LandingPage from '@/pages/landing';
 import { type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
@@ -9,13 +10,17 @@ import { Spinner } from '@/components/ui/spinner';
 import { I18nProvider } from '@/lib/i18n';
 import { AuthProvider, homePath, useAuth } from '@/lib/auth';
 import {ManagerBranchProvider,useManagerBranch} from '@/lib/manager-branch';
+import { isClinicSetupPath, SETUP_PATH, useClinicSetup } from '@/lib/clinic-setup';
+import ClinicSetupPage from '@/pages/clinic/clinic-setup';
+import PackagesPage from '@/pages/clinic/packages-page';
 import NotFound from '@/pages/not-found';
 import SetupPage from '@/pages/setup';
 import LoginPage from '@/pages/login';
 import ChangePasswordPage from '@/pages/change-password';
 import ClinicsPage from '@/pages/owner/clinics';
 import ClinicDetailPage from '@/pages/owner/clinic-detail';
-import { BranchesPage, ServicesPage, RoomsPage, EmployeesPage, CustomersPage } from '@/pages/clinic/setup-page';
+import { BranchesPage, ServicesPage, EmployeesPage, CustomersPage } from '@/pages/clinic/setup-page';
+import RoomsPage from '@/pages/clinic/rooms-page';
 import ClinicHomePage from '@/pages/clinic/home';
 import ChooseBranchPage from '@/pages/clinic/choose-branch';
 import BookingPage from '@/pages/clinic/booking-page';
@@ -23,7 +28,9 @@ import AppointmentsView from '@/pages/clinic/appointments-view';
 import AppointmentDetailPage from '@/pages/clinic/appointment-detail';
 import ReschedulePage from '@/pages/clinic/reschedule-page';
 import WaitingListPage from '@/pages/clinic/waiting-list-page';
-import InventoryPage, { InventoryDetailPage } from '@/pages/clinic/inventory-page';
+import { InventoryDetailPage } from '@/pages/clinic/inventory-page';
+import InventoryPage from '@/pages/clinic/inventory-workspace';
+import EquipmentMaterialsPage from '@/pages/clinic/equipment-materials-page';
 import { AppointmentsPage, BusinessPage, PeoplePage } from '@/pages/clinic/sections';
 
 const queryClient = new QueryClient({
@@ -43,6 +50,7 @@ function PublicRoutes() {
   const { needsSetup } = useAuth();
   return (
     <Switch>
+      <Route path="/" component={LandingPage}/>
       <Route path="/setup">{needsSetup ? <SetupPage /> : <Redirect to="/login" />}</Route>
       <Route path="/login">{needsSetup ? <Redirect to="/setup" /> : <LoginPage />}</Route>
       <Route>
@@ -56,13 +64,15 @@ function PublicRoutes() {
 function PrivateRoutes() {
   const { user } = useAuth();
   const branch=useManagerBranch();
+  const setup = useClinicSetup();
   const [location]=useLocation();
   if (!user) return null;
 
   const isOwner = user.role === 'platform_owner';
   const has = (key: 'appointments' | 'people' | 'business') => user.nav.includes(key);
-  if(user.role==='manager'&&!user.mustChangePassword&&branch.loading)return <FullscreenLoader/>;
-  if(user.role==='manager'&&branch.needsEntryChoice&&location!=='/choose-branch')return <Redirect to="/choose-branch"/>;
+  if(user.role==='manager'&&!user.mustChangePassword&&(branch.loading||setup.loading))return <FullscreenLoader/>;
+  if (!user.mustChangePassword && setup.required && !isClinicSetupPath(location) && !(setup.paused && location === '/home')) return <Redirect to={setup.paused ? '/home' : SETUP_PATH} />;
+  if(user.role==='manager'&&!setup.required&&branch.needsEntryChoice&&location!=='/choose-branch')return <Redirect to="/choose-branch"/>;
 
   // `/change-password` is always first and stays mounted while the user record updates, so the
   // forced first-login change can finish and redirect without racing the guard below.
@@ -92,6 +102,7 @@ function PrivateRoutes() {
                   {isOwner && <Route path="/clinics" component={ClinicsPage} />}
                   {isOwner && <Route path="/clinics/:id" component={ClinicDetailPage} />}
                   {!isOwner && <Route path="/home" component={ClinicHomePage} />}
+                  {user.role === 'manager' && <Route path={SETUP_PATH} component={ClinicSetupPage} />}
                   {!isOwner && has('appointments') && <Route path="/appointments/new" component={BookingPage} />}
                   {!isOwner && has('appointments') && <Route path="/appointments/view" component={AppointmentsView} />}
                   {!isOwner && has('appointments') && <Route path="/appointments/waiting-list" component={WaitingListPage} />}
@@ -102,8 +113,10 @@ function PrivateRoutes() {
                   {!isOwner && has('people') && <Route path="/people/employees" component={EmployeesPage} />}
                   {!isOwner && has('people') && <Route path="/people" component={PeoplePage} />}
                   {!isOwner && has('business') && <Route path="/business/settings" component={BranchesPage} />}
+                  {!isOwner && has('business') && <Route path="/business/services/packages" component={PackagesPage} />}
                   {!isOwner && has('business') && <Route path="/business/services" component={ServicesPage} />}
                   {!isOwner && has('business') && <Route path="/business/rooms" component={RoomsPage} />}
+                  {!isOwner && has('business') && <Route path="/business/equipment-materials" component={EquipmentMaterialsPage} />}
                   {!isOwner && has('business') && <Route path="/business/inventory/:id" component={InventoryDetailPage} />}
                   {!isOwner && has('business') && <Route path="/business/inventory" component={InventoryPage} />}
                   {!isOwner && has('business') && <Route path="/business" component={BusinessPage} />}
@@ -120,7 +133,9 @@ function PrivateRoutes() {
 
 function Router() {
   const { user, isLoading } = useAuth();
+  const [location]=useLocation();
   if (isLoading) return <FullscreenLoader />;
+  if(location==='/welcome')return <LandingPage/>;
   return user ? <PrivateRoutes /> : <PublicRoutes />;
 }
 

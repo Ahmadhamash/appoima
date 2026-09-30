@@ -19,18 +19,17 @@ export function localConciergeTurn(draft:Draft,text:string,language:Language,new
   if(/للرجال|رجال|\bmen\b/i.test(name))definition.audience='men';
   if(/للنساء|نساء|\bwomen\b/i.test(name))definition.audience='women';
   if(/لح[يى][ةه]|لحيه|beard/i.test(name))definition.bodyArea=ar?'اللحية':'Beard';
-  const service:ServiceDraft={key:newKey,name,nameLang:nameLanguage(name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:null,category:laser?'Laser':'Other',requiresRoom:null,employeeIds:[],roomIds:[],definition};
+  const service:ServiceDraft={key:newKey,name,nameLang:nameLanguage(name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:laser?'Laser':'Other',requiresRoom:null,employeeIds:[],roomIds:[],definition};
   next.services.push(service);return {draft:parseDraft(next),workspace,handled:true,reply:setupWorkflow({serviceWizard:true,draft:next},language).prompt};
  }
  const active=setupWorkflow({serviceWizard:true,draft:next},language).focus;
  const service=next.services.find(s=>s.key===active?.key);
- const aliases:Record<string,string>={'duration':'durationMinutes','المدة':'durationMinutes','مدة':'durationMinutes','price':'price','السعر':'price','سعر':'price','currency':'currency','العملة':'currency','room':'requiresRoom','غرفة':'requiresRoom','scope':'branchScope','النطاق':'branchScope','name':'name','الاسم':'name'};
+ const aliases:Record<string,string>={'duration':'durationMinutes','المدة':'durationMinutes','مدة':'durationMinutes','price':'price','السعر':'price','سعر':'price','room':'requiresRoom','غرفة':'requiresRoom','scope':'branchScope','النطاق':'branchScope','name':'name','الاسم':'name'};
  const field=key?aliases[key]:active?.field,answer=value??input;
  let handled=false;
  if(service&&field){
   if(field==='durationMinutes'&&/^\d{1,4}(?:\s*(?:دقيقة|دقيقه|دقائق|minutes?|mins?))?$/.test(answer)){service.durationMinutes=Number(answer.match(/^\d+/)![0]);handled=true;}
   else if(field==='price'&&/^\d{1,9}(?:\.\d{1,3})?$/.test(answer)){service.price=answer;handled=true;}
-  else if(field==='currency'&&/^(?:[A-Za-z]{3}|دينار أردني|دينار اردني)$/.test(answer)){service.currency=/دينار/.test(answer)?'JOD':answer.toUpperCase();handled=true;}
   else if(field==='requiresRoom'&&/^(?:نعم|اه|آه|لا|yes|no)$/i.test(answer)){service.requiresRoom=!/^(لا|no)$/i.test(answer);handled=true;}
   else if(field==='branchScope'&&/^(?:كل الفروع|جميع الفروع|all branches|all)$/i.test(answer)){service.branchScope='all';service.branchKey=null;handled=true;}
   else if(field==='name'&&(key==='name'||key==='الاسم'||!service.name)&&answer.length<=120){service.name=answer;service.nameLang=nameLanguage(answer);handled=true;}

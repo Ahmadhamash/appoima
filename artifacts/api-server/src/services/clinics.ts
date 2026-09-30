@@ -2,6 +2,7 @@ import { appointmentsTable } from "@workspace/db";
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { db, clinicsTable, branchesTable, usersTable, servicesTable, roomsTable, roomServicesTable, type Clinic } from "@workspace/db";
 import { hasOpenHours } from "../domain/setup-rules";
+import { roomHasEquipment } from "../domain/equipment";
 import { notFound } from "../lib/errors";
 import { recordAudit } from "./audit";
 import { createStaffAccount } from "./auth";
@@ -38,8 +39,8 @@ async function buildOverview(clinic: Clinic): Promise<ClinicOverview> {
     .from(branchesTable)
     .where(eq(branchesTable.clinicId, clinic.id));
   const branchRows = await db.select({ openingHours: branchesTable.openingHours }).from(branchesTable).where(eq(branchesTable.clinicId, clinic.id));
-  const services = await db.select({ id: servicesTable.id, requiresRoom: servicesTable.requiresRoom }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinic.id), eq(servicesTable.isActive, true)));
-  const compatible = await db.select({ serviceId: roomServicesTable.serviceId }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), eq(roomsTable.clinicId, clinic.id))).where(and(eq(roomServicesTable.clinicId, clinic.id), eq(roomsTable.status, "available")));
+  const services = await db.select({ id: servicesTable.id, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinic.id), eq(servicesTable.isActive, true)));
+  const compatible = await db.select({ serviceId: roomServicesTable.serviceId, equipment: roomsTable.extra }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), eq(roomsTable.clinicId, clinic.id))).where(and(eq(roomServicesTable.clinicId, clinic.id), eq(roomsTable.status, "available")));
   const [activeStaff] = await db.select({ count: sql<number>`count(*)::int` }).from(usersTable).where(and(eq(usersTable.clinicId, clinic.id), eq(usersTable.isActive, true), sql`${usersTable.role} <> 'manager'`));
   const branchCount = branches?.count ?? 0;
   return {
@@ -51,7 +52,7 @@ async function buildOverview(clinic: Clinic): Promise<ClinicOverview> {
       staffCount: staff?.count ?? 0,
       branchCount,
       hasBranchHours: branchRows.length > 0 && branchRows.every((b) => hasOpenHours(b.openingHours)),
-      hasCatalog: services.length > 0 && services.every((s) => !s.requiresRoom || compatible.some((r) => r.serviceId === s.id)),
+      hasCatalog: services.length > 0 && services.every((s) => !(s.requiresRoom || s.requiredEquipment.length) || compatible.some((r) => r.serviceId === s.id && roomHasEquipment(s.requiredEquipment, r.equipment['equipment']))),
       hasStaff: (activeStaff?.count ?? 0) > 0,
       // Booking progress reflects committed appointment records.
       hasFirstAppointment: (await db.select({id: appointmentsTable.id}).from(appointmentsTable).where(eq(appointmentsTable.clinicId, clinic.id)).limit(1)).length > 0,

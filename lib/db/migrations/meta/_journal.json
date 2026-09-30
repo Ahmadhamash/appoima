@@ -50,6 +50,69 @@
       "when": 1790208000000,
       "tag": "0006_internal_clinic_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790508000000,
+      "tag": "0007_rooms_inventory_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790594400000,
+      "tag": "0008_service_equipment",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790594401000,
+      "tag": "0009_equipment_service_costing",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790594402000,
+      "tag": "0010_follow_up_appointments",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790594403000,
+      "tag": "0011_inventory_patient_pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790594404000,
+      "tag": "0012_inventory_locations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790668800000,
+      "tag": "0013_packages_payment_ledgers",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790672400000,
+      "tag": "0014_inventory_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790762400000,
+      "tag": "0015_branch_locations",
+      "breakpoints": true
     }
   ]
 }

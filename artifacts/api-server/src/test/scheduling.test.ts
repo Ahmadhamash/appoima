@@ -55,8 +55,8 @@ describe('Phase 3 scheduling',()=>{
     await db.delete(schedulingCommandsTable).where(inArray(schedulingCommandsTable.clinicId,[clinicA,clinicB]));
     await db.update(usersTable).set({workingHours:week,breaks:empty,timeOff:[],permissions:['customers.read'],isActive:true}).where(inArray(usersTable.id,[docId,docTwoId]));
     await db.update(branchesTable).set({timeZone:'UTC',openingHours:week}).where(eq(branchesTable.id,branchA));
-    await db.update(roomsTable).set({status:'available'}).where(inArray(roomsTable.id,[roomA,roomTwo]));
-    await db.update(servicesTable).set({isActive:true}).where(eq(servicesTable.id,serviceA));
+    await db.update(roomsTable).set({status:'available',extra:{}}).where(inArray(roomsTable.id,[roomA,roomTwo]));
+    await db.update(servicesTable).set({isActive:true,durationMinutes:45,requiresRoom:true,requiredEquipment:[]}).where(eq(servicesTable.id,serviceA));
   });
   afterAll(async()=>{await f.cleanup();});
   it('checks actual PostgreSQL exclusion constraints, not just application prechecks',async()=>{await expect(verifySchedulingGuards()).resolves.toBeUndefined();});
@@ -66,7 +66,31 @@ describe('Phase 3 scheduling',()=>{
     const c=await manager.get('/api/clinic/scheduling/catalog').query({branchId:branchA,serviceId:serviceA});
     expect(c.status).toBe(200);expect(c.body.employees[0]).not.toHaveProperty('passwordHash');expect(c.body.employees[0]).not.toHaveProperty('timeOff');
   });
+  it('requires room equipment and uses provider hours and the service duration',async()=>{
+    await db.update(servicesTable).set({durationMinutes:60,requiresRoom:false,requiredEquipment:['Laser Device']}).where(eq(servicesTable.id,serviceA));
+    const query={branchId:branchA,serviceId:serviceA,employeeId:docId,date};
+    const missing=await manager.get('/api/clinic/scheduling/availability').query(query);
+    expect(missing.status).toBe(200);expect(missing.body.slots).toEqual([]);expect(missing.body.emptyReason).toBe('room_unavailable');
+    const roomInput={name:'Room A',nameLang:'en',branchId:branchA,capacity:1,status:'available',serviceIds:[serviceA],extra:{equipment:[],openingHours:empty}};
+    const rejected=await manager.put(`/api/clinic/rooms/${roomA}`).send(roomInput);
+    expect(rejected.status).toBe(400);expect(rejected.body.error).toBe('room_missing_equipment');
+    const saved=await manager.put(`/api/clinic/rooms/${roomA}`).send({...roomInput,extra:{equipment:['laser device'],openingHours:empty}});
+    expect(saved.status).toBe(200);
+    const [room]=await db.select().from(roomsTable).where(eq(roomsTable.id,roomA));
+    expect(room!.extra['openingHours']).toBeNull();
+    const providerWeek=Object.fromEntries(Object.keys(week).map(day=>[day,[{open:'10:00',close:'12:00'}]])) as typeof week;
+    await db.update(usersTable).set({workingHours:providerWeek}).where(eq(usersTable.id,docId));
+    const ready=await manager.get('/api/clinic/scheduling/availability').query(query);
+    expect(ready.status).toBe(200);expect(ready.body.durationMinutes).toBe(60);
+    expect(ready.body.slots[0]).toMatchObject({startsAt:at(10),endsAt:at(11),roomId:roomA});
+    expect(ready.body.slots.some((slot:{startsAt:string})=>slot.startsAt===at(9))).toBe(false);
+    const booked=await book({startsAt:at(10)});
+    expect(booked.status).toBe(201);
+    const appointment=await manager.get(`/api/clinic/appointments/${booked.body.id}`);
+    expect(appointment.body.durationMinutes).toBe(60);
+  });
   it('filters the manager home schedule by the chosen branch',async()=>{const today=new Date().toISOString().slice(0,10);await rawAppointment(docId,roomA,`${today}T09:00:00.000Z`);const selected=await manager.get('/api/clinic/scheduling/home').query({branchId:branchA});expect(selected.status).toBe(200);expect(selected.body.total).toBe(1);const other=await manager.get('/api/clinic/scheduling/home').query({branchId:branchB});expect(other.status).toBe(200);expect(other.body.total).toBe(0);});
+  it('filters appointments by an inclusive date and time range',async()=>{const early=(await rawAppointment(docId,roomA,at(9)))[0]!,late=(await rawAppointment(docId,roomA,at(11)))[0]!;const result=await manager.get('/api/clinic/appointments').query({from:at(10),to:at(11)});expect(result.status).toBe(200);expect(result.body.total).toBe(1);expect(result.body.items.map((item:{id:number})=>item.id)).toEqual([late.id]);expect(result.body.items.map((item:{id:number})=>item.id)).not.toContain(early.id);expect((await manager.get('/api/clinic/appointments').query({from:at(12),to:at(10)})).status).toBe(400);});
   it('creates a pending appointment, room reservation and initial history atomically',async()=>{
     const r=await book();expect(r.status).toBe(201);
     const d=await manager.get(`/api/clinic/appointments/${r.body.id}`);expect(d.status).toBe(200);expect(d.body.status).toBe('pending');expect(d.body.room.id).toBe(roomA);expect(d.body.history).toHaveLength(1);expect(d.body.history[0].fromStatus).toBeNull();

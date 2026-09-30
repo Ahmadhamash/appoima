@@ -1,13 +1,16 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, pgEnum, serial, integer, text, timestamp, numeric, index, unique, uniqueIndex, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, date, pgEnum, serial, integer, text, timestamp, numeric, jsonb, index, unique, uniqueIndex, foreignKey, check } from 'drizzle-orm/pg-core';
 import { branchesTable, languageEnum } from './clinics';
 import { usersTable } from './users';
 import { customersTable, servicesTable, roomsTable } from './setup';
 import { appointmentsTable } from './scheduling';
+import {inventoryProductsTable} from './inventory-locations';
+import {inventoryTransfersTable} from './rooms-inventory';
+import {inventoryUnitEnum} from './inventory-units';
+export {inventoryUnitEnum} from './inventory-units';
 export const waitingStatusEnum = pgEnum('waiting_status', ['waiting','offered','booked','declined','expired']);
 export const waitingOfferStatusEnum = pgEnum('waiting_offer_status', ['offered','booked','declined','unavailable','expired']);
 export const inventoryMovementKindEnum = pgEnum('inventory_movement_kind', ['receipt','adjustment','consumption']);
-export const inventoryUnitEnum = pgEnum('inventory_unit', ['piece','pair','box','ml','l','g','kg']);
 export const waitingEntriesTable = pgTable('waiting_list_entries', {
   id: serial('id').primaryKey(), clinicId: integer('clinic_id').notNull(), branchId: integer('branch_id').notNull(),
   customerId: integer('customer_id').notNull(), serviceId: integer('service_id').notNull(), preferredEmployeeId: integer('preferred_employee_id'),
@@ -50,11 +53,16 @@ export const waitingOffersTable = pgTable('waiting_list_offers', {
 ]);
 export const inventoryItemsTable = pgTable('inventory_items', {
   id: serial('id').primaryKey(), clinicId: integer('clinic_id').notNull(), branchId: integer('branch_id').notNull(),
-  name: text('name').notNull(), nameLang: languageEnum('name_lang').notNull().default('en'), unit: inventoryUnitEnum('unit').notNull(),
+  productId:integer('product_id').notNull().default(sql`null`),isAvailable:integer('is_available').notNull().default(1),
+  name: text('name').notNull(), nameLang: languageEnum('name_lang').notNull().default('en'), unit: inventoryUnitEnum('unit').notNull(), extra: jsonb('extra').$type<Record<string,unknown>>().notNull().default({}),
   createdBy: integer('created_by').notNull(), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
 },t => [
   unique('inventory_items_clinic_id_unique').on(t.clinicId,t.id),
+  unique('inventory_items_clinic_branch_id_unique').on(t.clinicId,t.branchId,t.id),
   unique('inventory_items_branch_unit_unique').on(t.clinicId,t.branchId,t.id,t.unit),
+  unique('inventory_items_product_branch_unique').on(t.clinicId,t.productId,t.branchId),
+  foreignKey({name:'inventory_items_product_fk',columns:[t.clinicId,t.productId,t.unit],foreignColumns:[inventoryProductsTable.clinicId,inventoryProductsTable.id,inventoryProductsTable.unit]}),
+  check('inventory_items_available_check',sql`${t.isAvailable} in (0,1)`),
   index('inventory_items_branch_idx').on(t.clinicId,t.branchId,t.name),
   foreignKey({name:'inventory_items_branch_fk',columns:[t.clinicId,t.branchId],foreignColumns:[branchesTable.clinicId,branchesTable.id]}),
   foreignKey({name:'inventory_items_creator_fk',columns:[t.clinicId,t.createdBy],foreignColumns:[usersTable.clinicId,usersTable.id]}),
@@ -75,16 +83,20 @@ export const inventoryConsumptionsTable = pgTable('inventory_consumptions', {
 ]);
 export const inventoryMovementsTable = pgTable('inventory_movements', {
   id: serial('id').primaryKey(), clinicId: integer('clinic_id').notNull(), branchId: integer('branch_id').notNull(), itemId: integer('item_id').notNull(),
+  roomId:integer('room_id'),batchExpiryDate:date('batch_expiry_date'),transferId:integer('transfer_id').references(()=>inventoryTransfersTable.id),
   unit: inventoryUnitEnum('unit').notNull(), kind: inventoryMovementKindEnum('kind').notNull(), quantity: numeric('quantity',{precision:16,scale:3}).notNull(),
   actorId: integer('actor_id').notNull(), reason: text('reason').notNull().default(''), reasonLang: languageEnum('reason_lang').notNull().default('en'),
   consumptionId: integer('consumption_id'), appointmentId: integer('appointment_id'), serviceId: integer('service_id'),
   createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
 }, t => [
   index('inventory_movements_item_idx').on(t.clinicId,t.itemId,t.id),
+  index('inventory_movements_location_idx').on(t.clinicId,t.itemId,t.roomId),
+  uniqueIndex('inventory_movements_transfer_direction_unique').on(t.transferId,sql`(${t.quantity}>0)`).where(sql`${t.transferId} is not null`),
   index('inventory_movements_service_idx').on(t.clinicId,t.serviceId,t.itemId),
   unique('inventory_movements_consumption_item_unique').on(t.consumptionId,t.itemId),
   foreignKey({name:'inventory_movements_item_unit_fk',columns:[t.clinicId,t.branchId,t.itemId,t.unit],foreignColumns:[inventoryItemsTable.clinicId,inventoryItemsTable.branchId,inventoryItemsTable.id,inventoryItemsTable.unit]}),
   foreignKey({name:'inventory_movements_actor_fk',columns:[t.clinicId,t.actorId],foreignColumns:[usersTable.clinicId,usersTable.id]}),
+  foreignKey({name:'inventory_movements_room_fk',columns:[t.clinicId,t.branchId,t.roomId],foreignColumns:[roomsTable.clinicId,roomsTable.branchId,roomsTable.id]}),
   foreignKey({name:'inventory_movements_consumption_fk',columns:[t.clinicId,t.branchId,t.consumptionId,t.appointmentId,t.serviceId],foreignColumns:[inventoryConsumptionsTable.clinicId,inventoryConsumptionsTable.branchId,inventoryConsumptionsTable.id,inventoryConsumptionsTable.appointmentId,inventoryConsumptionsTable.serviceId]}),
   check('inventory_movements_kind_check',sql`(${t.kind} = 'receipt' AND ${t.quantity} > 0 OR ${t.kind} = 'adjustment' AND ${t.quantity} <> 0 OR ${t.kind} = 'consumption' AND ${t.quantity} < 0) AND ${t.quantity} <> 'NaN'::numeric`),
   check('inventory_movements_context_check',sql`(${t.kind} = 'consumption' AND ${t.consumptionId} is not null AND ${t.appointmentId} is not null AND ${t.serviceId} is not null) OR (${t.kind} <> 'consumption' AND ${t.consumptionId} is null AND ${t.appointmentId} is null AND ${t.serviceId} is null)`),

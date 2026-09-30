@@ -1,7 +1,7 @@
 import { createDefinition, normalizeServiceName } from '@workspace/service-definition';
 import { parseDraft, nameLanguage, type Draft, type ServiceDraft, type Language, ConciergeInputError } from './concierge-core';
 export type ServiceSource={kind:'manual'|'conversation'|'public';label:string;url:string|null};
-export type ServiceSuggestion={key:string;name:string;detail:string;sourceUrl:string};
+export type ServiceSuggestion={key:string;name:string;detail:string;sourceUrl:string;followUpEnabled?:boolean};
 /** Enforces the service-only boundary independently of model instructions. */
 export function assertServiceOnly(current:Draft,next:Draft) {
   for(const kind of ['branches','rooms','staff'] as const)if(JSON.stringify(current[kind])!==JSON.stringify(next[kind]))throw new ConciergeInputError('concierge_services_only');
@@ -12,11 +12,11 @@ export function publicServiceSuggestions(details:{services:{name:string;detail:s
   return details.services.flatMap((s,index)=>{
     const name=s.name.trim().slice(0,120),normalized=normalizeServiceName(name);if(!name||seen.has(normalized))return [];seen.add(normalized);
     let sourceUrl='';try{const url=new URL(s.sourceUrl);if(url.protocol==='https:'&&!url.username&&!url.password)sourceUrl=url.href;}catch{/* No executable URLs. */}
-    return [{key:`public_service_${index+1}`,name,detail:s.detail.slice(0,500),sourceUrl}];
-  }).slice(0,30);
+    return [{key:`public_service_${index+1}`,name,detail:s.detail.slice(0,1500),sourceUrl}];
+  }).slice(0,50);
 }
 export function draftFromSuggestion(suggestion:ServiceSuggestion,key:string,language:Language):ServiceDraft {
-  return {key,name:suggestion.name,nameLang:nameLanguage(suggestion.name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:null,category:'Other',requiresRoom:null,employeeIds:null,roomIds:null,definition:createDefinition('custom',language)};
+  return {key,followUpEnabled:suggestion.followUpEnabled??false,name:suggestion.name,nameLang:nameLanguage(suggestion.name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:'Other',requiresRoom:null,employeeIds:null,roomIds:null,definition:createDefinition('custom',language)};
 }
 export function changedServiceSources(before:Draft,after:Draft,sources:Record<string,ServiceSource>,source:ServiceSource) {
   const next:Record<string,ServiceSource>={};for(const row of after.services){

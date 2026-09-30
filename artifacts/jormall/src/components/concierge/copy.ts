@@ -17,6 +17,7 @@ const en = {
   title: "Your setup companion",
   brand: "JorMall · Assistant",
   close: "Continue later",
+  signOut: "Sign out",
   open: "Smart setup",
   name: "What should I call you?",
   namePlaceholder: "Your first name",
@@ -53,7 +54,7 @@ const en = {
   attach: "Upload a document",
   uploadTitle: "Send it here. I’ll read it while we stay together.",
   uploadHint:
-    "PDF, UTF-8 TXT, CSV or JSON · up to 8 MB. No patient records or passwords.",
+    "PDF, images, audio, video (up to 10 minutes), TXT, CSV or JSON · up to 32 MB. No patient records or passwords.",
   chooseFile: "Choose a file",
   fileReading: "Uploading and reading your document…",
   read: "Read successfully",
@@ -92,6 +93,7 @@ const en = {
   closeTime: "Until",
   removeRange: "Remove range",
   branchKey: "Branch",
+  branchScope: "Branches offering this service",
   clinicWide: "All branches / clinic-wide",
   choose: "Choose…",
   durationMinutes: "Duration (minutes)",
@@ -167,7 +169,7 @@ const en = {
   other_staff: "Other staff",
   manager: "Manager",
   voiceConnecting: "Connecting microphone…",
-  fileTooBig: "This file exceeds 8 MB.",
+  fileTooBig: "This file exceeds 32 MB.",
   micDenied:
     "Microphone permission was not granted. Allow it in the browser or continue by typing.",
   micUnsupported:
@@ -177,7 +179,7 @@ const en = {
   audioBlocked:
     "Your browser needs a click before it can play the voice. Press “Enable voice playback”.",
   offline: "Could not reach the server. Check your connection and retry.",
-  unsupportedFile: "Choose a PDF or a UTF-8 TXT, CSV or JSON file.",
+  unsupportedFile: "Choose a PDF, image, audio, video, TXT, CSV or JSON file.",
   pending: "You can return later to continue setting up your company.",
   scopeNote:
     "This assistant prepares branches, services, rooms and staff. Booking, customer and inventory actions remain in their existing permission-checked screens.",
@@ -207,6 +209,7 @@ const ar: Record<Key, string> = {
   title: "مساعدتك لتجهيز البرنامج",
   brand: "JorMall · مساعدتك الذكية",
   close: "بكمل بعدين",
+  signOut: "تسجيل الخروج",
   open: "التجهيز الذكي",
   name: "شو بتحب أناديك؟",
   namePlaceholder: "اكتب اسمك هون",
@@ -242,7 +245,7 @@ const ar: Record<Key, string> = {
   attach: "ارفع ملف",
   uploadTitle: "ابعت الملف هون، وأنا بقرأه وبضل معك.",
   uploadHint:
-    "PDF أو TXT أو CSV أو JSON بترميز UTF-8 · حتى 8 ميغابايت. بدون بيانات مرضى أو كلمات مرور.",
+    "PDF، صورة، صوت، فيديو حتى 10 دقائق، أو TXT وCSV وJSON · حتى 32 ميغابايت. بدون بيانات مرضى أو كلمات مرور.",
   chooseFile: "اختيار ملف",
   fileReading: "عم برفع الملف وبقرأ محتواه…",
   read: "تمت قراءة الملف",
@@ -251,7 +254,7 @@ const ar: Record<Key, string> = {
   draft: "تفاصيل شركتك",
   draftNote: "لسه ما أضفناها للنظام. راجع التفاصيل قبل الحفظ.",
   noDraft: "لسه ما جمعنا بيانات. احكيلي عن أول فرع عندك.",
-  back: "نرجع للمحادثة",
+  back: "رجوع",
   saveDraft: "احفظ التعديلات",
   apply: "تأكيد وحفظ بالنظام",
   confirm:
@@ -280,6 +283,7 @@ const ar: Record<Key, string> = {
   closeTime: "إلى",
   removeRange: "احذف الفترة",
   branchKey: "الفرع",
+  branchScope: "فروع الخدمة",
   clinicWide: "كل الفروع / على مستوى المركز",
   choose: "اختار…",
   durationMinutes: "مدة الخدمة بالدقائق",
@@ -354,7 +358,7 @@ const ar: Record<Key, string> = {
   other_staff: "موظف آخر",
   manager: "مدير",
   voiceConnecting: "عم بوصل الميكروفون…",
-  fileTooBig: "حجم الملف أكبر من 8 ميغابايت.",
+  fileTooBig: "حجم الملف أكبر من 32 ميغابايت.",
   micDenied: "إذن الميكروفون مش مفعّل. اسمح له من المتصفح أو كمّل بالكتابة.",
   micUnsupported:
     "الصوت يحتاج HTTPS (أو localhost) وإذن الميكروفون ومتصفح يدعم WebRTC.",
@@ -362,7 +366,7 @@ const ar: Record<Key, string> = {
     "انقطع اتصال الصوت. شغّله مرة ثانية ونكمّل من هون.",
   audioBlocked: "المتصفح يحتاج ضغطة منك قبل تشغيل الصوت. اضغط «تفعيل الصوت».",
   offline: "ما قدرت أوصل للسيرفر. افحص الاتصال وجرّب مرة ثانية.",
-  unsupportedFile: "اختار ملف PDF أو TXT أو CSV أو JSON بترميز UTF-8.",
+  unsupportedFile: "اختار PDF، صورة، ملف صوت أو فيديو، أو TXT وCSV وJSON.",
   pending: "بتقدر ترجع بعدين ونكمّل تجهيز شركتك.",
   scopeNote:
     "المساعدة بتجهّز الفروع والخدمات والغرف والموظفين. إجراءات الحجز والعملاء والمخزون بتضل بشاشاتها الحالية وبنفس الصلاحيات.",
@@ -401,8 +405,9 @@ const errors: Record<string, Key> = {
 export function text(lang: Language, key: Key | string): string {
   return (lang === "ar" ? ar : en)[key as Key] ?? key;
 }
-export function errorText(lang: Language, code: string): string {
+export function errorText(lang: Language, code: string): string {if(code==='concierge_media_too_long')return lang==='ar'?'الصوت أو الفيديو أطول من 10 دقائق. ارفع مقطعًا أقصر.':'Upload an audio or video clip of up to 10 minutes.';if(code==='concierge_media_unreadable')return lang==='ar'?'ما قدرنا نقرأ الصوت أو الفيديو. جرّب ملفًا آخر.':'This audio or video could not be read. Try another file.';if(code==='concierge_media_unavailable')return lang==='ar'?'قراءة الصوت والفيديو غير متاحة حاليًا.':'Audio and video reading is currently unavailable.';
   const special: Record<string, [string, string]> = {
+    concierge_step_incomplete: ['لسه في معلومة ناقصة بهالخطوة. راجع الأسماء والسعة، واحكيلي التفاصيل الناقصة أو اكتبها ثم جرّب تكمل.','This step still needs a detail. Check the names and capacity, tell me what is missing or type it, then continue.'],
     concierge_stream_interrupted: ['انقطع الاتصال قبل تأكيد حفظ المسودة. حدّث الجلسة قبل إعادة المحاولة.','Connection ended before draft confirmation. Refresh the session before retrying.'],
     concierge_definition_required: ['كل خدمة تحتاج تعريفًا. افتح تعديل الخدمة واختر قالبها ثم احفظها.','Every service needs a definition. Edit the service, choose a template, and save.'],
     concierge_services_only: ['هذا المعالج يخصص الخدمات فقط. بقيت باقي أقسام النظام دون تغيير.','This wizard only customizes services. Other sections were not changed.'],

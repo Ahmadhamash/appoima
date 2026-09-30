@@ -39,7 +39,7 @@ export function DayBoard({ items, staff = [], compact = false }: { items: Appoin
             return <Link key={item.id} href={'/appointments/' + item.id} data-testid={'appointment-row-' + item.id} className={'focus-ring absolute inset-x-1.5 z-[1] overflow-hidden rounded-lg border px-2 py-1.5 text-start text-xs hover:shadow-md ' + tone(item, employeeIndex)} style={{ top, height: cardHeight }}>
               <strong className="block truncate text-[#21334f]"><EnteredName item={item.customer}/></strong>
               <span className="block truncate text-[#536881]"><EnteredName item={item.service}/></span>
-              <span className="block text-[11px] font-medium text-[#80632d]" dir="ltr">{formatAppointmentTime(item.startsAt, zone, lang)} – {formatAppointmentTime(item.endsAt, zone, lang)}</span>
+              <span className="block text-[11px] font-medium text-primary" dir="ltr">{formatAppointmentTime(item.startsAt, zone, lang)} – {formatAppointmentTime(item.endsAt, zone, lang)}</span>
             </Link>;
           })}
         </div>)}

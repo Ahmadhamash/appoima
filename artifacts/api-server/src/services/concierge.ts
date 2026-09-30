@@ -1,5 +1,11 @@
+import { gatheringReporter, type ProgressSink } from '../concierge/progress';
+import { previousSetupStep } from '../domain/concierge-workflow';
+import { uploadedIdentity } from '../domain/concierge-file-identity';
+import { enrichBlockedSocial, indexedProfilesFor } from '../concierge/indexed-social';
+import { socialPlatform, socialKind } from '../concierge/public-business-crawl';
 import {serviceExclusions,filterRemovedServices} from '../domain/service-wizard';
-import { beginWorkspaceDraft, editWorkspaceDraft, acceptWorkspaceFact, parseWorkspaceProfile, WorkspaceValidationError, type WorkspaceDraft } from '@workspace/service-definition';
+import type { ImportApprovalEdits } from '../domain/import-approval';
+import { beginWorkspaceDraft, editWorkspaceDraft, acceptWorkspaceFact, parseWorkspaceProfile, publicHttpsUrl, validWorkspaceLogo, WorkspaceValidationError, type WorkspaceDraft, type WorkspaceFact } from '@workspace/service-definition';
 import { readWorkspace, applyWorkspace } from './clinic-workspace';
 import { lookupLinkedClinic } from '../concierge/linked-clinic';
 import { localConciergeTurn } from '../domain/local-concierge';
@@ -9,7 +15,8 @@ import { randomUUID, createHash } from 'node:crypto';
 import { and, eq, sql, asc } from 'drizzle-orm';
 import { db, managerOnboardingTable as onboarding, usersTable, clinicsTable, branchesTable, servicesTable, roomsTable, appointmentsTable, customersTable, type User, type ManagerOnboarding } from '@workspace/db';
 import { hasPermission, type Permission } from '../domain/permissions';
-import { emptyDraft, parseDraft, mergeDraft, draftIssues, fixedSpeech, mentionsUpload, nameLanguage, CONSENT_VERSION, LIMITS, NAVIGATION, KINDS, type Stage, type Draft, type Language, type ConversationMessage, type UploadedDocument, type ServiceDraft } from '../domain/concierge-core';
+import { emptyDraft, parseDraft, mergeDraft, applySharedServiceDetails, draftIssues, fixedSpeech, mentionsUpload, nameLanguage, CONSENT_VERSION, LIMITS, NAVIGATION, KINDS, type Stage, type Draft, type Language, type ConversationMessage, type UploadedDocument, type ServiceDraft } from '../domain/concierge-core';
+import { withDefaultStaffHours } from '../domain/concierge-core';
 import { badRequest, forbidden, conflict, notFound, HttpError } from '../lib/errors';
 import { recordAudit } from './audit';
 import { applyConciergeSetup, previewConciergeSetup } from './concierge-setup';
@@ -18,11 +25,22 @@ import { conciergeConfig, publicCapabilities } from '../concierge/config';
 import { enrichCompany, type BusinessDetails } from '../concierge/company-details';
 import { createSonioxAssistKey } from '../concierge/providers';
 import { importPublicDetails } from '../domain/concierge-public-import';
-import { setupWorkflow, canFinishStep, type SetupStep } from '../domain/concierge-workflow';
+import { setupWorkflow, canFinishStep, roomsForConfirmation, type SetupStep } from '../domain/concierge-workflow';
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type State = { excludedServices?:string[]; workspace?:WorkspaceDraft; serviceWizard?:boolean; entryMode?:'manual'|'voice'|'text'; serviceSources?:Record<string,ServiceSource>; serviceSuggestions?:ServiceSuggestion[]; sourceImport?:boolean; branding?:{name:string;details:BusinessDetails}; companySearchQuery?:string; companyCandidates?:CompanyCandidate[]; completedSteps?:SetupStep[]; accessFingerprint?:string; draft:Draft; messages:ConversationMessage[]; uploads:UploadedDocument[]; branchBasis:Record<string,string>; lastTurnId?:string; lastTurnHash?:string; ui?:'none'|'upload'|'review'; navigation?:string; applied?:Record<string,number[]>; companyCandidate?:CompanyCandidate|null; companyProfile?:CompanyCandidate|null; companySkipped?:boolean };
+type State = { excludedServices?:string[]; workspace?:WorkspaceDraft; serviceWizard?:boolean; entryMode?:'manual'|'voice'|'text'; serviceSources?:Record<string,ServiceSource>; serviceSuggestions?:ServiceSuggestion[]; sourceImport?:boolean; importReviewPending?:boolean; importApproved?:boolean; branding?:{name:string;details:BusinessDetails}; companySearchQuery?:string; companyCandidates?:CompanyCandidate[]; completedSteps?:SetupStep[]; accessFingerprint?:string; draft:Draft; messages:ConversationMessage[]; uploads:UploadedDocument[]; branchBasis:Record<string,string>; lastTurnId?:string; lastTurnHash?:string; ui?:'none'|'upload'|'review'; navigation?:string; applied?:Record<string,number[]>; companyCandidate?:CompanyCandidate|null; companyProfile?:CompanyCandidate|null; companySkipped?:boolean };
 const initialState = ():State=>({draft:emptyDraft(),messages:[],uploads:[],branchBasis:{},ui:'none'});
 function stateOf(row:ManagerOnboarding):State { return {...initialState(),...row.state,draft:parseDraft(row.state.draft??emptyDraft())} as State; }
+function brandingFacts(state:State):WorkspaceFact[]{
+ const facts=[...(state.workspace?.proposals??[])],details=state.branding?.details;
+ if(state.importApproved)return facts;
+ const source=state.companyProfile?.sources.find(item=>publicHttpsUrl(item.url)&&!/(^|\.)(instagram|facebook|tiktok|youtube)\.com$/i.test(new URL(item.url).hostname))??state.companyProfile?.sources.find(item=>publicHttpsUrl(item.url));
+ if(!details||!source)return facts;
+ const add=(field:WorkspaceFact['field'],value:string,evidence:string)=>{if(facts.some(fact=>fact.field===field)||state.workspace?.profile[field]===value)return;facts.push({id:createHash('sha256').update(source.url+'|'+field+'|'+value).digest('hex').slice(0,24),field,value,sourceUrl:source.url,evidence,confidence:'extracted'});};
+ if(validWorkspaceLogo(details.logoDataUrl))add('logoDataUrl',details.logoDataUrl,'Logo from the confirmed clinic source; owner approval required.');
+ const color=details.colors.find(value=>/^#[0-9a-fA-F]{6}$/.test(value));if(color)add('primaryColor',color,'Brand color from the confirmed clinic source; owner approval required.');
+ if(state.branding?.name)add(/[\u0600-\u06ff]/u.test(state.branding.name)?'nameAr':'nameEn',state.branding.name,'Name from the confirmed clinic source; owner approval required.');
+ return facts;
+}
 export function ensureManager(actor:User) {
   if(!conciergeConfig().enabled)throw notFound();
   if(!actor.clinicId||actor.role!=='manager'||!hasPermission(actor,'settings.manage')||!actor.isActive||actor.mustChangePassword)throw forbidden();
@@ -55,13 +73,18 @@ function checkRevision(row:ManagerOnboarding,revision:number) { if(row.revision!
 const audit=(tx:Tx,actor:User,action:string,details:Record<string,unknown>={})=>recordAudit({clinicId:actor.clinicId,actorUserId:actor.id,action:`concierge.${action}`,entityType:'manager_onboarding',details},tx);
 function consent(row:ManagerOnboarding) { if(row.consentVersion!==CONSENT_VERSION)throw forbidden('concierge_consent_required'); }
 async function change(tx:Tx,row:ManagerOnboarding,fields:Partial<typeof onboarding.$inferInsert>) {
+  const nextState=fields.state as State|undefined;
+  if(nextState?.draft?.staff.some(p=>p.workingHours===null)){
+    const branches=await tx.select({id:branchesTable.id,openingHours:branchesTable.openingHours}).from(branchesTable).where(eq(branchesTable.clinicId,row.clinicId));
+    fields={...fields,state:{...nextState,draft:withDefaultStaffHours(nextState.draft,branches.map(b=>({...b,key:`branch_${b.id}`})))} as unknown as Record<string,unknown>};
+  }
   const [updated]=await tx.update(onboarding).set({...fields,revision:row.revision+1,updatedAt:new Date()}).where(eq(onboarding.id,row.id)).returning();return updated!;
 }
 function publicSession(row:ManagerOnboarding) {
   const state=stateOf(row), latest=state.messages.filter(m=>m.role==='assistant').at(-1);
   const conversation=row.stage==='conversation';
   return {revision:row.revision,stage:row.stage,preferredName:row.preferredName,language:row.language,consented:row.consentVersion===CONSENT_VERSION,
-    workspace:state.workspace??null,serviceWizard:state.serviceWizard??false,entryMode:state.entryMode??'text',serviceSources:state.serviceSources??{},serviceSuggestions:state.serviceSuggestions??[],sourceImport:state.sourceImport??false,branding:state.branding??null,draft:state.draft,uploads:state.uploads,ui:state.ui??'none',navigation:state.navigation??null,companyCandidate:state.companyCandidate??null,companyCandidates:state.companyCandidates??[],companyProfile:state.companyProfile??null,companyChecked:!!state.companyProfile,workflow:setupWorkflow(state,row.language as Language),
+    workspace:state.workspace?{...state.workspace,proposals:brandingFacts(state)}:null,serviceWizard:state.serviceWizard??false,entryMode:state.entryMode??'text',serviceSources:state.serviceSources??{},serviceSuggestions:state.serviceSuggestions??[],sourceImport:state.sourceImport??false,importReviewPending:state.importReviewPending??(!!state.branding&&!state.importApproved),importApproved:state.importApproved??false,branding:state.branding??null,draft:state.draft,uploads:state.uploads,ui:state.ui??'none',navigation:state.navigation??null,companyCandidate:state.companyCandidate??null,companyCandidates:state.companyCandidates??[],companyProfile:state.companyProfile??null,companyChecked:!!state.companyProfile,workflow:setupWorkflow(state,row.language as Language),
     message:conversation&&latest&&state.lastTurnId&&(state.serviceWizard||!publicCapabilities().llm||state.ui==='upload')?latest:conversation&&state.companyProfile?{id:latest?.id??'stage:workflow',role:'assistant',text:setupWorkflow(state,row.language as Language).prompt}:conversation&&!state.companyProfile?{id:'stage:company',role:'assistant',text:row.language==='ar'?'أهلين! شو اسم شركتك؟ بحب أتأكد منها قبل ما نبدأ.':'Hi! What is your company name? I’ll check it before we begin.'}:{id:`stage:${row.stage}`,role:'assistant',text:fixedSpeech(row.stage as Stage,row.language as Language)},
     busy:!!row.busyUntil&&row.busyUntil.getTime()>Date.now(),applied:state.applied??null};
 }
@@ -132,41 +155,169 @@ export async function setConciergeMode(actor:User,mode:'manual'|'voice'|'text',r
       ...(mode==='manual'||!caps.llm?{}:{consentVersion:CONSENT_VERSION,consentAt:new Date()})});
   });return publicSession(row);
 }
-export async function findConciergeCompany(actor:User,revision:number,query:string,sourceUrls:string[]=[]){
-  const claim=await withSession(actor,async(tx,row,fresh)=>{if(!sourceUrls.length)consent(row);noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');const state=stateOf(row);if(state.companyProfile&&!state.serviceWizard)throw conflict('concierge_stale');const budget=reserveBudget(row,'turns',1);const id=randomUUID();await tx.update(onboarding).set({busyId:id,busyUntil:new Date(Date.now()+180000),budget}).where(eq(onboarding.id,row.id));await audit(tx,fresh,'company_lookup_started');return {id,language:row.language as Language,previousQuery:state.companySearchQuery??state.companyCandidate?.name??null};});
-  try{const candidates=sourceUrls.length?[await lookupLinkedClinic(sourceUrls)]:await lookupCompany(claim.previousQuery?`${query}\nPrevious name/search context (latest correction wins): ${claim.previousQuery}`:query,claim.language);const candidate=candidates[0]!;const row=await withSession(actor,async(tx,row,fresh)=>{if(row.busyId!==claim.id||row.revision!==revision)throw conflict('concierge_stale');const state=stateOf(row);await audit(tx,fresh,'company_lookup_completed',{found:candidate.found,choiceCount:candidates.filter(c=>c.found).length});return change(tx,row,{busyId:null,busyUntil:null,state:{...state,sourceImport:sourceUrls.length>0||state.sourceImport,companyCandidate:candidate,companyCandidates:candidates.filter(c=>c.found).slice(0,3),companySearchQuery:query.slice(0,500)} as unknown as Record<string,unknown>});});return publicSession(row);}
-  catch(err){await db.update(onboarding).set({busyId:null,busyUntil:null}).where(and(where(actor),eq(onboarding.busyId,claim.id))).catch(()=>{});throw err;}
+export async function findConciergeCompany(actor:User,revision:number,query:string,sourceUrls:string[]=[],progress?:ProgressSink){
+  const claim=await withSession(actor,async(tx,row,fresh)=>{
+    if(!sourceUrls.length)consent(row);
+    noBusy(row);checkRevision(row,revision);
+    if(row.stage!=='conversation')throw conflict('concierge_stale');
+    const state=stateOf(row);
+    if(state.companyProfile&&!state.serviceWizard)throw conflict('concierge_stale');
+    const budget=reserveBudget(row,'turns',1),id=randomUUID();
+    await tx.update(onboarding).set({busyId:id,busyUntil:new Date(Date.now()+240000),budget}).where(eq(onboarding.id,row.id));
+    await audit(tx,fresh,'company_lookup_started');
+    return {id,language:row.language as Language,previousQuery:state.companySearchQuery??state.companyCandidate?.name??null,mayEnrich:row.consentVersion===CONSENT_VERSION&&!!conciergeConfig().openaiKey};
+  });
+  const report=gatheringReporter(progress),onPage=(page:{url:string;completed:number;total:number})=>report({phase:'reading',percent:10+45*page.completed/Math.max(1,page.total),...page});
+  try{
+    report({phase:'searching',percent:5});
+    const candidates=sourceUrls.length?[await lookupLinkedClinic(sourceUrls,undefined,onPage)]:await lookupCompany(claim.previousQuery?`${query}\nPrevious name/search context (latest correction wins): ${claim.previousQuery}`:query,claim.language);
+    report({phase:'collecting',percent:60});
+    if(sourceUrls.length&&candidates[0]&&claim.mayEnrich){
+      const candidate=candidates[0],profiles=indexedProfilesFor(candidate,sourceUrls);
+      if(profiles.length)await enrichBlockedSocial(candidate,profiles,claim.language);
+    }
+    if(sourceUrls.length&&candidates[0]?.found&&claim.mayEnrich){
+      const candidate=candidates[0]!,base=candidate.details!;
+      const acceptedUrls=candidate.sources.map(source=>source.url);
+      const enriched=await enrichCompany(candidate,claim.language,acceptedUrls,(candidate as import('../concierge/linked-clinic').LinkedClinic).collectedPages,{progress:report});
+      const unique=<T extends {name:string}>(rows:T[])=>rows.filter((row,index)=>rows.findIndex(other=>normalizeServiceName(other.name)===normalizeServiceName(row.name))===index);
+      candidate.details={
+        logoDataUrl:base.logoDataUrl??enriched.logoDataUrl,
+        colors:[...new Set([...base.colors,...enriched.colors])].slice(0,3),
+        website:base.website??enriched.website,
+        branches:unique([...enriched.branches,...base.branches]).slice(0,50),
+        services:unique([...enriched.services,...base.services]).slice(0,50),
+        status:base.status==='found'||enriched.status==='found'?'found':base.status==='partial'||enriched.status==='partial'?'partial':'unavailable',
+      };
+      const brandSource=candidate.sources.find(source=>!/(^|\.)(instagram|facebook|tiktok|youtube)\.com$/i.test(new URL(source.url).hostname));
+      const facts=candidate.workspaceFacts??[];
+      if(brandSource&&candidate.details.logoDataUrl&&candidate.details.logoDataUrl.length<=125000&&!facts.some(f=>f.field==='logoDataUrl')){
+        facts.push({id:createHash('sha256').update(brandSource.url+'|logo').digest('hex').slice(0,24),field:'logoDataUrl',value:candidate.details.logoDataUrl,sourceUrl:brandSource.url,evidence:'Logo found on the supplied clinic page; owner confirmation required.',confidence:'extracted'} satisfies WorkspaceFact);
+      }
+      const color=candidate.details.colors[0];
+      if(brandSource&&color&&/^#[0-9a-fA-F]{6}$/.test(color)&&!facts.some(f=>f.field==='primaryColor')){
+        facts.push({id:createHash('sha256').update(brandSource.url+'|primaryColor|'+color).digest('hex').slice(0,24),field:'primaryColor',value:color,sourceUrl:brandSource.url,evidence:`Brand color on the supplied clinic page: ${color}`,confidence:'extracted'} satisfies WorkspaceFact);
+      }
+      candidate.workspaceFacts=facts;
+    }
+    report({phase:'saving',percent:98});
+    for(const result of candidates)delete (result as import('../concierge/linked-clinic').LinkedClinic).collectedPages;
+    const candidate=candidates[0]!;
+    const row=await withSession(actor,async(tx,row,fresh)=>{
+      if(row.busyId!==claim.id||row.revision!==revision)throw conflict('concierge_stale');
+      const state=stateOf(row);
+      await audit(tx,fresh,'company_lookup_completed',{found:candidate.found,choiceCount:candidates.filter(c=>c.found).length});
+      return change(tx,row,{busyId:null,busyUntil:null,state:{...state,sourceImport:sourceUrls.length>0||state.sourceImport,companyCandidate:candidate,companyCandidates:candidates.filter(c=>c.found).slice(0,3),companySearchQuery:query.slice(0,500)} as unknown as Record<string,unknown>});
+    });
+    return publicSession(row);
+  }catch(err){
+    await db.update(onboarding).set({busyId:null,busyUntil:null}).where(and(where(actor),eq(onboarding.busyId,claim.id))).catch(()=>{});
+    throw err;
+  }
 }
-export async function confirmConciergeCompany(actor:User,revision:number,answer:'yes'|'retry'|'skip',colors?:string[],selectedIndex=0){
-  const context=await businessContext(actor);
+export async function confirmConciergeCompany(actor:User,revision:number,answer:'yes'|'retry'|'skip',colors?:string[],selectedIndex=0,progress?:ProgressSink){
+  const report=gatheringReporter(progress),onPage=(page:{url:string;completed:number;total:number})=>report({phase:'reading',percent:10+45*page.completed/Math.max(1,page.total),...page});
+  report({phase:'collecting',percent:5});
   if(!Number.isInteger(selectedIndex)||selectedIndex<0||selectedIndex>2)throw badRequest('concierge_invalid_data');
-  let details:BusinessDetails|undefined;
+  let details:BusinessDetails|undefined,linkedFacts:WorkspaceFact[]=[],enrichment:Pick<CompanyCandidate,'sources'|'publicScan'|'linkWarnings'>|null=null;
   if(answer==='yes'){
     const [current]=await db.select().from(onboarding).where(where(actor));
     if(!current||current.revision!==revision)throw conflict('concierge_stale');
     const state=stateOf(current),selected=(state.companyCandidates?.length?state.companyCandidates[selectedIndex]:selectedIndex===0?state.companyCandidate:null);
     if(!selected?.found)throw badRequest('concierge_invalid_data');
-    details=selected.details??await enrichCompany(selected,current.language as Language);
+    if(selected.details)details=selected.details;
+    else{
+      const urls=selected.sources.map(source=>source.url).filter(publicHttpsUrl).slice(0,3);
+      const linked=urls.length?await lookupLinkedClinic(urls,undefined,onPage).catch(()=>null):null;
+      if(linked){selected.publicScan=linked.publicScan;selected.socialProfiles=linked.socialProfiles;selected.linkWarnings=linked.linkWarnings;if(linked.found)selected.details=linked.details;}
+      const profiles=indexedProfilesFor(selected,urls);
+      if(profiles.length)await enrichBlockedSocial(selected,profiles,current.language as Language);
+      const enriched=await enrichCompany(selected,current.language as Language,urls,linked?.collectedPages,{progress:report});
+      enrichment={sources:selected.sources,publicScan:selected.publicScan,linkWarnings:selected.linkWarnings};
+      linkedFacts=linked?.found?linked.workspaceFacts:[];
+      const base=selected.details??null;
+      details={...enriched,logoDataUrl:base?.logoDataUrl??enriched.logoDataUrl,colors:[...new Set([...(base?.colors??[]),...enriched.colors])].slice(0,3),services:[...new Map([...(base?.services??[]),...enriched.services].map(service=>[normalizeServiceName(service.name),service])).values()].slice(0,50),branches:[...new Map([...(base?.branches??[]),...enriched.branches].map(branch=>[normalizeServiceName(branch.name),branch])).values()].slice(0,50),status:base?.logoDataUrl||base?.services.length||enriched.status!=='unavailable'?'partial':'unavailable'};
+    }
   }
+  report({phase:'saving',percent:98});
   const row=await withSession(actor,async(tx,row,fresh)=>{
     noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
     const state=stateOf(row),candidate=answer==='yes'?(state.companyCandidates?.length?state.companyCandidates[selectedIndex]:state.companyCandidate):state.companyCandidate;
     if(answer==='yes'&&!candidate?.found)throw badRequest('concierge_invalid_data');
-    if(answer==='yes'&&candidate){candidate.details=details;if(candidate.details&&colors?.length)candidate.details.colors=colors;}
+    if(answer==='yes'&&candidate){
+      candidate.details=details;
+      if(enrichment)Object.assign(candidate,enrichment);
+      if(linkedFacts.length)candidate.workspaceFacts=[...(candidate.workspaceFacts??[]),...linkedFacts];
+      if(candidate.details&&colors?.length){
+        candidate.details.colors=colors;
+        const color=colors.find(value=>/^#[0-9a-fA-F]{6}$/.test(value));
+        const source=candidate.sources.find(item=>candidate.workspaceFacts?.some(fact=>fact.field==='logoDataUrl'&&fact.sourceUrl===item.url));
+        if(color&&source&&!candidate.workspaceFacts?.some(fact=>fact.field==='primaryColor'))candidate.workspaceFacts=[...(candidate.workspaceFacts??[]),{id:createHash('sha256').update(source.url+'|logo-color|'+color).digest('hex').slice(0,24),field:'primaryColor',value:color,sourceUrl:source.url,evidence:'Color sampled from a publicly linked profile image; owner confirmation required.',confidence:'extracted'}];
+      }
+    }
     const next:State={...state,companyCandidate:null,companyCandidates:[]};
     if(answer==='yes'&&candidate){
       next.companyProfile=candidate;
-      if(state.workspace&&candidate.workspaceFacts)next.workspace={...state.workspace,proposals:candidate.workspaceFacts};
-      if(candidate.details){
+      if(candidate.details&&!candidate.uploaded){
+        const facts=[...(candidate.workspaceFacts??[])];
+        const source=candidate.sources.find(item=>publicHttpsUrl(item.url)&&!/(^|\.)(instagram|facebook|tiktok|youtube)\.com$/i.test(new URL(item.url).hostname))??candidate.sources.find(item=>publicHttpsUrl(item.url));
+        const add=(field:WorkspaceFact['field'],value:string,evidence:string)=>{if(!source||facts.some(fact=>fact.field===field))return;facts.push({id:createHash('sha256').update(source.url+'|'+field+'|'+value).digest('hex').slice(0,24),field,value,sourceUrl:source.url,evidence,confidence:'extracted'});};
+        if(validWorkspaceLogo(candidate.details.logoDataUrl))add('logoDataUrl',candidate.details.logoDataUrl,'Logo from the confirmed clinic source; owner approval required.');
+        const primary=candidate.details.colors.find(color=>/^#[0-9a-fA-F]{6}$/.test(color));
+        if(primary)add('primaryColor',primary,'Brand color from the confirmed clinic source; owner approval required.');
+        if(candidate.name)add(/[\u0600-\u06ff]/u.test(candidate.name)?'nameAr':'nameEn',candidate.name,'Name from the confirmed clinic source; owner approval required.');
+        candidate.workspaceFacts=facts;
+        if(state.workspace)next.workspace={...state.workspace,proposals:facts};
         next.branding={name:candidate.name,details:candidate.details};
-        next.serviceSuggestions=publicServiceSuggestions(candidate.details,state.draft,context.services).filter(s=>!state.excludedServices?.includes(normalizeServiceName(s.name)));
-        // Confirmed public branches enter the reviewable draft; services stay opt-in.
-        if(!state.serviceWizard)next.draft=importPublicDetails(state.draft,{branches:candidate.details.branches,services:[]},context);
+        next.importReviewPending=true;
+        next.importApproved=false;
       }
+    }else if(answer==='skip'){
+      const [clinic]=await tx.select({name:clinicsTable.name}).from(clinicsTable).where(eq(clinicsTable.id,fresh.clinicId!));
+      next.companyProfile={name:clinic!.name,summary:'',industry:null,location:null,website:null,sources:[],found:false};
+      next.companySkipped=true;
     }else if(!state.serviceWizard){next.companyProfile=null;}
     await audit(tx,fresh,'company_confirmed',{answer});
     return change(tx,row,{state:next as unknown as Record<string,unknown>});
   });return publicSession(row);
+}
+/** Owner approval applies identity now; imported service names stay incomplete until their booking details are supplied. */
+export async function approveConciergeImport(actor:User,revision:number,factIds:string[],serviceIndexes:number[],branchIndexes:number[],logoColor:string|null=null,edits:ImportApprovalEdits={facts:[],services:[],branches:[]}){
+ const context=await businessContext(actor);
+ const row=await withSession(actor,async(tx,row,fresh)=>{
+  noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
+  const state=stateOf(row),details=state.branding?.details;
+  if(!details||!state.companyProfile?.found||state.importApproved||state.importReviewPending===false)throw conflict('concierge_stale');
+  const facts=brandingFacts(state);
+  if(edits.facts.some(edit=>!factIds.includes(edit.id))||edits.services.some(edit=>!serviceIndexes.includes(edit.index))||edits.branches.some(edit=>!branchIndexes.includes(edit.index)))throw badRequest('concierge_invalid_data');
+  if(factIds.some(id=>!facts.some(fact=>fact.id===id))||serviceIndexes.some(index=>index>=details.services.length)||branchIndexes.some(index=>index>=details.branches.length))throw badRequest('concierge_invalid_data');
+  let workspace=state.workspace??beginWorkspaceDraft(await readWorkspace(fresh.clinicId!,tx));
+  workspace={...workspace,proposals:facts};
+  for(const id of factIds)workspace=acceptWorkspaceFact(workspace,id);
+  for(const edit of edits.facts){const fact=facts.find(f=>f.id===edit.id);if(!fact)throw badRequest('concierge_invalid_data');try{workspace=editWorkspaceDraft(workspace,{...workspace.profile,[fact.field]:edit.value});}catch{throw badRequest('concierge_invalid_data');}}
+  if(logoColor){
+   if(!/^#[0-9a-fA-F]{6}$/.test(logoColor)||!validWorkspaceLogo(details.logoDataUrl))throw badRequest('concierge_invalid_data');
+   const source=state.companyProfile.sources.find(item=>publicHttpsUrl(item.url));if(!source)throw badRequest('concierge_invalid_data');
+   const fact:WorkspaceFact={id:createHash('sha256').update(source.url+'|logo-palette|'+logoColor).digest('hex').slice(0,24),field:'primaryColor',value:logoColor,sourceUrl:source.url,evidence:'Color selected by the manager from the confirmed clinic logo.',confidence:'extracted'};
+   workspace=acceptWorkspaceFact({...workspace,proposals:[...workspace.proposals.filter(item=>item.field!=='primaryColor'),fact]},fact.id);
+  }
+  const identity=await applyWorkspace(tx,fresh,workspace);
+  const selectedDetails:BusinessDetails={...details,logoDataUrl:identity.profile.logoDataUrl,colors:identity.profile.primaryColor&&['public','owner'].includes(identity.sources.primaryColor?.kind??'')?[identity.profile.primaryColor]:[],services:details.services.flatMap((item,index)=>{if(!serviceIndexes.includes(index))return [];const edit=edits.services.find(e=>e.index===index);return [{...item,...(edit?{name:edit.name,detail:edit.detail}:{})}];}),branches:details.branches.flatMap((item,index)=>{if(!branchIndexes.includes(index))return [];const edit=edits.branches.find(e=>e.index===index);return [{...item,...(edit?{name:edit.name,detail:edit.detail}:{})}];})};
+  if(new Set(selectedDetails.services.map(item=>normalizeServiceName(item.name))).size!==selectedDetails.services.length||new Set(selectedDetails.branches.map(item=>normalizeServiceName(item.name))).size!==selectedDetails.branches.length)throw badRequest('concierge_invalid_data');
+  const next:State={...state,workspace:beginWorkspaceDraft(identity),branding:{name:state.branding!.name,details:selectedDetails},companyProfile:{...state.companyProfile,details:selectedDetails},sourceImport:true,importReviewPending:false,importApproved:true};
+  if(state.serviceWizard){next.serviceSuggestions=publicServiceSuggestions(selectedDetails,state.draft,context.services).filter(s=>!state.excludedServices?.includes(normalizeServiceName(s.name))).map(s=>({...s,followUpEnabled:edits.services.find(e=>normalizeServiceName(e.name)===normalizeServiceName(s.name))?.followUpEnabled??false}));}
+  else{
+   next.draft=importPublicDetails(state.draft,selectedDetails,context);
+   next.serviceSources={...state.serviceSources};
+   for(const service of next.draft.services){
+    if(state.draft.services.some(previous=>previous.key===service.key)||!service.name)continue;
+    const source=selectedDetails.services.find(item=>normalizeServiceName(item.name)===normalizeServiceName(service.name!));
+    if(source){const edited=edits.services.find(e=>normalizeServiceName(e.name)===normalizeServiceName(service.name!));service.followUpEnabled=edited?.followUpEnabled??false;next.serviceSources[service.key]={kind:edited?'manual':'public',label:service.name,url:edited?null:source.sourceUrl};}
+   }
+  }
+  await audit(tx,fresh,'public_details_approved',{identity:workspace.dirty,services:selectedDetails.services.length,branches:selectedDetails.branches.length});
+  return change(tx,row,{state:next as unknown as Record<string,unknown>});
+ });return publicSession(row);
 }
 /** Minimal authorized catalog; no emails, notes, customer data or credentials. */
 export async function conciergeServiceOptions(actor:User){
@@ -193,16 +344,30 @@ function reserveBudget(row:ManagerOnboarding,type:'turns'|'uploads'|'speechChars
   const maxima={turns:LIMITS.dailyTurns,uploads:LIMITS.dailyUploads,speechChars:LIMITS.dailySpeechChars,voiceSessions:LIMITS.dailyVoiceSessions};
   budget[type]+=amount;if(conciergeConfig().dailyLimitsEnabled&&budget[type]>maxima[type])throw new HttpError(429,'concierge_daily_limit');return budget;
 }
+export async function backConciergeStep(actor:User,revision:number){
+ const result=await withSession(actor,async(tx,row,fresh)=>{
+  noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
+  const state=stateOf(row);if(state.serviceWizard)return row;
+  const flow=setupWorkflow(state,row.language as Language),back=previousSetupStep(flow.step,state.completedSteps??[]);
+  if(flow.step==='company')return row;
+  const next:State={...state,completedSteps:back.completed,ui:'none'};
+  if(back.previous==='company'){next.companyCandidate=state.companyProfile??null;next.companyCandidates=next.companyCandidate?[next.companyCandidate]:[];next.companyProfile=null;}
+  await audit(tx,fresh,'step_back',{from:flow.step,to:back.previous});
+  return change(tx,row,{state:next as unknown as Record<string,unknown>});
+ });return publicSession(result);
+}
 export async function finishConciergeStep(actor:User,revision:number){
  const context=await businessContext(actor);
  const result=await withSession(actor,async(tx,row,fresh)=>{
   consent(row);noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
-  const state=stateOf(row),flow=setupWorkflow(state,row.language as Language);
+  const state=stateOf(row);state.draft=withDefaultStaffHours(state.draft,context.branches);const flow=setupWorkflow(state,row.language as Language);
   if(flow.step==='company'||flow.step==='review')return row;
-  if(!canFinishStep(flow.step,state.draft,context))return row;
+  const draft=flow.step==='rooms'?roomsForConfirmation(state.draft,context.services):state.draft;
+  if(!canFinishStep(flow.step,draft,context))throw conflict('concierge_step_incomplete');
   const completedSteps=Array.from(new Set([...(state.completedSteps??[]),flow.step]));
+  if(flow.step==='services'&&draft.rooms.length===0&&context.rooms.length===0&&canFinishStep('rooms',draft,context))completedSteps.push('rooms');
   await audit(tx,fresh,'step_confirmed',{step:flow.step});
-  return change(tx,row,{state:{...state,completedSteps} as unknown as Record<string,unknown>});
+  return change(tx,row,{state:{...state,draft,completedSteps} as unknown as Record<string,unknown>});
  });return publicSession(result);
 }
 export async function turnConcierge(actor:User,input:{revision:number;requestId:string;text:string},file?:ModelFile,stream?:{onService:(service:ServiceDraft)=>void;signal?:AbortSignal}) {
@@ -210,16 +375,17 @@ export async function turnConcierge(actor:User,input:{revision:number;requestId:
   const fingerprint=hash({text:input.text,file:file?{name:file.name,hash:hash(Buffer.from(file.bytes).toString('base64'))}:null});
   const claim=await withSession(actor,async(tx,row,fresh)=>{
     consent(row);const state=stateOf(row);
-    if(!state.companyProfile)throw conflict('concierge_identity_required');
+    if(!state.companyProfile&&!file)throw conflict('concierge_identity_required');
     if(state.lastTurnId===input.requestId){if(state.lastTurnHash!==fingerprint)throw conflict('concierge_stale');return {row,fresh,replay:true};}
     noBusy(row);checkRevision(row,input.revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
     let budget=reserveBudget(row,'turns',1);if(file)budget=reserveBudget({...row,budget},'uploads',1);
-    const [updated]=await tx.update(onboarding).set({busyId:input.requestId,busyUntil:new Date(Date.now()+100000),budget,updatedAt:new Date()}).where(eq(onboarding.id,row.id)).returning();
+    const [updated]=await tx.update(onboarding).set({busyId:input.requestId,busyUntil:new Date(Date.now()+(file?240000:100000)),budget,updatedAt:new Date()}).where(eq(onboarding.id,row.id)).returning();
     await audit(tx,fresh,file?'upload_started':'turn_started',{requestId:input.requestId,bytes:file?.bytes.length??0});return {row:updated!,fresh,replay:false};
   });
   if(claim.replay)return publicSession(claim.row);
   try {
     const state=stateOf(claim.row),context=await businessContext(claim.fresh);
+    state.draft=withDefaultStaffHours(state.draft,context.branches);
     const {reply,usage}=await callDirector({language:claim.row.language as Language,preferredName:claim.row.preferredName,context:{...context,excludedServices:state.excludedServices??[],workspace:state.workspace?{...state.workspace.profile,logoDataUrl:null}:null,serviceWizard:state.serviceWizard??false,confirmedCompany:state.companyProfile?{name:state.companyProfile.name,summary:state.companyProfile.summary,...(!state.serviceWizard?{branches:state.companyProfile.details?.branches,services:state.companyProfile.details?.services}:{})}:null,workflow:setupWorkflow(state,claim.row.language as Language)},draft:state.draft,messages:state.messages,text:input.text},file,fetch,stream?{signal:stream.signal,onService:service=>{if(!filterRemovedServices({...emptyDraft(),services:[service]},state.draft,state.excludedServices).services.length)return;const preview=mergeDraft(state.draft,{...emptyDraft(),services:[service]}).services.find(s=>s.key===service.key)!;if(!preview.definition&&state.serviceWizard)return;stream.onService(preview);}}:undefined);
     stream?.signal?.throwIfAborted();
     const result=await withSession(actor,async(tx,row,fresh)=>{
@@ -227,12 +393,14 @@ export async function turnConcierge(actor:User,input:{revision:number;requestId:
       if(row.busyId!==input.requestId||row.revision!==input.revision)throw conflict('concierge_stale');
       if(authFingerprint(fresh)!==authFingerprint(claim.fresh))throw forbidden('concierge_access_changed');
       for(const kind of KINDS){const permission=({branches:'settings.manage',services:'services.manage',rooms:'rooms.manage',staff:'employees.manage'} as const)[kind];if(reply.patch[kind].length&&!hasPermission(fresh,permission))throw forbidden();}
-      const draft=mergeDraft(state.draft,filterRemovedServices(reply.patch,state.draft,state.excludedServices)),basis={...state.branchBasis};
+      const allowedPatch=filterRemovedServices(reply.patch,state.draft,state.excludedServices);
+      const draft=applySharedServiceDetails(state.draft,mergeDraft(state.draft,allowedPatch),allowedPatch,input.text),basis={...state.branchBasis};
+      if(JSON.stringify(draft.services)!==JSON.stringify(state.draft.services)&&!hasPermission(fresh,'services.manage'))throw forbidden();
       let workspace=state.workspace;
       if(workspace&&reply.workspaceFacts?.length){
         const updates:Record<string,string>={};
         for(const fact of reply.workspaceFacts){
-          if(fact.field==='logoDataUrl'||!fact.value||!fact.evidence||!input.text.includes(fact.evidence)||!fact.evidence.includes(fact.value))continue;
+          if(fact.field==='logoDataUrl'||!fact.value||!fact.evidence||(!file&&!input.text.includes(fact.evidence))||!fact.evidence.includes(fact.value))continue;
           updates[fact.field]=fact.value;
         }
         try{workspace=editWorkspaceDraft(workspace,{...workspace.profile,...updates});}catch{/* Invalid inferred contact/theme remains editable manually. */}
@@ -247,6 +415,7 @@ export async function turnConcierge(actor:User,input:{revision:number;requestId:
       const uploads=file?[...state.uploads,{id:input.requestId,name:file.name,size:file.bytes.length,status:reply.fileRead?'read' as const:'unreadable' as const,summary:reply.fileSummary??''}].slice(-LIMITS.dailyUploads):state.uploads;
       const nav=reply.navigation==='none'?null:NAVIGATION[reply.navigation];
       const next:State={...state,workspace,serviceSources,accessFingerprint:authFingerprint(fresh),draft,messages,uploads,branchBasis:basis,lastTurnId:input.requestId,lastTurnHash:fingerprint,ui:file?'none':mentionsUpload(input.text)?'upload':reply.ui==='upload'?'upload':setupWorkflow({...state,draft},row.language as Language).step==='review'?reply.ui:'none',navigation:nav&&hasPermission(fresh,nav.permission as Permission)?nav.path:undefined};
+      if(file&&reply.fileRead){next.sourceImport=true;if(!state.companyProfile){next.companyCandidate=uploadedIdentity(reply,draft);next.companyCandidates=next.companyCandidate?[next.companyCandidate]:[];}}
       const updated=await change(tx,row,{busyId:null,busyUntil:null,state:next as unknown as Record<string,unknown>});
       await audit(tx,fresh,file?'upload_processed':'turn_completed',{requestId:input.requestId,...usage,fileRead:file?reply.fileRead:null,records:KINDS.reduce((n,k)=>n+draft[k].length,0)});return updated;
     });return publicSession(result);
@@ -316,6 +485,7 @@ export async function saveConciergeDraft(actor:User,revision:number,raw:unknown)
 export async function previewConcierge(actor:User) {
   const fresh=await freshManager(actor);const [row]=await db.select().from(onboarding).where(where(fresh));if(!row)throw notFound();
   checkAccess(row,fresh);const state=stateOf(row),context=await businessContext(fresh);
+  state.draft=withDefaultStaffHours(state.draft,context.branches);
   const issues=draftIssues(state.draft,context.branches.map(b=>b.key),context.services.map(s=>s.key));
   const preview=previewConciergeSetup(fresh,state.draft);
   return {...preview,revision:row.revision,draft:state.draft,issues:[...issues.filter(i=>!(i.code==='empty'&&state.workspace?.dirty)),...preview.issues],options:{branches:context.branches,services:context.services}};

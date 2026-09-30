@@ -1,4 +1,5 @@
 import type { ServiceDefinition, IntakeSnapshot } from '@workspace/service-definition';
+import type {Payment} from './patient-billing';
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
@@ -11,18 +12,20 @@ export type Slot = {startsAt: string; endsAt: string; roomId: number|null};
 export type CustomerChoice = Option & {phone?: string|null; email?: string|null};
 export type Catalog = {
   branches: (Option & {timeZone: string})[];
-  services: (Option & {durationMinutes: number; price: string; currency: string; requiresRoom: boolean; definition?: ServiceDefinition|null})[];
+  services: (Option & {durationMinutes: number; followUpEnabled: boolean; price: string; currency: string; requiresRoom: boolean; requiredEquipment: string[]; definition?: ServiceDefinition|null})[];
   employees: Option[]; canBook: boolean; canReadAll: boolean; canSearchCustomers: boolean; canAddCustomer: boolean;
 };
 export type AppointmentSummary = {
-  id: number; clinicId: number; branchId: number; customerId: number; serviceId: number; employeeId: number; roomId: number|null;
+  clinicalNotes?:string;notesLang?:'ar'|'en';id: number; clinicId: number; branchId: number; customerId: number; serviceId: number; employeeId: number; roomId: number|null;
   startsAt: string; endsAt: string; status: Status; version: number; durationMinutes: number;
   customer: Option; service: Option; employee: Option; branch: Option & {timeZone: string};
   nextActions?: Status[]; canReschedule?: boolean;
+  billing?:Payment;
 };
 export type Reservation = {startsAt: string; endsAt: string; employeeId: number; roomId: number|null};
 export type AppointmentDetail = AppointmentSummary & {
-  serviceIntake?: IntakeSnapshot|null;
+  packageId?:number|null;packagePayment?:{warning:boolean;blocking:boolean;missing:string;sessionNumber:number}|null;
+  serviceIntake?: IntakeSnapshot|null; appointmentType:'standard'|'follow_up';followUpOfId:number|null;chargePrice:string|null;chargeCurrency:string|null;canEditCharge:boolean;
   notes?: string; notesLang?: 'en'|'ar'; requiresRoom: boolean; room: Option|null; nextActions: Status[]; canReschedule: boolean; canEditNotes: boolean;
   customerDetails?: {phone: string|null; email: string|null; notes: string; sensitiveNotes?: string};
   history: {id: number; event: 'created'|'status_changed'|'rescheduled'|'notes_updated'; fromStatus: Status|null; toStatus: Status;
@@ -55,7 +58,7 @@ export function useSchedulingCommand(onSuccess?: (id: number) => void) {
     },
     onSuccess: async (result) => {
       attempt.current=null;
-      await Promise.all([client.invalidateQueries({queryKey:['operations']}),client.invalidateQueries({queryKey:['scheduling']}),client.invalidateQueries({queryKey:['me','clinic']}),client.invalidateQueries({queryKey:['setup']})]);
+      await Promise.all([client.invalidateQueries({queryKey:['billing']}),client.invalidateQueries({queryKey:['operations']}),client.invalidateQueries({queryKey:['scheduling']}),client.invalidateQueries({queryKey:['me','clinic']}),client.invalidateQueries({queryKey:['setup']})]);
       toast({title:t('p3.saved')});
       onSuccess?.(result.id);
     },

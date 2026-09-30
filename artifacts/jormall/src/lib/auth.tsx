@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const previous = qc.getQueryData<SessionUser | null>(ME_KEY);
       if (previous?.id !== user?.id) qc.removeQueries({predicate:(q)=>!(q.queryKey[0] === 'auth' && q.queryKey[1] === 'me') && !(q.queryKey[0] === 'setup' && q.queryKey[1] === 'status')});
       qc.setQueryData(ME_KEY, user);
-      if (user) qc.setQueryData(SETUP_KEY, { needsSetup: false });
+      if (user) { localStorage.removeItem(`jormall:concierge-later:${user.id}`); window.dispatchEvent(new Event('jormall:setup-pause-changed')); qc.setQueryData(SETUP_KEY, { needsSetup: false }); }
     },
     signOut: () => logout.mutateAsync(),
   };

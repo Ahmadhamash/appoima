@@ -2,7 +2,7 @@ import { WorkspaceHome } from '@/components/workspace/workspace-home';
 import { HomeSchedule } from '@/components/scheduling/home-schedule';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
-import { CalendarDays, Check, Circle, ClipboardList, Clock, Stethoscope, Sparkles, type LucideIcon } from 'lucide-react';
+import { CalendarDays, Check, ClipboardList, Clock, Stethoscope, Sparkles, type LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +18,8 @@ export function useMyClinic() {
     queryKey: ['me', 'clinic'],
     queryFn: () => api<{ clinic: MyClinic }>('/me/clinic'),
     staleTime: 30_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -49,9 +51,10 @@ function ManagerHome({ user }: { user: SessionUser }) {
     { key: 'hours', done: progress?.hasBranchHours ?? false, href: '/business/settings', permission: 'settings.manage' },
     { key: 'catalog', done: progress?.hasCatalog ?? false, href: '/business/services', permission: 'services.manage' },
     { key: 'staff', done: progress?.hasStaff ?? false, href: '/people/employees', permission: 'employees.manage' },
-    { key: 'booking', done: progress?.hasFirstAppointment ?? false, href: '/appointments/view', permission: 'appointments.read' },
+    { key: 'booking', done: progress?.hasFirstAppointment ?? false, href: '/appointments/new', permission: 'appointments.manage' },
   ];
   const current = steps.find((s) => !s.done)?.key;
+  const completeCount=steps.filter(s=>s.done).length;
 
   return (
     <>
@@ -63,38 +66,47 @@ function ManagerHome({ user }: { user: SessionUser }) {
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{errorMessage(q.error)}</div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-          {progress && !steps.every((s) => s.done) && <Card data-testid="card-checklist">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ClipboardList className="size-4 text-primary" aria-hidden />
-                {t('manager.checklistTitle')}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">{t('manager.checklistIntro')}</p>
+          {progress && !steps.every((s) => s.done) && <Card data-testid="card-checklist" className="overflow-hidden rounded-2xl border-primary/15 shadow-sm">
+            <CardHeader className="space-y-3 bg-primary/[0.035] pb-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ClipboardList className="size-5 text-primary" aria-hidden />
+                    {t('manager.checklistTitle')}
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">{t('manager.checklistIntro')}</p>
+                </div>
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary" data-testid="checklist-progress-label">{t('manager.checklistProgress',{done:completeCount,total:steps.length})}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-primary/10" role="progressbar" aria-valuenow={completeCount} aria-valuemin={0} aria-valuemax={steps.length} aria-label={t('manager.checklistTitle')}>
+                <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{width:`${completeCount/steps.length*100}%`}}/>
+              </div>
             </CardHeader>
-            <CardContent>
-              <ol className="space-y-1">
+            <CardContent className="pt-4">
+              <ol className="grid gap-3 sm:grid-cols-2">
                 {steps.map((s, i) => {
                   const isCurrent = s.key === current;
                   return (
                     <li
                       key={s.key}
                       aria-current={isCurrent ? 'step' : undefined}
-                      className={cn('flex items-start gap-3 rounded-lg p-3', isCurrent && 'bg-primary/5 ring-1 ring-primary/20')}
+                      className={cn('flex min-h-36 items-start gap-3 rounded-xl border p-4',isCurrent?'border-primary/40 bg-primary/[0.06] shadow-sm':s.done?'border-primary/15 bg-primary/[0.025]':'border-border bg-card')}
                       data-testid={`checklist-${s.key}`}
                     >
                       <span
                         aria-hidden
                         className={cn(
-                          'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border text-xs font-semibold',
-                          s.done ? 'border-primary bg-primary text-primary-foreground' : isCurrent ? 'border-primary text-primary' : 'border-muted-foreground/30 text-muted-foreground',
+                          'grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold',
+                          s.done ? 'border-primary bg-primary text-primary-foreground' : isCurrent ? 'border-primary bg-background text-primary' : 'border-muted-foreground/30 text-muted-foreground',
                         )}
                       >
-                        {s.done ? <Check className="size-3.5" /> : i + 1}
+                        {s.done ? <Check className="size-4" /> : i + 1}
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <p className={cn('font-medium', s.done && 'text-muted-foreground line-through')}>{t(`manager.steps.${s.key}.title`)}</p>
-                        <p className="text-sm text-muted-foreground">{t(`manager.steps.${s.key}.hint`)}</p>
-                        {isCurrent && (s.href && can(user, s.permission) ? <Link href={s.href} className="focus-ring mt-2 inline-block rounded bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" data-testid="continue-setup">{t('p2.startSetup')}</Link> : null)}
+                      <div className="flex min-w-0 flex-1 flex-col items-start">
+                        <span className={cn('mb-1 text-xs font-semibold',isCurrent?'text-primary':'text-muted-foreground')}>{t(s.done?'manager.completedStep':isCurrent?'manager.currentStep':'manager.upcomingStep')}</span>
+                        <p className="font-semibold leading-snug">{t(`manager.steps.${s.key}.title`)}</p>
+                        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{t(`manager.steps.${s.key}.hint`)}</p>
+                        {s.href && can(user, s.permission) && <Link href={s.href} className={cn('focus-ring mt-3 inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-semibold',isCurrent?'bg-primary text-primary-foreground hover:bg-primary/90':'border border-primary/20 text-primary hover:bg-primary/5')} data-testid={isCurrent?'continue-setup':`open-setup-${s.key}`}>{t(isCurrent?`manager.steps.${s.key}.action`:'manager.openStep')}</Link>}
                       </div>
                       <span className="sr-only">{s.done ? t('common.done') : t('common.notYet')}</span>
                     </li>
@@ -158,4 +170,3 @@ export default function ClinicHomePage() {
       return <SimpleHome user={user} titleKey="staff" icon={Clock} />;
   }
 }
-

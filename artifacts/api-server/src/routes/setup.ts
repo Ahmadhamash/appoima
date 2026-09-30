@@ -4,6 +4,8 @@ import { requireAuth, requirePasswordChanged, requirePermission } from "../middl
 import { forbidden } from "../lib/errors";
 import { branchSchema, serviceSchema, serviceBatchSchema, roomSchema, customerSchema, employeeSchema, newEmployeeSchema, pageSchema, employeePageSchema } from "../domain/setup-validation";
 import * as setup from "../services/setup";
+import {roomOverview,roomSchedule,createRoomBlock,removeRoomBlock} from '../services/room-workflows';
+import {roomBlockSchema,roomRangeSchema} from '../domain/room-workflow-validation';
 
 const router: IRouter = Router();
 router.use("/clinic", requireAuth, requirePasswordChanged, (req, _res, next) => {
@@ -28,6 +30,10 @@ router.post("/clinic/services", requirePermission("services.manage"), async (req
 router.put("/clinic/services/:id", requirePermission("services.manage"), async (req, res) => res.json({ item: await setup.saveService(req.user!, serviceSchema.parse(req.body), id(req.params["id"])) }));
 
 router.get("/clinic/rooms", requirePermission("rooms.read"), async (req, res) => res.json(await setup.listRooms(req.user!, pageSchema.parse(req.query))));
+router.get('/clinic/rooms/overview',requirePermission('rooms.read'),async(req,res)=>res.json(await roomOverview(req.user!)));
+router.get('/clinic/rooms/schedule',requirePermission('rooms.read'),async(req,res)=>res.json(await roomSchedule(req.user!,roomRangeSchema.parse(req.query))));
+router.post('/clinic/rooms/:id/blocks',requirePermission('rooms.manage'),async(req,res)=>res.status(201).json(await createRoomBlock(req.user!,id(req.params['id']),roomBlockSchema.parse(req.body))));
+router.delete('/clinic/rooms/blocks/:id',requirePermission('rooms.manage'),async(req,res)=>res.json(await removeRoomBlock(req.user!,id(req.params['id']))));
 router.get("/clinic/rooms/:id", requirePermission("rooms.read"), async (req, res) => res.json({ item: await setup.getRoom(req.user!, id(req.params["id"])) }));
 router.post("/clinic/rooms", requirePermission("rooms.manage"), async (req, res) => res.status(201).json({ item: await setup.saveRoom(req.user!, roomSchema.parse(req.body)) }));
 router.put("/clinic/rooms/:id", requirePermission("rooms.manage"), async (req, res) => res.json({ item: await setup.saveRoom(req.user!, roomSchema.parse(req.body), id(req.params["id"])) }));

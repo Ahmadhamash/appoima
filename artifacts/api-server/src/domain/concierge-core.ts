@@ -1,15 +1,15 @@
 import { WORKSPACE_FIELDS, type WorkspaceField } from '@workspace/service-definition';
 /** Provider-independent onboarding contract. Model output is DATA, never an executable command. */
 import { SERVICE_DEFINITION_SCHEMA, parseServiceDefinition, definitionIssues, normalizeServiceName, type ServiceDefinition } from '@workspace/service-definition';
-import { DAYS, validRanges, isTimeZone, type Week } from './setup-rules';
+import { DAYS, validRanges, isTimeZone, normalizeWeek, type Week } from './setup-rules';
 export type Language = 'ar' | 'en';
 export type Stage = 'name' | 'choice' | 'conversation' | 'complete' | 'manual';
 export type Kind = 'branches' | 'services' | 'rooms' | 'staff';
 export const KINDS: Kind[] = ['branches', 'services', 'rooms', 'staff'];
 export const CONSENT_VERSION = 'concierge-openai-soniox-2026-09-22';
-export const LIMITS = { records: 50, patches: 20, messageChars: 6000, replyChars: 1400, history: 24, uploadBytes: 8 * 1024 * 1024, textFileChars: 60000, dailyTurns: 80, dailyUploads: 10, dailySpeechChars: 24000, dailyVoiceSessions: 4, voiceSeconds: 3300, retentionDays: 30 } as const;
-export type BranchDraft = { key: string; existingId: number | null; name: string | null; nameLang: Language | null; timeZone: string | null; openingHours: Week | null };
-export type ServiceDraft = { definition?: ServiceDefinition | null; branchScope?: 'all' | 'branch' | null; employeeIds?: number[] | null; roomIds?: number[] | null; key: string; name: string | null; nameLang: Language | null; branchKey: string | null; durationMinutes: number | null; price: string | null; currency: string | null; category: 'Hair' | 'Nails' | 'Skin' | 'Laser' | 'Massage' | 'Makeup' | 'Other' | null; requiresRoom: boolean | null };
+export const LIMITS = { records: 50, patches: 20, messageChars: 6000, replyChars: 1400, history: 24, uploadBytes: 32 * 1024 * 1024, textFileChars: 60000, dailyTurns: 80, dailyUploads: 10, dailySpeechChars: 24000, dailyVoiceSessions: 4, voiceSeconds: 3300, retentionDays: 30 } as const;
+export type BranchDraft = { address?: string | null; mapUrl?: string | null; key: string; existingId: number | null; name: string | null; nameLang: Language | null; timeZone: string | null; openingHours: Week | null };
+export type ServiceDraft = { followUpEnabled?: boolean | null; definition?: ServiceDefinition | null; branchScope?: 'all' | 'branch' | null; employeeIds?: number[] | null; roomIds?: number[] | null; key: string; name: string | null; nameLang: Language | null; branchKey: string | null; durationMinutes: number | null; price: string | null; currency: string | null; category: 'Hair' | 'Nails' | 'Skin' | 'Laser' | 'Massage' | 'Makeup' | 'Other' | null; requiresRoom: boolean | null };
 export type RoomDraft = { key: string; name: string | null; nameLang: Language | null; branchKey: string | null; capacity: number | null; serviceKeys: string[] | null };
 export type StaffDraft = { key: string; name: string | null; nameLang: Language | null; email: string | null; phone: string | null; jobTitle: string | null; branchKey: string | null; role: 'secretary' | 'doctor' | 'service_provider' | 'other_staff' | null; serviceKeys: string[] | null; workingHours: Week | null; breaks: Week | null };
 export type Draft = { branches: BranchDraft[]; services: ServiceDraft[]; rooms: RoomDraft[]; staff: StaffDraft[] };
@@ -30,8 +30,8 @@ const enumeration = (values: string[]): Shape => ({ type: 'string', enum: values
 const array = (items: Shape): Shape => ({ type: 'array', items });
 const week = object(Object.fromEntries(DAYS.map(d => [d, array(object({ open: string, close: string }))])));
 const base = { key: string, name: nullable(string), nameLang: nullable(enumeration(['ar', 'en'])) };
-const branchShape = object({ ...base, existingId: nullable(number), timeZone: nullable(string), openingHours: nullable(week) });
-export const serviceShape = object({ ...base, definition: nullable(SERVICE_DEFINITION_SCHEMA), branchScope: nullable(enumeration(['all','branch'])), employeeIds: nullable(array(number)), roomIds: nullable(array(number)), branchKey: nullable(string), durationMinutes: nullable(number), price: nullable(string), currency: nullable(string), category: nullable(enumeration(['Hair','Nails','Skin','Laser','Massage','Makeup','Other'])), requiresRoom: nullable(boolean) });
+const branchShape = object({ ...base, address: nullable(string), mapUrl: nullable(string), existingId: nullable(number), timeZone: nullable(string), openingHours: nullable(week) });
+export const serviceShape = object({ ...base, definition: nullable(SERVICE_DEFINITION_SCHEMA), branchScope: nullable(enumeration(['all','branch'])), employeeIds: nullable(array(number)), roomIds: nullable(array(number)), branchKey: nullable(string), durationMinutes: nullable(number), price: nullable(string), currency: nullable(string), category: nullable(enumeration(['Hair','Nails','Skin','Laser','Massage','Makeup','Other'])), requiresRoom: nullable(boolean), followUpEnabled: nullable(boolean) });
 const roomShape = object({ ...base, branchKey: nullable(string), capacity: nullable(number), serviceKeys: nullable(array(string)) });
 const staffShape = object({ ...base, email: nullable(string), phone: nullable(string), jobTitle: nullable(string), branchKey: nullable(string), role: nullable(enumeration(['secretary','doctor','service_provider','other_staff'])), serviceKeys: nullable(array(string)), workingHours: nullable(week), breaks: nullable(week) });
 export const DRAFT_SCHEMA = object({ branches: array(branchShape), services: array(serviceShape), rooms: array(roomShape), staff: array(staffShape) });
@@ -60,13 +60,20 @@ export function parseDraft(raw: unknown): Draft {
   // Explicit v1 upgrade for already-stored drafts and old clients; all other unknown keys still fail.
   if (raw && typeof raw === 'object' && Array.isArray((raw as Draft).services)) {
     raw = {...raw,services:(raw as Draft).services.map(s=>({...s,
-      definition:s.definition ?? null,
-      branchScope:Object.hasOwn(s,'branchScope') ? s.branchScope : s.branchKey ? 'branch' : 'all',
-      employeeIds:s.employeeIds ?? null,roomIds:s.roomIds ?? null,
+      definition:s.definition ?? null,followUpEnabled:s.followUpEnabled ?? null,
+      branchScope:Object.hasOwn(s,'branchScope') ? s.branchScope : s.branchKey ? 'branch' : null,
+      employeeIds:s.employeeIds ?? null,roomIds:s.roomIds ?? null,currency:'JOD',
     }))};
   }
+  if(raw && typeof raw==='object' && Array.isArray((raw as Draft).branches))raw={...raw,branches:(raw as Draft).branches.map(b=>({...b,address:b.address??null,mapUrl:b.mapUrl??null}))};
   check(raw, DRAFT_SCHEMA);
   const draft = structuredClone(raw) as Draft, keys = new Set<string>();
+  if(draft.branches.length===1){
+    const onlyBranch=draft.branches[0]!.key;
+    for(const room of draft.rooms)room.branchKey??=onlyBranch;
+    for(const person of draft.staff)person.branchKey??=onlyBranch;
+    for(const service of draft.services)if(!service.branchScope){service.branchScope='branch';service.branchKey??=onlyBranch;}
+  }
   if (KINDS.reduce((n, k) => n + draft[k].length, 0) > LIMITS.records) fail();
   for (const kind of KINDS) for (const row of draft[kind]) {
     if (!KEY.test(row.key) || keys.has(row.key)) fail(); keys.add(row.key);
@@ -76,8 +83,11 @@ export function parseDraft(raw: unknown): Draft {
     if ('serviceKeys' in row && row.serviceKeys !== null && (row.serviceKeys.some(k => !KEY.test(k)) || new Set(row.serviceKeys).size !== row.serviceKeys.length)) fail();
   }
   for (const b of draft.branches) {
+    if(b.address!==null&&b.address!==undefined&&(typeof b.address!=='string'||b.address.length>400))fail();
+    if(b.mapUrl){try{const url=new URL(b.mapUrl);if(!['https:','http:'].includes(url.protocol)||url.username||url.password||b.mapUrl.length>500)fail();}catch{fail();}}
     if (b.existingId !== null && b.existingId <= 0) fail();
     if (b.timeZone !== null && !isTimeZone(b.timeZone)) fail();
+    b.timeZone = 'Asia/Amman';
     if (b.openingHours !== null) for (const d of DAYS) if (b.openingHours[d].length > 8 || !validRanges(b.openingHours[d])) fail();
   }
   if (new Set(draft.branches.filter(b => b.existingId !== null).map(b => b.existingId)).size !== draft.branches.filter(b => b.existingId !== null).length) fail();
@@ -123,6 +133,31 @@ export function mergeDraft(current: Draft, patch: Draft): Draft {
   }
   return parseDraft(out);
 }
+/** A manager can confirm one set of booking details for every listed service. */
+export function applySharedServiceDetails(previous:Draft,updated:Draft,patch:Draft,utterance:string):Draft{
+  if(updated.services.length<2||!/(?:كلهم|كلها|جميعهم|كل الخدمات|all (?:of them|services)|same for all)/iu.test(utterance)||!/(?:نفس|متشابه|متشابهين|موحد|متساوي|same|similar|identical)/iu.test(utterance)||/(?:ما عدا|باستثناء|إلا|except|apart from)/iu.test(utterance))return updated;
+  const result=structuredClone(updated);
+  for(const field of ['durationMinutes','price','requiresRoom'] as const){
+    const stated=[...new Set(patch.services.map(service=>service[field]).filter(value=>value!==null))];
+    const known=[...new Set(previous.services.map(service=>service[field]).filter(value=>value!==null))];
+    const shared=stated.length===1?stated[0]:stated.length===0&&known.length===1?known[0]:undefined;
+    if(shared===undefined)continue;
+    for(const service of result.services)service[field]=shared as never;
+  }
+  return parseDraft(result);
+}
+/** Only missing staff hours inherit. Explicit schedules, including closed weeks, survive edits. */
+export function withDefaultStaffHours(draft:Draft, existingBranches:{key:string;id?:number;openingHours:unknown}[]=[]):Draft {
+  const result=parseDraft(draft);
+  const branches=[...result.branches,...existingBranches.filter(b=>!result.branches.some(d=>d.key===b.key||d.existingId===b.id))];
+  for(const person of result.staff){
+    if(person.branchKey===null&&branches.length===1)person.branchKey=branches[0]!.key;
+    if(person.workingHours!==null)continue;
+    const hours=branches.find(b=>b.key===person.branchKey)?.openingHours;
+    if(hours)person.workingHours=structuredClone(normalizeWeek(hours));
+  }
+  return result;
+}
 export type Issue = { key: string; field: string; code: string };
 export function draftIssues(draft: Draft, existingBranches: string[] = [], existingServices: string[] = []): Issue[] {
   const issues: Issue[] = []; const branches = new Set([...existingBranches, ...draft.branches.map(b => b.key)]), services = new Set([...existingServices, ...draft.services.map(s => s.key)]);
@@ -132,6 +167,7 @@ export function draftIssues(draft: Draft, existingBranches: string[] = [], exist
   for (const s of draft.services) {
     required(s, ['name','durationMinutes','price','currency','category','requiresRoom','branchScope']); reference(s);
     if(s.branchScope==='branch'&&!s.branchKey)issues.push({key:s.key,field:'branchKey',code:'required'});
+    if(s.category==='Other'&&(!s.definition||['خدمات العيادة','Clinic services'].includes(s.definition.section)))issues.push({key:s.key,field:'customCategory',code:'required'});
     for(const issue of definitionIssues(s.definition))issues.push({key:s.key,...issue});
   }
   for (const r of draft.rooms) { required(r, ['name','branchKey','capacity','serviceKeys']); reference(r); for (const key of r.serviceKeys ?? []) if (!services.has(key)) issues.push({key:r.key,field:'serviceKeys',code:'invalid_reference'}); }

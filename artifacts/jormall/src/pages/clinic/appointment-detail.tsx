@@ -1,4 +1,6 @@
 import { useAuth } from '@/lib/auth';
+import {AppointmentPayment} from '@/components/operations/patient-payment';
+import {AppointmentLedger} from '@/components/operations/package-ledger';
 import { can } from '@/lib/setup-api';
 import { emptyConsumption, consumptionBody } from '@/lib/operations-api';
 import { CheckField } from '@/components/setup/controls';
@@ -27,27 +29,35 @@ function NotesEditor({appointment:a}: {appointment:AppointmentDetail}) {
     </fieldset>
   </form>;
 }
+function AppointmentPrice({appointment:a}:{appointment:AppointmentDetail}){
+  const {lang}=useI18n(),errorMessage=useErrorMessage(),[price,setPrice]=useState(a.chargePrice??''),command=useSchedulingCommand();
+  return <section className="space-y-3 rounded-xl border bg-card p-4 sm:p-5" data-testid="appointment-price"><h2 className="font-semibold">{a.appointmentType==='follow_up'?(lang==='ar'?'رتوش / موعد متابعة':'Retouch / follow-up appointment'):(lang==='ar'?'أتعاب الطبيب / الخدمة':'Doctor / service fee')}</h2><p className="text-sm"><bdi dir="ltr">{a.chargePrice??'—'} {a.chargeCurrency??'JOD'}</bdi>{a.followUpOfId&&<Link href={`/appointments/${a.followUpOfId}`} className="ms-3 underline">{lang==='ar'?'الموعد الأصلي':'Original appointment'} #{a.followUpOfId}</Link>}</p>{a.canEditCharge&&<form onSubmit={e=>{e.preventDefault();command.mutate({path:`/clinic/appointments/${a.id}/charge`,body:{price,expectedVersion:a.version}});}} className="flex flex-wrap items-end gap-3"><FormField label={lang==='ar'?'أتعاب الطبيب لهذا الموعد (JOD)':'Doctor / service fee for this appointment (JOD)'} type="number" required min="0" max="999999999.999" step="0.001" value={price} onChange={e=>setPrice(e.target.value)} testId="appointment-charge-price"/><Button type="submit" disabled={command.isPending} data-testid="save-appointment-price">{lang==='ar'?'حفظ السعر':'Save price'}</Button></form>}<FormError message={command.error?errorMessage(command.error):undefined}/>{a.appointmentType==='follow_up'&&<p className="text-xs text-muted-foreground">{lang==='ar'?'السعر الافتراضي للمتابعة صفر. الطبيب أو مقدم الخدمة أو السكرتير يستطيع تعديل سعر هذا الموعد.':'Follow-up defaults to zero. The doctor, service provider or secretary can edit this appointment price.'}</p>}</section>;
+}
 function AppointmentActions({appointment:a}: {appointment:AppointmentDetail}) {
   const {t,lang}=useI18n(),errorMessage=useErrorMessage();
   const {user}=useAuth();
   const materialPermission=can(user,'inventory.manage') && (can(user,'appointments.manage') || Boolean(user && ['doctor','service_provider'].includes(user.role) && user.id===a.employeeId));
+  const provider=Boolean(user&&['doctor','service_provider'].includes(user.role));
+  const [materialsApproved,setMaterialsApproved]=useState(false),[materialsReady,setMaterialsReady]=useState(false);
   const [consumption,setConsumption]=useState(emptyConsumption),[recordMaterials,setRecordMaterials]=useState(materialPermission && Boolean(user && ['doctor','service_provider'].includes(user.role)));
-  const [action,setAction]=useState<Status|null>(null),[reason,setReason]=useState(''),[notes,setNotes]=useState(a.notes??''),[notesLang,setNotesLang]=useState<'en'|'ar'>(a.notesLang??lang);
+  const [action,setAction]=useState<Status|null>(null),[reason,setReason]=useState(''),[overrideReason,setOverrideReason]=useState(''),[notes,setNotes]=useState(a.notes??''),[notesLang,setNotesLang]=useState<'en'|'ar'>(a.notesLang??lang);
   const command=useSchedulingCommand(()=>setAction(null));
   return <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-5" data-testid="appointment-actions">
     <h2 className="font-semibold">{t('p3.statusActions')}</h2>
+    {a.packagePayment?.warning&&<p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{lang==='ar'?'مطلوب تحصيل':'Payment due'} {a.packagePayment.missing} JD {lang==='ar'?'قبل الجلسة حسب خطة الدفع':'before treatment under the payment plan'}</p>}
     {!action?<div className="flex flex-wrap gap-2">{a.nextActions.map((s)=><Button key={s} type="button" variant={s==='cancelled'||s==='no_show'?'outline':'default'} onClick={()=>{setAction(s);setReason('');}} data-testid={`appointment-action-${s}`}>{t(`p3.actions.${s}`)}</Button>)}
       {a.canReschedule&&<Link href={`/appointments/${a.id}/reschedule`} className="focus-ring inline-flex min-h-10 items-center rounded-md border px-4 py-2 text-sm" data-testid="appointment-reschedule">{t('p3.reschedule')}</Link>}
       {!a.nextActions.length&&!a.canReschedule&&<p className="text-sm text-muted-foreground">{t('p3.noActions')}</p>}
-    </div>:<form onSubmit={(e)=>{e.preventDefault();command.mutate({path:`/clinic/appointments/${a.id}/status`,body:{status:action,expectedVersion:a.version,reason,...(action==='completed'?{notes,notesLang,...(materialPermission&&recordMaterials?{consumption:consumptionBody(consumption)}:{})}:{})}});}} className="space-y-4">
+    </div>:<form onSubmit={(e)=>{e.preventDefault();command.mutate({path:`/clinic/appointments/${a.id}/status`,body:{status:action,expectedVersion:a.version,reason,overrideReason,...(action==='completed'?{notes,notesLang,...(materialPermission&&recordMaterials?{consumption:consumptionBody(consumption),consumptionApproved:true}:{})}:{})}});}} className="space-y-4">
       <fieldset disabled={command.isPending} className="space-y-4">
         <p className="font-medium">{t(`p3.actions.${action}`)}</p><p className="text-sm text-muted-foreground">{t('p3.actionReview')}</p>
         {(action==='cancelled'||action==='no_show')&&<FormField label={t('p3.reason')} value={reason} onChange={(e)=>setReason(e.target.value)} maxLength={1000} required testId="appointment-action-reason"/>}
-        {action==='completed'&&<><SelectField label={t('p3.notesLang')} value={notesLang} onChange={(v)=>setNotesLang(v as 'en'|'ar')} testId="completion-notes-language"><option value="en">English</option><option value="ar">العربية</option></SelectField><div lang={notesLang} dir={notesLang==='ar'?'rtl':'ltr'}><TextareaField label={t('p3.notes')} value={notes} onChange={setNotes} testId="completion-notes" hint={t('p3.notesHint')}/></div></>}
-        {action==='completed'&&<><p className="text-xs text-muted-foreground">{t('p4.recordLater')}</p>{materialPermission&&<><CheckField label={t('p4.recordNow')} checked={recordMaterials} onChange={setRecordMaterials} testId="completion-record-materials"/>{recordMaterials&&<ConsumptionFields branchId={a.branchId} value={consumption} onChange={setConsumption}/>}</>}</>}
+        {action==='completed'&&<><SelectField label={t('p3.notesLang')} value={notesLang} onChange={(v)=>setNotesLang(v as 'en'|'ar')} testId="completion-notes-language"><option value="en">English</option><option value="ar">العربية</option></SelectField><div lang={notesLang} dir={notesLang==='ar'?'rtl':'ltr'}><TextareaField label={lang==='ar'?'ملاحظات العلاج والمريض':'Treatment and patient notes'} value={notes} onChange={setNotes} testId="completion-notes" hint={lang==='ar'?'تُحفظ في ملف المريض مع هذا الموعد والخدمة.':'Saved in the patient record with this appointment and service.'}/></div></>}
+        {action==='completed'&&<>{!provider&&<p className="text-xs text-muted-foreground">{t('p4.recordLater')}</p>}{materialPermission&&<><CheckField label={t('p4.recordNow')} checked={recordMaterials} disabled={provider} onChange={setRecordMaterials} testId="completion-record-materials"/>{recordMaterials&&<><ConsumptionFields appointmentId={a.id} onDefaultsReady={setMaterialsReady} branchId={a.branchId} roomId={a.roomId} value={consumption} onChange={next=>{setConsumption(next);setMaterialsApproved(false);}}/><CheckField label={lang==='ar'?'راجعت وأوافق على الكميات المستخدمة لهذا المريض':'I reviewed and approve the quantities used for this patient'} checked={materialsApproved} onChange={setMaterialsApproved} testId="completion-approve-materials"/></>}</>}</>}
+        {a.packagePayment?.blocking&&user?.role==='manager'&&<FormField label={lang==='ar'?'سبب تجاوز شرط الدفع (إذا سمحت السياسة)':'Payment override reason (if policy allows)'} value={overrideReason} onChange={e=>setOverrideReason(e.target.value)} testId="appointment-payment-override"/>}
         <FormError message={command.error?errorMessage(command.error):undefined}/>
         {command.error&&<p className="text-xs text-muted-foreground">{t('p3.retrySame')}</p>}
-        <div className="flex flex-wrap gap-2"><Button type="submit" data-testid="confirm-appointment-action">{command.isPending?t('common.loading'):action==='completed'?t('p3.finishNotes'):t('p3.confirmAction')}</Button><Button type="button" variant="outline" onClick={()=>{setAction(null);command.reset();}} data-testid="dismiss-appointment-action">{t('p3.dismiss')}</Button></div>
+        <div className="flex flex-wrap gap-2"><Button type="submit" disabled={action==='completed'&&materialPermission&&recordMaterials&&(!materialsReady||!materialsApproved||(!consumption.items.length&&!consumption.confirmNoItems))} data-testid="confirm-appointment-action">{command.isPending?t('common.loading'):action==='completed'?t('p3.finishNotes'):t('p3.confirmAction')}</Button><Button type="button" variant="outline" onClick={()=>{setAction(null);command.reset();}} data-testid="dismiss-appointment-action">{t('p3.dismiss')}</Button></div>
       </fieldset>
     </form>}
   </section>;
@@ -70,6 +80,9 @@ export default function AppointmentDetailPage() {
         </dl>
       </section>
       <AppointmentActions key={`actions-${a.id}-${a.version}`} appointment={a}/>
+      <AppointmentPrice key={`price-${a.id}-${a.version}`} appointment={a}/>
+      <AppointmentPayment key={`payment-${a.id}-${a.version}`} appointment={a}/>
+      <AppointmentLedger appointmentId={a.id} customerId={a.customerId}/>
       {a.status==='cancelled'&&<ReplacementPanel appointmentId={a.id}/>}
       <AppointmentConsumption appointment={a}/>
       {a.customerDetails&&<section className="space-y-3 rounded-xl border bg-card p-4 sm:p-5" data-testid="appointment-customer-details"><h2 className="font-semibold">{t('p3.customerDetails')}</h2>

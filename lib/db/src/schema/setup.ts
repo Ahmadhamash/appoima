@@ -20,8 +20,10 @@ export const servicesTable = pgTable("services", {
   currency: text("currency").notNull().default("JOD"),
   category: serviceCategoryEnum("category").notNull(),
   definition: jsonb("definition").$type<ServiceDefinition | null>(),
+  requiredEquipment: jsonb("required_equipment").$type<string[]>().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
   requiresRoom: boolean("requires_room").notNull().default(false),
+  followUpEnabled: boolean("follow_up_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("services_clinic_idx").on(t.clinicId),
@@ -39,6 +41,7 @@ export const roomsTable = pgTable("rooms", {
   nameLang: languageEnum("name_lang").notNull().default("en"),
   capacity: integer("capacity").notNull().default(1),
   status: roomStatusEnum("status").notNull().default("available"),
+  extra: jsonb("extra").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("rooms_clinic_idx").on(t.clinicId),

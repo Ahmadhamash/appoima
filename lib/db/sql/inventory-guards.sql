@@ -10,10 +10,10 @@ CREATE TRIGGER inventory_consumptions_immutable BEFORE UPDATE OR DELETE OR TRUNC
 
 CREATE OR REPLACE FUNCTION public.jormall_inventory_item_identity() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF (NEW.id,NEW.clinic_id,NEW.branch_id,NEW.unit) IS DISTINCT FROM (OLD.id,OLD.clinic_id,OLD.branch_id,OLD.unit) THEN
-    RAISE EXCEPTION 'Item identity, branch and unit cannot change.' USING ERRCODE='55000';
-  END IF;
-  RETURN NEW;
+ IF (NEW.id,NEW.clinic_id,NEW.branch_id,NEW.unit,NEW.product_id) IS DISTINCT FROM (OLD.id,OLD.clinic_id,OLD.branch_id,OLD.unit,OLD.product_id) THEN
+  RAISE EXCEPTION 'Item identity, catalog, branch and unit cannot change.' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
 END; $$;
 DROP TRIGGER IF EXISTS inventory_items_identity_guard ON public.inventory_items;
 CREATE TRIGGER inventory_items_identity_guard BEFORE UPDATE ON public.inventory_items FOR EACH ROW EXECUTE FUNCTION public.jormall_inventory_item_identity();
@@ -32,18 +32,22 @@ DROP TRIGGER IF EXISTS inventory_consumptions_context_guard ON public.inventory_
 CREATE TRIGGER inventory_consumptions_context_guard BEFORE INSERT ON public.inventory_consumptions FOR EACH ROW EXECUTE FUNCTION public.jormall_inventory_consumption_guard();
 
 CREATE OR REPLACE FUNCTION public.jormall_inventory_movement_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE item public.inventory_items%ROWTYPE; balance numeric;
+DECLARE item public.inventory_items%ROWTYPE; balance numeric; location_balance numeric;
 BEGIN
-  PERFORM pg_advisory_xact_lock(7140002,NEW.clinic_id);
-  SELECT * INTO item FROM public.inventory_items WHERE clinic_id=NEW.clinic_id AND id=NEW.item_id FOR UPDATE;
-  IF NOT FOUND OR item.branch_id <> NEW.branch_id OR item.unit <> NEW.unit THEN
-    RAISE EXCEPTION 'Inventory item context mismatch.' USING ERRCODE='23503';
-  END IF;
-  SELECT coalesce(sum(quantity),0) INTO balance FROM public.inventory_movements WHERE clinic_id=NEW.clinic_id AND item_id=NEW.item_id;
-  IF balance+NEW.quantity < 0 THEN
-    RAISE EXCEPTION 'Insufficient stock.' USING ERRCODE='23514', CONSTRAINT='inventory_nonnegative_guard';
-  END IF;
-  RETURN NEW;
+ PERFORM pg_advisory_xact_lock(7140002,NEW.clinic_id);
+ SELECT * INTO item FROM inventory_items WHERE clinic_id=NEW.clinic_id AND id=NEW.item_id FOR UPDATE;
+ IF NOT FOUND OR item.branch_id<>NEW.branch_id OR item.unit<>NEW.unit OR item.is_available<>1 THEN
+  RAISE EXCEPTION 'Inventory item context mismatch.' USING ERRCODE='23503';
+ END IF;
+ IF NEW.room_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM inventory_settings WHERE clinic_id=NEW.clinic_id AND movement_mode='room') THEN
+  RAISE EXCEPTION 'Room inventory tracking is disabled.' USING ERRCODE='23514',CONSTRAINT='inventory_room_tracking_guard';
+ END IF;
+ SELECT coalesce(sum(quantity),0) INTO balance FROM inventory_movements WHERE clinic_id=NEW.clinic_id AND item_id=NEW.item_id;
+ SELECT coalesce(sum(quantity),0) INTO location_balance FROM inventory_movements WHERE clinic_id=NEW.clinic_id AND item_id=NEW.item_id AND room_id IS NOT DISTINCT FROM NEW.room_id;
+ IF balance+NEW.quantity<0 OR location_balance+NEW.quantity<0 THEN
+  RAISE EXCEPTION 'Insufficient stock in this location.' USING ERRCODE='23514',CONSTRAINT='inventory_nonnegative_guard';
+ END IF;
+ RETURN NEW;
 END; $$;
 DROP TRIGGER IF EXISTS inventory_movements_insert_guard ON public.inventory_movements;
 CREATE TRIGGER inventory_movements_insert_guard BEFORE INSERT ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION public.jormall_inventory_movement_guard();

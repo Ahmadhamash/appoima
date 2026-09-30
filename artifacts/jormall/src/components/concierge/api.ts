@@ -1,10 +1,24 @@
 import type { Session, ServiceDraft } from './contract';
+export type GatheringProgress={phase:'searching'|'reading'|'collecting'|'extracting'|'saving'|'complete';percent:number;url?:string;completed?:number;total?:number};
 export class ConciergeHTTPError extends Error {constructor(readonly code:string,readonly status:number){super(code);}}
 export class ConciergeAPI {
  constructor(readonly signal:AbortSignal){}
  async request<T>(path:string,body?:unknown,method=body===undefined?'GET':'POST'):Promise<T>{
   const response=await this.fetch(path,{method,headers:{'Content-Type':'application/json'},...(body!==undefined?{body:JSON.stringify(body)}:{})});
   return await response.json() as T;
+ }
+ async gathering(path:string,body:unknown,onProgress:(progress:GatheringProgress)=>void):Promise<Session>{
+  const response=await this.fetch(path,{method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream'},body:JSON.stringify(body)});
+  if(!response.headers.get('content-type')?.includes('text/event-stream'))return response.json() as Promise<Session>;
+  if(!response.body)throw new ConciergeHTTPError('concierge_stream_interrupted',503);
+  const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',bytes=0,session:Session|null=null;
+  const frame=(value:string)=>{let event='',data='';for(const line of value.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data+=line.slice(5).trimStart();}if(!data)return;const payload=JSON.parse(data);
+   if(event==='error')throw new ConciergeHTTPError(payload.error??'concierge_operation_failed',503);
+   if(event==='gathering.progress'&&['searching','reading','collecting','extracting','saving','complete'].includes(payload.phase)&&Number.isFinite(payload.percent))onProgress({...payload,percent:Math.max(0,Math.min(100,Math.round(payload.percent)))});
+   if(event==='session.committed')session=payload as Session;
+  };
+  try{while(true){const chunk=await reader.read();if(chunk.done)break;bytes+=chunk.value.length;if(bytes>1500000)throw new ConciergeHTTPError('concierge_provider_response',503);buffer+=decoder.decode(chunk.value,{stream:true});buffer=buffer.replace(/\r\n/g,'\n');let index;while((index=buffer.indexOf('\n\n'))!==-1){frame(buffer.slice(0,index));buffer=buffer.slice(index+2);}if(session)return session;}throw new ConciergeHTTPError('concierge_stream_interrupted',503);}
+  finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
  }
  async fetch(path:string,init:RequestInit={},signal=this.signal):Promise<Response>{
   let r:Response;

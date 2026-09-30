@@ -1,0 +1,78 @@
+name: Build and deploy JorMall
+
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jormall-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - name: Database-independent setup tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/test/branch-location.test.ts src/test/gathering-progress.test.ts src/test/concierge-service-batch.test.ts
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/jormall build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          path: artifacts/api-server/dist/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: artifacts/jormall/dist/public/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy to clinic server
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, linux, x64, jormall-production]
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-dist
+          path: artifacts/api-server/dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: artifacts/jormall/dist/public/
+      - name: Apply migration and restart application
+        run: bash scripts/deploy/production.sh

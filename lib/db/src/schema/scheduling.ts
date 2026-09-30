@@ -1,11 +1,12 @@
 import type { IntakeSnapshot } from '@workspace/service-definition';
 import { sql } from 'drizzle-orm';
-import { pgTable, pgEnum, serial, integer, text, timestamp, boolean, jsonb, index, unique, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, pgEnum, serial, integer, text, timestamp, boolean, jsonb, numeric, index, unique, foreignKey, check } from 'drizzle-orm/pg-core';
 import { clinicsTable, branchesTable, languageEnum } from './clinics';
 import { usersTable } from './users';
 import { customersTable, servicesTable, roomsTable } from './setup';
 export const appointmentStatusEnum = pgEnum('appointment_status', ['pending','confirmed','checked_in','in_service','completed','cancelled','no_show']);
 export const appointmentEventEnum = pgEnum('appointment_event', ['created','status_changed','rescheduled','notes_updated']);
+export type AppointmentProductCharge={itemId:number;name:string;nameLang:'en'|'ar';unit:string;quantity:string;unitPrice:string;amount:string};
 export const appointmentsTable = pgTable('appointments', {
   id: serial('id').primaryKey(), clinicId: integer('clinic_id').notNull().references(() => clinicsTable.id),
   branchId: integer('branch_id').notNull(), customerId: integer('customer_id').notNull(),
@@ -15,11 +16,22 @@ export const appointmentsTable = pgTable('appointments', {
   durationMinutes: integer('duration_minutes').notNull(), requiresRoom: boolean('requires_room').notNull(),
   status: appointmentStatusEnum('status').notNull().default('pending'), notes: text('notes').notNull().default(''),
   serviceIntake: jsonb('service_intake').$type<IntakeSnapshot | null>(),
+  appointmentType: text('appointment_type').$type<'standard' | 'follow_up'>().notNull().default('standard'),
+  followUpOfId: integer('follow_up_of_id'),
+  chargePrice: numeric('charge_price', { precision: 12, scale: 3 }),
+  chargeCurrency: text('charge_currency'),
+  productCharges: jsonb('product_charges').$type<AppointmentProductCharge[]>().notNull().default([]),
+  productChargesBasis: text('product_charges_basis').$type<'planned'|'actual'|'manual'>().notNull().default('planned'),
   notesLang: languageEnum('notes_lang').notNull().default('en'), createdBy: integer('created_by').notNull(),
   version: integer('version').notNull().default(1), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
   updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
 }, (t) => [
   unique('appointments_clinic_id_unique').on(t.clinicId, t.id),
+  unique('appointments_follow_up_context_unique').on(t.clinicId, t.customerId, t.serviceId, t.id),
+  foreignKey({ name: 'appointments_follow_up_context_fk', columns: [t.clinicId, t.customerId, t.serviceId, t.followUpOfId], foreignColumns: [t.clinicId, t.customerId, t.serviceId, t.id] }),
+  check('appointments_follow_up_check', sql`${t.appointmentType} IN ('standard','follow_up') AND ((${t.appointmentType} = 'follow_up') = (${t.followUpOfId} IS NOT NULL)) AND (${t.followUpOfId} IS NULL OR ${t.followUpOfId} <> ${t.id})`),
+  check('appointments_charge_check', sql`(${t.chargePrice} IS NULL AND ${t.chargeCurrency} IS NULL) OR (${t.chargePrice} >= 0 AND ${t.chargePrice} <> 'NaN'::numeric AND ${t.chargeCurrency} = 'JOD')`),
+  check('appointments_products_check', sql`jsonb_typeof(${t.productCharges}) = 'array' AND jsonb_array_length(${t.productCharges}) <= 100 AND ${t.productChargesBasis} IN ('planned','actual','manual')`),
   index('appointments_clinic_start_idx').on(t.clinicId, t.startsAt),
   index('appointments_customer_start_idx').on(t.clinicId, t.customerId, t.startsAt),
   index('appointments_employee_start_idx').on(t.clinicId, t.employeeId, t.startsAt),

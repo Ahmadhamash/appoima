@@ -24,6 +24,8 @@ export const EMPTY_WEEK: WeeklyHours = { mon: [], tue: [], wed: [], thu: [], fri
 export type StaffTimeOff = { startsAt: string; endsAt: string; note: string };
 
 export const branchesTable = pgTable("branches", {
+  address: text("address"),
+  mapUrl: text("map_url"),
   id: serial("id").primaryKey(),
   clinicId: integer("clinic_id")
     .notNull()

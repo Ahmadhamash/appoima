@@ -1,3 +1,4 @@
+import AppointmentsView from './appointments-view';
 import { Link } from 'wouter';
 import { CalendarPlus, CalendarDays, Users, UserCog, Scissors, DoorOpen, Boxes, Settings, Info, type LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/app-shell';
@@ -38,22 +39,7 @@ function ChoiceGrid({ choices }: { choices: Choice[] }) {
   );
 }
 
-export function AppointmentsPage() {
-  const { t } = useI18n();
-  const { user } = useAuth();
-  return (
-    <>
-      <PageHeader title={t('sections.appointments.title')} />
-      <ChoiceGrid
-        choices={[
-          { icon: CalendarDays, title: t('sections.appointments.view'), hint: t('sections.appointments.viewHint'), testId: 'choice-view-appointments', href: '/appointments/view' },
-          { icon: CalendarPlus, title: t('sections.appointments.create'), hint: t('sections.appointments.createHint'), permission: 'appointments.manage', testId: 'choice-create-appointment', href: '/appointments/new' },
-        ]}
-      />
-      {can(user?.permissions ?? [], 'appointments.read') && <Link href="/appointments/waiting-list" className="focus-ring mt-5 inline-block rounded text-sm font-medium underline" data-testid="appointments-waiting-list">{t('p4.waitingTitle')}</Link>}
-    </>
-  );
-}
+export function AppointmentsPage() { return <AppointmentsView/>; }
 
 export function PeoplePage() {
   const { t } = useI18n();
@@ -71,12 +57,14 @@ export function PeoplePage() {
 }
 
 export function BusinessPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { user } = useAuth();
   return (
     <>
       <PageHeader title={t('sections.business.title')} />
       <ChoiceGrid
         choices={[
+          ...(user?.role==='manager'&&['inventory','services','employees','rooms','settings'].every(area=>can(user.permissions,`${area}.read`))?[{icon:Boxes,title:lang==='ar'?'المعدات والماتيريال':'Equipment & Materials',hint:lang==='ar'?'ربط الموارد بالخدمات وحساب تكلفة الجلسة':'Connect resources to services and calculate session cost',testId:'choice-equipment-materials',href:'/business/equipment-materials'}]:[]),
           { icon: Scissors, title: t('sections.business.services'), hint: t('sections.business.servicesHint'), permission: 'services.read', testId: 'choice-services', href: '/business/services' },
           { icon: DoorOpen, title: t('sections.business.rooms'), hint: t('sections.business.roomsHint'), permission: 'rooms.read', testId: 'choice-rooms', href: '/business/rooms' },
           { icon: Boxes, title: t('sections.business.inventory'), hint: t('sections.business.inventoryHint'), permission: 'inventory.read', testId: 'choice-inventory', href: '/business/inventory' },
