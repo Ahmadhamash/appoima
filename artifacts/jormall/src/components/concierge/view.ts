@@ -10,7 +10,7 @@ import { safeLogo, logoPalette } from './branding';
 import { ConciergeAPI, ConciergeHTTPError, createRequestId, type GatheringProgress } from './api';
 import { DAYS,KINDS,type Bootstrap,type Capabilities,type Language,type Session,type Review,type Draft,type Provision,type Week } from './contract';
 import { text,errorText } from './copy';
-import { el,button,iconButton } from './dom';
+import { el,button,icon,iconButton } from './dom';
 import { LiquidOrb } from './orb';
 import { SpeechPlayer } from './voice';
 import { RealtimeVoiceSession } from './realtime-voice';
@@ -143,17 +143,35 @@ private fieldEvent=(event:Event)=>{if(this.closed||this.session?.sourceImport)re
  private choiceView(){
   const ar=this.language==='ar',block=el('div','jc-entry-content');
   const profile=this.session?.workspace?.profile,name=profile?.nameAr||profile?.nameEn;
-  if(name&&!this.identityDismissed&&!this.session?.companyChecked){this.caption.textContent=ar?'هل هذا أنت؟':'Is this your clinic?';block.append(el('h2','',name));if(profile?.address)block.append(el('p','jc-muted',profile.address));const actions=el('div','jc-choices');actions.append(button(ar?'نعم، جيب معلومات عيادتي':'Yes, find my clinic details',()=>{this.identityConfirmedName=name;this.linksText=profile?.website||name;void this.importEntry();},'jc-button jc-primary','concierge-identity-yes'),button(ar?'لا، عدّل المعلومات':'No, change details',()=>{this.identityDismissed=true;this.render();},'jc-button','concierge-identity-no'));block.append(actions);this.controls.append(block);return;}
+  if(name&&!this.identityDismissed&&!this.session?.companyChecked){this.caption.textContent=ar?'هل هذا أنت؟':'Is this your clinic?';block.append(el('h2','',name));if(profile?.address)block.append(el('p','jc-muted',profile.address));const actions=el('div','jc-choices');actions.append(button(ar?'نعم، جيب معلومات عيادتي':'Yes, find my clinic details',()=>{this.identityConfirmedName=name;this.linksText=profile?.website||name;void this.importEntry();},'jc-button jc-primary','concierge-identity-yes'),button(ar?'لا، عدّل المعلومات':'No, change details',()=>{this.identityDismissed=true;this.render();},'jc-button','concierge-identity-no'));block.append(actions);this.entryImportChoices(block);this.controls.append(block);return;}
   block.append(el('p','jc-entry-subtitle',ar?'اسم العيادة والمدينة، أو رابط صفحتها.':'Enter your clinic name and city, or its public page.'));
   const form=el('form','jc-entry-links'),input=el('textarea');
   input.value=this.linksText;input.rows=3;input.maxLength=2500;input.dir='auto';input.placeholder=ar?'اسم المركز والمدينة، أو رابط الموقع / إنستغرام':'Clinic name and city, or website / Instagram link';input.dataset.testid='concierge-links-input';input.setAttribute('aria-label',ar?'اسم المركز والمدينة أو روابطه العامة':'Clinic name and city or public links');input.disabled=this.busy;input.oninput=()=>{this.linksText=input.value;};
   const yes=el('button','jc-button jc-primary',ar?'ابحث واستخرج المعلومات':'Find clinic details');yes.type='submit';yes.disabled=this.busy;yes.dataset.testid='concierge-links-submit';
   form.append(input,yes);form.onsubmit=event=>{event.preventDefault();void this.importEntry();};block.append(form);
   const no=button(ar?'أدخل المعلومات بنفسي':'Enter clinic details myself',()=>void this.beginText(),'jc-button','concierge-unified-choice');no.disabled=this.busy;block.append(no);
+  this.entryImportChoices(block);
   block.append(el('p','jc-entry-consent',ar?'سنقترح المعلومات من الروابط العامة لتراجعها قبل اعتمادها. عند بدء الصوت يُرسل الكلام إلى OpenAI وSoniox؛ ويمكنك التحويل للكتابة في أي وقت.':'We suggest details from public links for your approval. When you start voice, audio goes to OpenAI and Soniox; you can switch to typing at any time.'));
 
   if(this.session?.importReviewPending)block.append(button(ar?'رجوع للمعلومات المستخرجة':'Back to extracted details',()=>{this.entry=false;this.render();},'jc-button','concierge-return-import'));
   this.controls.append(block);
+ }
+ private entryImportChoices(block:HTMLElement){
+  const ar=this.language==='ar',section=el('section','jc-entry-import');
+  section.append(el('p','jc-entry-import-title',ar?'عندك معلومات العيادة جاهزة؟':'Already have your clinic details?'));
+  const actions=el('div','jc-entry-import-actions'),picker=el('input');
+  picker.type='file';picker.accept='.pdf,application/pdf';picker.hidden=true;picker.dataset.testid='concierge-entry-pdf-file';
+  picker.onchange=()=>{const file=picker.files?.[0];if(file)void this.upload(file);};
+  const pdf=button('',()=>picker.click(),'jc-entry-import-action','concierge-entry-pdf');
+  pdf.append(el('span','jc-entry-import-icon','PDF'),el('span','jc-entry-import-copy'));
+  pdf.lastElementChild!.append(el('strong','',ar?'ارفع ملف PDF':'Upload a PDF'),el('small','',ar?'نستخرج معلومات عيادتك من الملف وتراجعها قبل الحفظ.':'We extract clinic details for your review before saving.'));
+  pdf.disabled=this.busy||!this.caps?.llm;
+  const voice=button('',()=>void this.beginVoice(),'jc-entry-import-action','concierge-entry-voice');
+  const mic=el('span','jc-entry-import-icon');mic.append(icon('mic'));
+  voice.append(mic,el('span','jc-entry-import-copy'));
+  voice.lastElementChild!.append(el('strong','',ar?'احكي بالصوت':'Use your voice'),el('small','',ar?'احكي معلومات العيادة، وبنعبي التفاصيل معك.':'Tell us about your clinic and fill in the details with us.'));
+  voice.disabled=this.busy||!this.caps?.voice;
+  actions.append(pdf,voice);section.append(actions,picker);block.append(section);
  }
  private linksView(){
   const form=el('form','jc-panel-step jc-compose'),input=el('textarea');input.value=this.linksText;input.rows=5;input.maxLength=2500;input.placeholder='https://your-clinic.com\nhttps://instagram.com/your-clinic';input.setAttribute('aria-label',this.language==='ar'?'روابط الموقع والسوشال، كل رابط بسطر':'Website and social links, one per line');input.dataset.testid='concierge-links-input';input.dir='ltr';input.disabled=this.busy;input.oninput=()=>{this.linksText=input.value;};
