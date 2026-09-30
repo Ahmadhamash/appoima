@@ -1,4 +1,5 @@
-import { WorkspaceHome } from '@/components/workspace/workspace-home';
+import { WorkspaceHome, useClinicWorkspace } from '@/components/workspace/workspace-home';
+import { workspaceName } from '@workspace/service-definition';
 import { HomeSchedule } from '@/components/scheduling/home-schedule';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
@@ -24,7 +25,9 @@ export function useMyClinic() {
 }
 
 function Greeting({ user, clinic }: { user: SessionUser; clinic?: MyClinic }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const workspace = useClinicWorkspace();
+  const clinicName = workspace.data?.profile ? workspaceName(workspace.data.profile, lang) : clinic?.name;
   const fmt = useDateFormat();
   return (
     <div className="mb-6">
@@ -32,9 +35,9 @@ function Greeting({ user, clinic }: { user: SessionUser; clinic?: MyClinic }) {
       <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
         {t('home.greeting', { name: '\uFFF0' }).split('\uFFF0').map((part, index) => <span key={index}>{index > 0 && <EnteredName item={user}/>} {part}</span>)}
       </h1>
-      {clinic && (
+      {clinicName && (
         <p className="mt-1 text-sm text-muted-foreground">
-          {t('home.yourClinic')}: <span className="font-medium text-foreground" lang={clinic.nameLang} dir={clinic.nameLang === 'ar' ? 'rtl' : 'ltr'}>{clinic.name}</span>
+          {t('home.yourClinic')}: <span className="font-medium text-foreground" dir="auto">{clinicName}</span>
         </p>
       )}
     </div>
