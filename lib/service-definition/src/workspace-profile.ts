@@ -56,12 +56,15 @@ export function acceptWorkspaceFact(draft:WorkspaceDraft,id:string):WorkspaceDra
  const profile=parseWorkspaceProfile({...draft.profile,[fact.field]:fact.value});
  return {...draft,profile,dirty:true,sources:{...draft.sources,[fact.field]:{kind:'public',url:fact.sourceUrl,confidence:'confirmed',evidence:fact.evidence}},proposals:draft.proposals.filter(f=>f.id!==id)};
 }
+export function isPlaceholderWorkspaceName(name:string|null|undefined):boolean {
+ if(!name)return false;
+ return /^(?:عيادة جديدة|مركز جديد|new clinic|new center)(?:\s*(?:[-–—#]\s*.*|[0-9٠-٩]+(?:\s*[-–—]\s*.*)?))?$/iu.test(name.trim());
+}
 export function workspaceName(profile:WorkspaceProfile,language:'ar'|'en') {
  const preferred=language==='ar'?profile.nameAr:profile.nameEn;
  const alternate=language==='ar'?profile.nameEn:profile.nameAr;
- const isGeneric=(name:string|null)=>!!name&&/^(?:عيادة جديدة|مركز جديد|new clinic|new center)$/iu.test(name.trim());
- if(preferred&&!isGeneric(preferred))return preferred;
- if(alternate&&!isGeneric(alternate))return alternate;
+ if(preferred&&!isPlaceholderWorkspaceName(preferred))return preferred;
+ if(alternate&&!isPlaceholderWorkspaceName(alternate))return alternate;
  return preferred??alternate??'';
 }
 export function workspaceSubtitle(profile:WorkspaceProfile,language:'ar'|'en') {

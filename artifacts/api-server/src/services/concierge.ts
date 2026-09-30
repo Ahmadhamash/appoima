@@ -165,12 +165,12 @@ export async function findConciergeCompany(actor:User,revision:number,query:stri
     const budget=reserveBudget(row,'turns',1),id=randomUUID();
     await tx.update(onboarding).set({busyId:id,busyUntil:new Date(Date.now()+240000),budget}).where(eq(onboarding.id,row.id));
     await audit(tx,fresh,'company_lookup_started');
-    return {id,language:row.language as Language,previousQuery:state.companySearchQuery??state.companyCandidate?.name??null,mayEnrich:row.consentVersion===CONSENT_VERSION&&!!conciergeConfig().openaiKey};
+    return {id,language:row.language as Language,mayEnrich:row.consentVersion===CONSENT_VERSION&&!!conciergeConfig().openaiKey};
   });
   const report=gatheringReporter(progress),onPage=(page:{url:string;completed:number;total:number})=>report({phase:'reading',percent:10+45*page.completed/Math.max(1,page.total),...page});
   try{
     report({phase:'searching',percent:5});
-    const candidates=sourceUrls.length?[await lookupLinkedClinic(sourceUrls,undefined,onPage)]:await lookupCompany(claim.previousQuery?`${query}\nPrevious name/search context (latest correction wins): ${claim.previousQuery}`:query,claim.language);
+    const candidates=sourceUrls.length?[await lookupLinkedClinic(sourceUrls,undefined,onPage)]:await lookupCompany(query,claim.language);
     report({phase:'collecting',percent:60});
     if(sourceUrls.length&&candidates[0]&&claim.mayEnrich){
       const candidate=candidates[0],profiles=indexedProfilesFor(candidate,sourceUrls);
