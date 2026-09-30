@@ -120,15 +120,16 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
     room.onchange = () => { service.requiresRoom = room.value === '' ? null : room.value === 'true'; update(); };
     custom.oninput = () => { if (service.category !== 'Other') return; customLabels.set(service.key, custom.value.trim()); definition(service).section = custom.value.trim() || GENERIC[ar ? 0 : 1]!; update(); };
     parent.oninput = () => { if (service.category === 'Other') return; definition(service).section = parent.value.trim() || categoryName(service.category) || GENERIC[ar ? 0 : 1]!; update(); };
-    const identity = el('div', 'jc-service-batch-fields jc-service-identity'), details = el('div', 'jc-service-batch-fields'), extras = el('div', 'jc-service-batch-fields');
+    const identity = el('div', 'jc-service-batch-fields jc-service-identity'), details = el('div', 'jc-service-batch-fields');
     const nameField = labeled(w('اسم الخدمة الفرعية', 'Service / subservice name'), name); nameField.classList.add('jc-service-name-field'); identity.append(nameField, labeled(w('المدة بالدقائق', 'Duration in minutes'), duration), labeled(w('السعر (د.أ)', 'Price (JOD)'), price));
-    details.append(labeled(w('التصنيف', 'Category'), category), labeled(w('تحتاج غرفة؟', 'Needs a room?'), room), customField); extras.append(parentField, dataList);
+    details.append(labeled(w('التصنيف', 'Category'), category), labeled(w('تحتاج غرفة؟', 'Needs a room?'), room), customField, parentField, dataList);
     if (draft.branches.length > 1) {
      const scope = el('select'); scope.dataset.testid = `service-branch-${service.key}`; option(scope, '', w('اختر فروع الخدمة', 'Choose service scope')); option(scope, 'all', w('كل الفروع', 'All branches')); for (const branch of draft.branches) option(scope, branch.key, branch.name ?? w('الفرع', 'Branch')); scope.value = service.branchScope === 'branch' ? service.branchKey ?? '' : service.branchScope === 'all' ? 'all' : '';
-     scope.onchange = () => { service.branchScope = scope.value === '' ? null : scope.value === 'all' ? 'all' : 'branch'; service.branchKey = scope.value && scope.value !== 'all' ? scope.value : null; update(); }; extras.append(labeled(w('الخدمة بأي فرع؟', 'Which branch offers this service?'), scope));
+     scope.onchange = () => { service.branchScope = scope.value === '' ? null : scope.value === 'all' ? 'all' : 'branch'; service.branchKey = scope.value && scope.value !== 'all' ? scope.value : null; update(); }; details.append(labeled(w('الخدمة بأي فرع؟', 'Which branch offers this service?'), scope));
     }
     const followUp = el('label', 'jc-import-follow-up'), check = el('input'); check.type = 'checkbox'; check.checked = service.followUpEnabled ?? false; check.dataset.testid = `service-follow-up-${service.key}`; check.onchange = () => { service.followUpEnabled = check.checked; refresh(); }; followUp.append(check, document.createTextNode(w('رتوش / موعد متابعة — السعر الافتراضي صفر', 'Retouch / follow-up — default price zero')));
-    const extraPage = el('div', 'jc-service-part'); extraPage.append(extras, followUp); const parts = compact ? [identity, details, extraPage] : [el('div', 'jc-service-part jc-service-batch-fields'), extraPage]; if (!compact) parts[0]!.append(...identity.children, ...details.children);
+    followUp.classList.add('jc-service-follow-up'); details.append(followUp);
+    const parts = compact ? [identity, details] : [el('div', 'jc-service-part jc-service-batch-fields')]; if (!compact) parts[0]!.append(...identity.children, ...details.children);
     row.append(...parts); const pager = setupPager(row, parts, language, `service-detail-pages-${service.key}`); if (pager) row.insertBefore(pager, parts[0]!); row.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: savedPages.get(row.dataset.testid) ?? 0 }));
     update(); cards.push(row); keys.push(service.key); group.append(row);
    }

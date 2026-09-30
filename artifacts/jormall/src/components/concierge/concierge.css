@@ -340,6 +340,8 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 
 .jc-gather-heading{display:flex;align-items:center;justify-content:center;gap:12px}.jc-gather-heading h2{font-size:22px;margin:0}.jc-gather-percent{display:block;text-align:center;font-size:38px;color:#c9dfff;margin:20px 0 12px;font-variant-numeric:tabular-nums}.jc-gather-meter{height:9px;background:#30415d;border-radius:20px;overflow:hidden}.jc-gather-bar{height:100%;background:#b5d7ff;border-radius:20px;transition:width .35s ease}.jc-gather-status{text-align:center;color:#e3edff;font-weight:600;margin:18px 0 10px}.jc-gather-url{color:#b7cee9;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}.jc-dialog.jc-setup-mode .jc-company-searching{padding:22px;min-width:0;width:100%}
 .jc-service-entry .jc-service-identity{grid-template-columns:repeat(2,minmax(0,1fr))}.jc-service-name-field{grid-column:1/-1}
+.jc-service-entry .jc-service-follow-up{grid-column:1/-1}
+.jc-structured-setup .jc-staff-assignments{display:grid;gap:12px}
 .jc-service-entry .jc-service-part{display:grid;gap:10px}.jc-service-entry .jc-service-part>.jc-service-batch-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
 .jc-service-group-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 6px;color:#d7e7ff}.jc-service-group-heading h3{min-width:0;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.jc-service-group-heading .jc-link{flex:none;font-size:12px;padding:5px 8px}
 .jc-service-entry .jc-service-batch-title strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.jc-service-entry .jc-service-batch-title .jc-link{flex:none;padding:4px;font-size:12px}
