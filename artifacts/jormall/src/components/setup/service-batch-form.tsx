@@ -1,6 +1,6 @@
 import { CategoryField } from '../category-field';
 import { createDefinition } from '@workspace/service-definition';
-import { useId, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,14 +17,12 @@ const freshRow = (key: number): ServiceRow => ({ key, name: '', durationMinutes:
 export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { options: Options; sections: string[]; onSaved: (message: string) => void; onCancel: () => void }) {
   const { lang, t } = useI18n();
   const errorMessage = useErrorMessage();
-  const sectionListId = useId();
   const ar = lang === 'ar';
   const [section, setSection] = useState('');
   const [rows, setRows] = useState<ServiceRow[]>([freshRow(1)]);
   const [nextKey, setNextKey] = useState(2);
   const [branchId, setBranchId] = useState<number | null>(null);
   const currency = 'JOD';
-  const [category, setCategory] = useState('');
   const [requiresRoom, setRequiresRoom] = useState(false);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [requiredEquipment, setRequiredEquipment] = useState<string[]>([]);
@@ -42,7 +40,6 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const group = section.trim();
-    if(!category.trim()||category.trim().length>80){setError(ar?'اكتب التصنيف (حتى 80 حرفًا).':'Enter a category (up to 80 characters).');return;}
     const names = rows.map(row => row.name.trim());
     if (!noEquipment && !requiredEquipment.length) { setError(ar ? 'حدد المعدات المطلوبة أو أكد أن الخدمة لا تحتاج معدات.' : 'Choose equipment or confirm none is needed.'); return; }
     if (!group || group.length > 80) { setError(ar ? 'اكتب اسم الخدمة الرئيسية (حتى 80 حرفًا).' : 'Enter a main service name (up to 80 characters).'); return; }
@@ -53,7 +50,7 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
     const services = rows.map((row, index) => ({
       name: names[index], nameLang: lang, branchId,
       definition: { ...createDefinition('custom', lang), section: group, medicalScope: 'medical' as const },
-      durationMinutes: Number(row.durationMinutes), price: row.price.trim(), currency, category,
+      durationMinutes: Number(row.durationMinutes), price: row.price.trim(), currency, category:group,
       isActive: true, requiresRoom, employeeIds,
       requiredEquipment: row.overrideEquipment ? row.requiredEquipment : requiredEquipment,
     }));
@@ -64,12 +61,9 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
     <FormError message={error}/>
     <fieldset disabled={mutation.isPending} className="min-w-0 space-y-5">
       <div className="rounded-2xl border border-[#eadfca] bg-[#fffbf4] p-4">
-        <label htmlFor="service-main-name" className="mb-2 block text-sm font-semibold text-[#1b2d48]">{ar ? 'الخدمة الرئيسية' : 'Main service'} <span aria-hidden>*</span></label>
-        <input id="service-main-name" list={sectionListId} value={section} onChange={event => { setSection(event.target.value); setError(''); }} placeholder={ar ? 'مثال: الليزر' : 'For example: Laser'} maxLength={80} className={`${controlClass} rounded-xl bg-white`} data-testid="service-main-name" dir="auto"/>
-        <datalist id={sectionListId}>{sections.map(name => <option key={name} value={name}/>)}</datalist>
+        <CategoryField label={ar?'الخدمة الرئيسية':'Main service'} value={section} options={[...sections,...options.categories??[]]} language={lang} onChange={value=>{setSection(value);setError('');}} testId="service-main-name"/>
         <p className="mt-2 text-xs text-[#786f62]">{ar ? 'اكتب اسم قسم جديد أو اختر قسمًا موجودًا لتظهر تحته الخدمات الفرعية.' : 'Enter a new section or choose an existing one for these subservices.'}</p>
       </div>
-      <CategoryField label={ar?'التصنيف':'Category'} value={category} options={options.categories??[]} language={lang} onChange={setCategory} testId="service-batch-category"/>
       <section className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
         <h3 className="font-semibold">{ar ? 'المعدات المطلوبة للخدمة الرئيسية' : 'Equipment for the main service'} *</h3>
         <p className="text-sm text-muted-foreground">{ar ? 'تنطبق على كل الخدمات الفرعية، ويمكن تعديل أي خدمة فرعية وحدها.' : 'Used by every subservice unless you override it below.'}</p>

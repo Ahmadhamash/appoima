@@ -1,3 +1,4 @@
+import { TimeField } from '@/components/time-field';
 import { useEffect,useRef,useState } from 'react';
 import { Link } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
@@ -37,7 +38,7 @@ function WaitingForm({onClose}:{onClose:()=>void}) {
         <FormField label={t('p4.preferredDay')} type="date" value={preferredDate} min={branch?localDate(branch.timeZone):undefined} onChange={e=>setPreferredDate(e.target.value)} required testId="waiting-date"/>
       </div><p className="text-xs text-muted-foreground">{t('p4.windowHint')} {branch&&t('p3.timeZone',{zone:branch.timeZone})}</p>
       <CheckField label={t('p4.specificWindow')} checked={limited} onChange={setLimited} testId="waiting-time-window"/>
-      {limited&&<div className="grid gap-3 sm:grid-cols-2"><FormField label={t('p2.from')} type="time" value={fromTime} onChange={e=>setFromTime(e.target.value)} required testId="waiting-from"/><FormField label={t('p2.to')} type="time" value={toTime} onChange={e=>setToTime(e.target.value)} required testId="waiting-to"/></div>}
+      {limited&&<div className="grid gap-3 sm:grid-cols-2"><TimeField label={t('p2.from')} value={fromTime} onChange={setFromTime} required testId="waiting-from"/><TimeField label={t('p2.to')} value={toTime} onChange={setToTime} required testId="waiting-to"/></div>}
       <SelectField label={t('p4.noteLanguage')} value={noteLang} onChange={v=>setNoteLang(v as 'en'|'ar')} testId="waiting-note-language"><option value="en">English</option><option value="ar">العربية</option></SelectField>
       <div lang={noteLang} dir={noteLang==='ar'?'rtl':'ltr'}><TextareaField label={t('p4.note')} value={note} onChange={setNote} maxLength={1000} testId="waiting-note"/></div>
       <FormError message={command.error?errorMessage(command.error):undefined}/>{!customer&&<p className="text-sm text-muted-foreground">{t('p4.selectCustomerFirst')}</p>}

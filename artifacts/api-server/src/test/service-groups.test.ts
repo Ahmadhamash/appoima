@@ -53,7 +53,8 @@ describe('Complete main service groups',()=>{
     await db.update(servicesTable).set({definition:null,category:'Legacy section',branchId:otherBranch,followUpEnabled:true,requiredEquipment:['Existing device'],isActive:false}).where(eq(servicesTable.id,rows[1]!.id));
     const original=await load(rows[0]!.id),payload=edit(original,'Edited main service');payload.services[0].service.name='Edited subservice';payload.services[0].service.price='45.500';payload.services[0].service.durationMinutes=45;
     expect((await a.put(`/api/clinic/services/${rows[0]!.id}/group`).send(payload)).status).toBe(200);
-    const updated=await load(rows[0]!.id);expect(updated.name).toBe('Edited main service');expect(updated.items[0]).toMatchObject({name:'Edited subservice',price:'45.500',durationMinutes:45,employeeIds:[employeeId],definition:{section:'Edited main service',description:'Keep 0'}});
+    const updated=await load(rows[0]!.id);expect(updated.name).toBe('Edited main service');expect(updated.items[0]).toMatchObject({name:'Edited subservice',category:'Edited main service',price:'45.500',durationMinutes:45,employeeIds:[employeeId],definition:{section:'Edited main service',description:'Keep 0'}});
+    const choices=await a.get('/api/clinic/service-categories');expect(choices.body.items).toContain('Edited main service');expect(choices.body.items).not.toContain('Test category');
     const legacy=await load(rows[1]!.id);expect(legacy.name).toBe('Legacy section');expect((await a.put(`/api/clinic/services/${rows[1]!.id}/group`).send(edit(legacy,'Legacy renamed'))).status).toBe(200);
     expect((await load(rows[1]!.id)).items[0]).toMatchObject({branchId:otherBranch,followUpEnabled:true,requiredEquipment:['Existing device'],isActive:false,definition:{section:'Legacy renamed'}});
   });

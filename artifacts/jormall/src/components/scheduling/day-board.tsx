@@ -2,6 +2,7 @@ import { Link } from 'wouter';
 import { EnteredName } from '@/components/setup/controls';
 import { useI18n } from '@/lib/i18n';
 import { formatAppointmentTime, type AppointmentSummary } from '@/lib/scheduling-api';
+import { formatClockTime } from '@/lib/time-format';
 
 type Staff = { id: number; name: string; nameLang: 'ar' | 'en' };
 const colors = [
@@ -30,7 +31,7 @@ export function DayBoard({ items, staff = [], compact = false }: { items: Appoin
       <div style={{ display: 'grid', gridTemplateColumns: `76px repeat(${Math.max(1, employees.length)}, minmax(170px, 1fr))`, minWidth: Math.max(650, employees.length * 175 + 76) }}>
         <div className="grid h-16 place-items-center border-b border-e border-[#e8edf3] text-xs font-semibold">{t('p3.time')}</div>
         {employees.map((employee, index) => <div key={employee.id} className="flex h-16 items-center justify-center gap-2 border-b border-e border-[#e8edf3] px-2 text-center text-sm font-semibold"><span className={'grid size-8 shrink-0 place-items-center rounded-full text-[#1b2d48] ' + colors[index % colors.length]!.split(' ')[1]}>{employee.name.slice(0, 1)}</span><EnteredName item={employee}/></div>)}
-        <div className="border-e border-[#e8edf3]" style={{ height }}>{hours.map(hour => <div key={hour} className="h-16 border-b border-[#e8edf3] px-2 pt-1 text-center text-xs text-[#56687e]" dir="ltr">{String(hour).padStart(2, '0')}:00</div>)}</div>
+        <div className="border-e border-[#e8edf3]" style={{ height }}>{hours.map(hour => <div key={hour} className="h-16 border-b border-[#e8edf3] px-2 pt-1 text-center text-xs text-[#56687e]" dir="ltr">{formatClockTime(`${String(hour).padStart(2, '0')}:00`)}</div>)}</div>
         {employees.map((employee, employeeIndex) => <div key={employee.id} className="relative border-e border-[#e8edf3]" style={{ height, backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 63px, #e8edf3 63px, #e8edf3 64px)' }}>
           {items.filter(item => item.employee.id === employee.id).map(item => {
             const start = minutes(item.startsAt), end = minutes(item.endsAt);

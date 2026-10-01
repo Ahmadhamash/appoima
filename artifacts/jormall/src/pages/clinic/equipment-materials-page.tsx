@@ -1,3 +1,4 @@
+import { formatInstantTime } from '@/lib/time-format';
 import { Children, cloneElement, isValidElement, useEffect, useState, type ReactNode } from 'react';
 import {PaymentSummary} from '@/components/operations/patient-payment';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -131,13 +132,14 @@ function ServiceCosting({ catalog: c, branchId }: { catalog: CostCatalog; branch
   </div>;
 }
 function ActualCosting({ catalog: c, branchId }: { catalog: CostCatalog; branchId: number }) {
+  const { lang } = useI18n();
   const L = useCopy(), client = useQueryClient(), [id, setId] = useState(0), [form, setForm] = useState<CostActualInput | null>(null), [confirmed, setConfirmed] = useState(false);
   const list = useQuery({ queryKey: ['costing', 'appointments'], queryFn: () => api<{ appointments: CostAppointment[] }>('/clinic/costing/appointments') });
   const q = useQuery({ queryKey: ['costing', 'actual', id], enabled: !!id, queryFn: () => api<CostActual>(`/clinic/costing/appointments/${id}`) });
   useEffect(() => { setForm(q.data?.actual ?? null); setConfirmed(false); }, [q.data]);
   const calculate = useMutation({ mutationFn: (freeze: boolean) => api<CostActual>(`/clinic/costing/appointments/${id}/${freeze ? 'finalize' : 'preview'}`, { method: 'POST', body: form }), onSuccess: data => { client.setQueryData(['costing', 'actual', id], data); } });
   const appointments = list.data?.appointments.filter(a => a.branchId === branchId) ?? [];
-  return <div className="space-y-5"><div className={panelClass}><Field label={L('موعد مكتمل (آخر 200 موعد)', 'Completed appointment (latest 200)')}><select className={inputClass} value={id || ''} onChange={e => { setId(Number(e.target.value)); calculate.reset(); }}><option value="">{L('اختَر موعدًا', 'Choose appointment')}</option>{appointments.map(a => <option key={a.id} value={a.id}>#{a.id} · {c.services.find(s => s.id === a.serviceId)?.name} · {new Date(a.startsAt).toLocaleString()}</option>)}</select></Field>{list.isSuccess && !appointments.length && <p className="mt-3 text-sm text-slate-500">{L('لا توجد مواعيد مكتملة لهذا الفرع.', 'No completed appointments in this branch.')}</p>}</div>
+  return <div className="space-y-5"><div className={panelClass}><Field label={L('موعد مكتمل (آخر 200 موعد)', 'Completed appointment (latest 200)')}><select className={inputClass} value={id || ''} onChange={e => { setId(Number(e.target.value)); calculate.reset(); }}><option value="">{L('اختَر موعدًا', 'Choose appointment')}</option>{appointments.map(a => <option key={a.id} value={a.id}>#{a.id} · {c.services.find(s => s.id === a.serviceId)?.name} · {formatInstantTime(a.startsAt,undefined,lang,true)}</option>)}</select></Field>{list.isSuccess && !appointments.length && <p className="mt-3 text-sm text-slate-500">{L('لا توجد مواعيد مكتملة لهذا الفرع.', 'No completed appointments in this branch.')}</p>}</div>
     <CostError error={list.error || q.error || calculate.error}/>
     {q.data?.frozen && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800" data-testid="cost-frozen">{L('تكلفة الموعد مثبّتة، بأسعار وقت الاعتماد.', 'Appointment cost is finalized using rates at confirmation time.')}</p>}
     {q.data && !q.data.frozen && form && <form className={panelClass + ' space-y-4'} onSubmit={e => { e.preventDefault(); calculate.mutate(false); }}>

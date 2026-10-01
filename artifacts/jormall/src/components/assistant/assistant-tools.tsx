@@ -1,3 +1,4 @@
+import { formatInstantTime } from '@/lib/time-format';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
@@ -74,7 +75,7 @@ export function AssistantTools({bootstrap,onClose}:{bootstrap:AssistantBootstrap
     </fieldset>
     <FormError message={error?errorMessage(error):undefined}/>
     {result&&<div className="space-y-4 rounded-lg border p-3" data-testid="assistant-action-result" aria-live="polite">
-      <div><h3 className="text-sm font-semibold">{t('p5.readOnly')}</h3><p className="mt-1 text-xs text-muted-foreground">{t('p5.snapshot',{time:new Date(result.asOf).toLocaleTimeString(lang==='ar'?'ar-JO':'en-GB')})}</p></div>
+      <div><h3 className="text-sm font-semibold">{t('p5.readOnly')}</h3><p className="mt-1 text-xs text-muted-foreground">{t('p5.snapshot',{time:formatInstantTime(result.asOf,undefined,lang)})}</p></div>
       {result.appointment&&<dl className="grid grid-cols-2 gap-3 text-sm">{(['customer','service','employee','branch'] as const).map(key=><div className="min-w-0" key={key}><dt className="text-xs text-muted-foreground">{t(`p5.${key}`)}</dt><dd><EnteredName item={result.appointment![key]}/></dd></div>)}<div><dt className="text-xs text-muted-foreground">{t('p5.status')}</dt><dd>{t(`p3.statuses.${result.appointment.status}`)}</dd></div></dl>}
       {result.action==='draft_reply'&&<p className="text-xs font-semibold">{t('p5.unsent')}</p>}
       <p className="whitespace-pre-wrap break-words text-sm" data-testid="assistant-local-text">{result.text}</p>

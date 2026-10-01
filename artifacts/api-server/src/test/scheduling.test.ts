@@ -64,7 +64,7 @@ describe('Phase 3 scheduling',()=>{
     const r=await manager.get('/api/clinic/scheduling/availability').query({branchId:branchA,serviceId:serviceA,employeeId:docId,date});
     expect(r.status).toBe(200);expect(r.body.timeZone).toBe('UTC');expect(r.body.slots[0]).toMatchObject({startsAt:at(),endsAt:at(9,45),roomId:roomA});
     const c=await manager.get('/api/clinic/scheduling/catalog').query({branchId:branchA,serviceId:serviceA});
-    expect(c.status).toBe(200);expect(c.body.employees[0]).not.toHaveProperty('passwordHash');expect(c.body.employees[0]).not.toHaveProperty('timeOff');
+    expect(c.status).toBe(200);expect(c.body.branches.find((branch:any)=>branch.id===branchA).openingHours).toMatchObject({mon:expect.any(Array)});expect(c.body.employees[0]).not.toHaveProperty('passwordHash');expect(c.body.employees[0]).not.toHaveProperty('timeOff');
   });
   it('requires room equipment and uses provider hours and the service duration',async()=>{
     await db.update(servicesTable).set({durationMinutes:60,requiresRoom:false,requiredEquipment:['Laser Device']}).where(eq(servicesTable.id,serviceA));

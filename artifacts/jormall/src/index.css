@@ -2,6 +2,17 @@
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 
+.time-input { display: flex; align-items: stretch; gap: 4px; min-width: 0; width: 100%; }
+.time-input > input, .time-input > select { box-sizing: border-box; min-width: 0; min-height: 42px; border: 1px solid hsl(var(--border)); border-radius: 8px; background: hsl(var(--background)); color: hsl(var(--foreground)); padding: 7px 8px; font: inherit; font-size: 13px; }
+.time-input > input { flex: 1; width: 0; }
+.time-input > select { flex: 0 0 64px; width: 64px; padding-inline: 5px; }
+.time-input > :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.time-input > input[aria-invalid=true], .time-input > input:invalid:not(:placeholder-shown) { border-color: #cb5968; }
+.time-input > :disabled { opacity: .6; }
+.weekly-schedule-clock { display: grid; gap: 4px; flex: 1; min-width: 0; font-size: 11px; }
+.jc-dialog .time-input > input, .jc-dialog .time-input > select { background: #17283f; color: #eef4ff; color-scheme: dark; border-color: #536782; }
+@media(max-width:480px) { .time-input > input, .time-input > select { padding-inline: 4px; font-size: 12px; } .time-input > select { flex-basis: 58px; width: 58px; } }
+
 .phone-field { display: grid; gap: .4rem; min-width: 0; font-size: .875rem; }
 .phone-field > label { font-weight: 600; }
 .phone-controls { display: flex; gap: .5rem; min-width: 0; }

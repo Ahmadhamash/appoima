@@ -339,7 +339,8 @@ export async function setEmployeeActive(actor: User, id: number, isActive: boole
 /** Purpose-limited labels for form selections, not a bypass to private resource details. */
 export async function serviceCategories(actor: User) {
   ensure(actor, 'services.read');
-  const rows = await db.selectDistinct({name:servicesTable.category}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicOf(actor)),and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt)))).orderBy(asc(servicesTable.category));
+  const mainService=sql<string>`coalesce(nullif(${servicesTable.definition}->>'section',''),${servicesTable.category})`;
+  const rows = await db.selectDistinct({name:mainService}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicOf(actor)),and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt)))).orderBy(asc(mainService));
   const unique = new Map<string,string>();
   for(const row of rows){const name=row.name.trim().replace(/\s+/g,' ');if(name&&!unique.has(name.normalize('NFKC').toLocaleLowerCase()))unique.set(name.normalize('NFKC').toLocaleLowerCase(),name);}
   return [...unique.values()];

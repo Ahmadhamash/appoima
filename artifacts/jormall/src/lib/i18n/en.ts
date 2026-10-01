@@ -306,7 +306,7 @@ export const en = {
     "durationMinutes": "Duration (minutes)",
     "price": "Price",
     "currency": "Currency",
-    "category": "Category",
+    "category": "Main service",
     "isActive": "Active",
     "requiresRoom": "Requires a room",
     "employeeIds": "Eligible employees",

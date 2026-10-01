@@ -2,6 +2,7 @@ import { useEffect, useRef, useId, type ReactNode } from 'react';
 import { createBranchHoursEditor } from '../weekly-schedule';
 import { useI18n } from '@/lib/i18n';
 import { DAYS, type Week, type Option } from '@/lib/setup-api';
+import { formatClockTime } from '@/lib/time-format';
 export const controlClass = 'focus-ring block min-h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60';
 
 export function SelectField({ label, value, onChange, children, testId, error, required = false }: { label: string; value: string | number; onChange: (v: string) => void; children: ReactNode; testId: string; error?: string; required?: boolean }) {
@@ -48,5 +49,5 @@ export function HoursEditor({ label, value, onChange, testId, error, hint }: { l
 }
 export function HoursReadout({ value }: { value: Week }) {
   const { t } = useI18n();
-  return <dl className="space-y-2 text-sm">{DAYS.map((day) => <div key={day} className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">{t(`p2.days.${day}`)}</dt><dd dir="ltr">{value[day].length ? value[day].map((r) => `${r.open}–${r.close}`).join(' / ') : t('p2.closed')}</dd></div>)}</dl>;
+  return <dl className="space-y-2 text-sm">{DAYS.map((day) => <div key={day} className="flex flex-wrap justify-between gap-2"><dt className="text-muted-foreground">{t(`p2.days.${day}`)}</dt><dd dir="ltr">{value[day].length ? value[day].map((r) => `${formatClockTime(r.open)}–${formatClockTime(r.close)}`).join(' / ') : t('p2.closed')}</dd></div>)}</dl>;
 }

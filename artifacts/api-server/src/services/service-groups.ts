@@ -53,7 +53,7 @@ export async function saveServiceGroup(actor:User,id:number,input:z.infer<typeof
     for(const item of input.services){
       const original=group.items.find(row=>row.id===item.id)!;
       const definition=item.service.definition??original.definition??{...createDefinition('custom',item.service.nameLang),medicalScope:'medical' as const};
-      await saveServiceInTx(tx,clinicId,fresh,{...item.service,definition:{...definition,section:input.name}},item.id);
+      await saveServiceInTx(tx,clinicId,fresh,{...item.service,category:input.name,definition:{...definition,section:input.name}},item.id);
     }
     await recordAudit({clinicId,actorUserId:fresh.id,action:'service_group.updated',entityType:'service',entityId:id,details:{previousName:group.name,name:input.name,serviceIds:ids}},tx);
     return {id,name:input.name,ids};

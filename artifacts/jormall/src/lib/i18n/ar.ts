@@ -308,7 +308,7 @@ export const ar: Dictionary = {
     "durationMinutes": "المدة بالدقائق",
     "price": "السعر",
     "currency": "العملة",
-    "category": "التصنيف",
+    "category": "الخدمة الرئيسية",
     "isActive": "نشط",
     "requiresRoom": "تحتاج إلى غرفة",
     "employeeIds": "الموظفون المؤهلون",

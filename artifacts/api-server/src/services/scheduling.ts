@@ -257,7 +257,7 @@ export async function createBookingCustomer(actor: User, input: BookingCustomerI
 /** Purpose-limited booking/display metadata; never expose login, permission, leave or private notes. */
 export async function schedulingCatalog(actor: User, input: {branchId?: number; serviceId?: number}) {
   const clinicId = scheduleClinic(actor);
-  const branches = await db.select({id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone}).from(branchesTable).where(and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.name));
+  const branches = await db.select({id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone, openingHours: branchesTable.openingHours}).from(branchesTable).where(and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.name));
   if (input.branchId && !branches.some((b) => b.id === input.branchId)) throw notFound('record_not_found');
   const serviceRows = await db.select({id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId,
     durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, followUpEnabled:servicesTable.followUpEnabled, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, definition:servicesTable.definition})

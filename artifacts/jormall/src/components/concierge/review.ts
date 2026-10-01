@@ -13,7 +13,7 @@ const emptyWeek=()=>Object.fromEntries(DAYS.map(day=>[day,[]])) as unknown as We
 export function buildReview(data:Review,language:Language,callbacks:{save:(draft:Draft)=>Promise<Review|void>;apply:(staff:Provision[])=>Promise<void>;back:()=>void;archiveBranch?:(key:string,draft:Draft)=>Promise<void>;error:(message:string)=>void}):HTMLElement{
  const knownCategories=new Set(data.options.categories??[]);
  const tr=(k:string)=>text(language,k),draft=structuredClone(data.draft),root=el('section','jc-review');root.dataset.testid='concierge-review';let dirty=false,busy=false;
- for(const service of draft.services){if(!service.branchScope&&service.branchKey){service.branchScope='branch';dirty=true;}else if(!service.branchScope&&draft.branches.length===1){service.branchScope='branch';service.branchKey=draft.branches[0]!.key;dirty=true;}if(service.currency!=='JOD'){service.currency='JOD';dirty=true;}}
+ for(const service of draft.services){if(!service.branchScope&&service.branchKey){service.branchScope='branch';dirty=true;}else if(!service.branchScope&&draft.branches.length===1){service.branchScope='branch';service.branchKey=draft.branches[0]!.key;dirty=true;}if(service.currency!=='JOD'){service.currency='JOD';dirty=true;}if(service.definition?.section&&service.category!==service.definition.section){service.category=service.definition.section;dirty=true;}}
  const header=el('div');header.append(el('h2','',tr('review')),el('p','jc-muted',tr('draftNote')),el('p','jc-muted',tr('scopeNote')));root.append(header);
  const warning=data.issues.length?el('p','jc-error',tr('missing')):null;if(warning){warning.setAttribute('role','status');root.append(warning);}
 
@@ -41,7 +41,7 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
  }
  function category(row:Row){
   const service=row as Draft['services'][number],field=el('label','jc-field');
-  const picker=createCategoryInput({id:`draft-${row.key}-category`,value:service.category??'',language,options:()=>categoryNames([...knownCategories,...draft.services.map(s=>s.category)]),onChange:value=>{service.category=value.trim()||null;markDirty();},onCommit:name=>knownCategories.add(name)});
+  const picker=createCategoryInput({id:`draft-${row.key}-category`,value:service.category??'',language,options:()=>categoryNames([...knownCategories,...draft.services.map(s=>s.category)]),onChange:value=>{service.category=value.trim()||null;if(service.definition)service.definition.section=value.trim();markDirty();},onCommit:name=>knownCategories.add(name)});
   field.append(el('span','jc-label',tr('category')),picker.node);return field;
  }
  function schedule(row:Row,key:'openingHours'){

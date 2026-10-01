@@ -2,6 +2,7 @@ import { el, button } from './concierge/dom';
 import { DAYS, type Week, type Language } from './concierge/contract';
 import { branchHoursFromSchedule, scheduleFromBranchHours, scheduleDayValid, type WeeklySchedule } from './weekly-schedule-rules';
 import { setupPager } from './concierge/paging';
+import { createTimeInput } from './time-input';
 
 type Day = typeof DAYS[number];
 type Options = {
@@ -66,7 +67,7 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
     for (const day of DAYS) {
       const valid = validDay(day), card = days.querySelector<HTMLElement>(`[data-day="${day}"]`);
       const message = valid ? '' : w('راجع الأوقات: النهاية بعد البداية، والبريكات ضمن الدوام وبدون تداخل (حتى 8 فترات).', 'Check times: the end must follow the start; breaks must fit within work hours without overlap (up to 8 intervals).');
-      for (const input of card?.querySelectorAll<HTMLInputElement>('input[type=time]') ?? []) {
+      for (const input of card?.querySelectorAll<HTMLInputElement>('.time-input input') ?? []) {
         const invalid=input.dataset.testid?.includes('-breaks-')?!valid:!scheduleDayValid(value.workingHours[day],[]);
         input.setCustomValidity(invalid?message:''); input.setAttribute('aria-invalid', String(invalid));
       }
@@ -114,11 +115,13 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
           value[key][day].forEach((range, rangeIndex) => {
             const row = el('div', 'weekly-schedule-range');
             for (const part of ['open', 'close'] as const) {
-              const label = el('label'), input = el('input'); input.type = 'time'; input.required = true; input.value = range[part]; input.dir = 'ltr';
-              input.dataset.testid = inputId(key, day, rangeIndex, part);
-              input.setAttribute('aria-label', `${names[index]} ${key === 'breaks' ? w('بريك', 'break') : w('دوام', 'work')} ${part === 'open' ? w('من', 'from') : w('إلى', 'to')}`);
-              input.oninput = () => { range[part] = input.value; emit(); };
-              label.append(el('span', '', part === 'open' ? w('من', 'From') : w('إلى', 'To')), input); row.append(label);
+              const label = el('div');
+              const clock = createTimeInput({ value: range[part], required: true, language,
+                testId: inputId(key, day, rangeIndex, part),
+                label: `${names[index]} ${key === 'breaks' ? w('بريك', 'break') : w('دوام', 'work')} ${part === 'open' ? w('من', 'from') : w('إلى', 'to')}`,
+                onChange: next => { range[part] = next; emit(); } });
+              const caption = el('label', '', part === 'open' ? w('من', 'From') : w('إلى', 'To')); caption.htmlFor = clock.input.id;
+              label.className = 'weekly-schedule-clock'; label.append(caption, clock.node); row.append(label);
             }
             if (key === 'breaks' || value[key][day].length > 1) {
               const remove = button('×', () => { value[key][day].splice(rangeIndex, 1); render(); emit(); }, 'weekly-schedule-remove', `${id}-${key}-${day}-${rangeIndex}-remove`);

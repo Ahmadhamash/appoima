@@ -1,3 +1,4 @@
+import { formatInstantTime } from '@/lib/time-format';
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -528,11 +529,7 @@ export function InvoiceCard({
           </summary>
           {invoice.payments.map((e) => (
             <p key={e.id} className="mt-2 text-xs">
-              {new Intl.DateTimeFormat(ar ? "ar-JO" : "en-GB", {
-                timeZone: "Asia/Amman",
-                dateStyle: "medium",
-                timeStyle: "short",
-              }).format(new Date(e.createdAt))}{" "}
+              {formatInstantTime(e.createdAt, "Asia/Amman", ar ? "ar" : "en", true)}{" "}
               ·{" "}
               {e.kind.includes("refund") || e.kind === "deposit_wallet"
                 ? ar
@@ -950,11 +947,7 @@ function PackageCard({
                 {e.amount && <Money value={e.amount} />}
               </div>
               <p>
-                {new Intl.DateTimeFormat(ar ? "ar-JO" : "en-GB", {
-                  timeZone: "Asia/Amman",
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                }).format(new Date(e.at))}{" "}
+                {formatInstantTime(e.at, "Asia/Amman", ar ? "ar" : "en", true)}{" "}
                 · {e.actor}
               </p>
               {"note" in e && e.note && <p>{e.note}</p>}

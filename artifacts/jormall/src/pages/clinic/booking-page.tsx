@@ -1,3 +1,6 @@
+import { BookingDateField } from '@/components/scheduling/booking-date-field';
+import { bookingDateAllowed, nextBookingDate } from '@/lib/booking-date';
+import type { Week } from '@/lib/setup-api';
 import {useCustomerBilling} from '@/lib/packages-api';
 import {PaymentSummary,ProductChargeFields} from '@/components/operations/patient-payment';
 import {useBookingPayment,previewPayment,productSelections} from '@/lib/patient-billing';
@@ -66,13 +69,13 @@ export function CustomerStep({selected,onSelected,allowSearch,allowAdd,pageSize=
     {allowAdd&&<Button type="button" variant="outline" onClick={()=>setAdding(true)} data-testid="booking-add-customer">{t('p3.addCustomer')}</Button>}
   </div>;
 }
-function CompactSlotPicker({branchId,serviceId,employeeId,timeZone,date,onDate,selected,onSelect}:{branchId:number;serviceId:number;employeeId:number;timeZone:string;date:string;onDate:(date:string)=>void;selected:Slot|null;onSelect:(slot:Slot|null)=>void}) {
+function CompactSlotPicker({branchId,serviceId,employeeId,timeZone,openingHours,date,onDate,selected,onSelect}:{branchId:number;serviceId:number;employeeId:number;timeZone:string;openingHours:Week;date:string;onDate:(date:string)=>void;selected:Slot|null;onSelect:(slot:Slot|null)=>void}) {
   const {t,lang}=useI18n(),errorMessage=useErrorMessage();
-  const q=useQuery({queryKey:['scheduling','slots',branchId,serviceId,employeeId,date],queryFn:()=>api<{slots:Slot[];timeZone:string;durationMinutes:number;emptyReason:null|'branch_closed'|'provider_off'|'room_unavailable'|'no_free_time'}>('/clinic/scheduling/availability?'+queryString({branchId,serviceId,employeeId,date})),enabled:!!branchId&&!!serviceId&&!!employeeId&&/^\d{4}-\d{2}-\d{2}$/.test(date),refetchInterval:30000,refetchOnWindowFocus:true,staleTime:0});
+  const q=useQuery({queryKey:['scheduling','slots',branchId,serviceId,employeeId,date],queryFn:()=>api<{slots:Slot[];timeZone:string;durationMinutes:number;emptyReason:null|'branch_closed'|'provider_off'|'room_unavailable'|'no_free_time'}>('/clinic/scheduling/availability?'+queryString({branchId,serviceId,employeeId,date})),enabled:!!branchId&&!!serviceId&&!!employeeId&&bookingDateAllowed(date,openingHours,timeZone),refetchInterval:30000,refetchOnWindowFocus:true,staleTime:0});
   useEffect(()=>{if(selected&&q.data&&!q.data.slots.some(value=>value.startsAt===selected.startsAt&&value.roomId===selected.roomId))onSelect(null);},[selected,q.data,onSelect]);
   return <div className="space-y-3" data-testid="slot-picker">
     <div className="grid grid-cols-2 gap-3">
-      <FormField label={t('p3.date')} type="date" value={date} min={localDate(timeZone)} onChange={event=>{onDate(event.target.value);onSelect(null);}} testId="slot-date" required/>
+      <BookingDateField value={date} openingHours={openingHours} timeZone={timeZone} onChange={next=>{if(bookingDateAllowed(next,openingHours,timeZone)){onDate(next);onSelect(null);}}}/>
       <SelectField label={t('p3.time')} value={selected?.startsAt??''} onChange={value=>onSelect(q.data?.slots.find(slot=>slot.startsAt===value)??null)} testId="booking-time" required><option value="">{lang==='ar'?'اختر الوقت':'Select time'}</option>{q.data?.slots.map(value=><option key={value.startsAt} value={value.startsAt}>{formatAppointmentTime(value.startsAt,timeZone,lang)} – {formatAppointmentTime(value.endsAt,timeZone,lang)}</option>)}</SelectField>
     </div>
     {q.isPending?<p role="status" className="text-xs text-[#68778b]">{t('common.loading')}</p>:q.isError?<FormError message={errorMessage(q.error)}/>:!q.data?.slots.length?<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" data-testid="slots-empty"><p>{q.data?.emptyReason==='branch_closed'?(lang==='ar'?'الفرع مغلق بهذا اليوم. اختر يوماً آخر.':'The branch is closed on this day. Choose another date.'):q.data?.emptyReason==='provider_off'?(lang==='ar'?'مقدم الخدمة لا يعمل بهذا اليوم. اختر يوماً آخر أو عدل جدول عمله.':'This provider is off today. Choose another date or update their schedule.'):q.data?.emptyReason==='room_unavailable'?(lang==='ar'?'لا توجد غرفة متاحة لهذه الخدمة بمعداتها المطلوبة. راجع ربط الخدمة ومعدات الغرف.':'No available room has the equipment required for this service. Check room services and equipment.'):lang==='ar'?'لا يوجد وقت يكفي لمدة هذه الخدمة بهذا اليوم. جرّب يوماً آخر.':'No time fits this service duration today. Try another date.'}</p>{q.data?.emptyReason==='provider_off'&&<Link href="/people/employees" className="mt-2 inline-block underline">{lang==='ar'?'جدول الفريق':'Staff schedule'}</Link>}{q.data?.emptyReason==='room_unavailable'&&<Link href="/business/rooms" className="mt-2 inline-block underline">{lang==='ar'?'إعداد الغرف':'Room setup'}</Link>}</div>:<p className="text-xs text-[#68778b]">{q.data.slots.length} {lang==='ar'?'وقت متاح لهذا اليوم':'available times this day'}</p>}
@@ -130,7 +133,7 @@ export default function BookingPage() {
   const subservices=catalog.data?.services.filter(item=>groupFor(item)===serviceGroup)??[];
   const command=useSchedulingCommand(id=>{if(customer&&service&&employee&&slot&&branch)setSuccess({id,customer:customer.name,service:service.name,employee:employee.name,time:formatAppointmentTime(slot.startsAt,branch.timeZone,lang,true)});setSlot(null);setNotes('');setBookingStep(0);setBookingOpen(false);});
   useEffect(()=>{if(!catalog.data?.branches.length)return;const preferred=catalog.data.branches.find(value=>value.id===selectedBranchId)?.id??catalog.data.branches.find(value=>value.id===user?.branchId)?.id??catalog.data.branches[0]!.id;setBranchId(current=>current??preferred);},[catalog.data,selectedBranchId,user?.branchId]);
-  useEffect(()=>{if(branch&&!date)setDate(current=>current||localDate(branch.timeZone));},[branch,date]);
+  useEffect(()=>{if(branch&&(!date||bookingOpen&&!bookingDateAllowed(date,branch.openingHours,branch.timeZone))){setDate(nextBookingDate(branch.openingHours,branch.timeZone));setSlot(null);}},[branch,date,bookingOpen]);
   if(!allowed)return <FormError message={t('p3.accessDenied')}/>;
   const canSubmit=!seriesPreview.isFetching&&seriesPreview.isSuccess&&seriesPreview.data.canBook&&(!seriesPreview.data.payment?.blocking||user?.role==='manager'&&selectedPackage?.plan.allowManagerOverride&&!!overrideReason.trim())&&pricing.isSuccess&&payment.total!==null&&!!(customer&&branch&&service&&employee&&slot)&&intakeIssues(service?.definition,intakeAnswers).length===0&&(!followUp||!!followUpOfId&&/^\d{1,9}(?:\.\d{1,3})?$/.test(chargePrice));
   const steps=lang==='ar'?['المريض','الخدمة','الموظف','خطة الجلسات','الموعد','التأكيد']:['Customer','Service','Staff','Sessions','Time','Confirm'];
@@ -161,7 +164,7 @@ export default function BookingPage() {
         <p className="rounded-xl bg-muted p-3 text-sm">{lang==='ar'?'تُحجز المواعيد فعليًا بنفس الوقت والموظف. ستراجع التواريخ والتعارضات قبل التأكيد.':'All appointments reserve the selected time and staff. Review dates and conflicts before confirming.'}</p>
         </div>}
         {bookingStep===4&&<div className="space-y-3">
-        {branch&&service&&employee?<CompactSlotPicker branchId={branch.id} serviceId={service.id} employeeId={employee.id} timeZone={branch.timeZone} date={date} onDate={setDate} selected={slot} onSelect={setSlot}/>:<FormField label={t('p3.date')} type="date" value={date} onChange={event=>setDate(event.target.value)} testId="slot-date"/>}
+        {branch&&service&&employee?<CompactSlotPicker branchId={branch.id} serviceId={service.id} employeeId={employee.id} timeZone={branch.timeZone} openingHours={branch.openingHours} date={date} onDate={setDate} selected={slot} onSelect={setSlot}/>:<BookingDateField value={date} timeZone={branch?.timeZone??'Asia/Amman'} openingHours={branch?.openingHours} onChange={setDate}/>}
         <div className="rounded-xl bg-[#faf8f3] px-3 py-2 text-sm"><strong className="block">{service?.name}</strong><span className="text-[#6a7890]">{lang==='ar'?'مدة الموعد':'Appointment duration'}: </span><strong>{service?t('p2.minutes',{count:service.durationMinutes}):'—'}</strong>{service&&service.requiredEquipment.length>0&&<p className="mt-1 text-xs text-[#6a7890]">{lang==='ar'?'المعدات المطلوبة: ':'Required equipment: '}{service.requiredEquipment.join('، ')}</p>}</div>
         </div>}
         {bookingStep===5&&<div className="space-y-3">

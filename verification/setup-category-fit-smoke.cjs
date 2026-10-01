@@ -1,3 +1,4 @@
+const {fillTime,readTime}=require('./time-input-helpers.cjs');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -16,26 +17,28 @@ async function fits(page,label){
  try{for(const [width,height,lang]of [[1440,900,'en'],[1366,768,'ar'],[390,844,'ar'],[390,667,'en']]){
   const fixture=await mount(browser,width,lang,true),{page}=fixture;await page.setViewportSize({width,height});
   try{
-   fixture.current().draft.services=[1,2].map(n=>({key:`service_${n}`,name:`Session ${n}`,nameLang:'en',branchKey:'branch_1',branchScope:'branch',durationMinutes:30,price:'25',currency:'JOD',category:null,requiresRoom:false,definition:null}));
+   fixture.current().draft.services=[1,2].map(n=>({key:`service_${n}`,name:`Session ${n}`,nameLang:'en',branchKey:'branch_1',branchScope:'branch',durationMinutes:30,price:'25',currency:'JOD',category:`Main ${n}`,requiresRoom:false,definition:null}));
    await page.route('**/api/concierge/service-options',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({categories:['Clinic consults'],branches:[],services:[],employees:[],rooms:[]})}));
    await page.goto(base+'/clinic-setup');await page.getByTestId('setup-branch_1-name').waitFor();await fits(page,'Branch identity');
    await page.getByTestId('branch-detail-pages-branch_1-next').click();
    const id='setup-branch_1';for(const day of ['tue','wed','thu','fri','sat','sun'])await page.getByTestId(`${id}-openingHours-${day}`).check();
    await fits(page,'All seven working days');
-   await page.getByTestId(`${id}-mon-detail-pages-next`).click();await page.getByTestId(`${id}-breaks-mon-add`).click();await page.getByTestId(`${id}-breaks-mon-0-open`).fill('12:00');await page.getByTestId(`${id}-breaks-mon-0-close`).fill('13:00');
-   await fits(page,'Break editor');await page.getByTestId(`${id}-apply-all`).click();assert.equal(await page.getByTestId(`${id}-breaks-tue-0-open`).inputValue(),'12:00');
+   await page.getByTestId(`${id}-mon-detail-pages-next`).click();await page.getByTestId(`${id}-breaks-mon-add`).click();await fillTime(page,`${id}-breaks-mon-0-open`,'12:00');await fillTime(page,`${id}-breaks-mon-0-close`,'13:00');
+   await fits(page,'Break editor');await page.getByTestId(`${id}-apply-all`).click();assert.equal(await readTime(page,`${id}-breaks-tue-0-open`),'12:00');
    if(process.env.SETUP_SHOT_DIR){fs.mkdirSync(process.env.SETUP_SHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.SETUP_SHOT_DIR,`setup-${width}-${height}.png`)});}
    await page.getByTestId('concierge-branch-pages-next').click();await fits(page,'Second branch');assert.equal(await page.getByTestId('setup-branch_2-name').inputValue(),'Branch 2');
    await page.getByTestId('concierge-journey-services').click();await page.getByTestId('service-name-service_1').waitFor();
-   if(await page.getByTestId('service-detail-pages-service_1-next').isVisible())await page.getByTestId('service-detail-pages-service_1-next').click();
-   await page.getByTestId('service-category-service_1').fill('نحت الجسم');await page.getByTestId('service-category-service_1').press('Enter');await fits(page,'Service category');
-   await page.getByTestId('concierge-service-pages-next').click();if(await page.getByTestId('service-detail-pages-service_2-next').isVisible())await page.getByTestId('service-detail-pages-service_2-next').click();
-   await page.getByTestId('service-category-service_2').click();await page.getByTestId('service-category-service_2-open-options').click();if(!await page.getByTestId('service-category-service_2-options').isVisible())await page.getByTestId('service-category-service_2-open-options').click();
-   const options=page.getByTestId('service-category-service_2-options');await options.getByRole('option',{name:'نحت الجسم',exact:true}).click();assert.equal(await page.getByTestId('service-category-service_2').inputValue(),'نحت الجسم');
-   await page.getByTestId('service-category-service_2-open-options').click();const labels=await options.getByRole('option').allTextContents();assert.ok(labels.includes('Clinic consults'));for(const name of ['Hair','Nails','Skin','Laser','Massage','Makeup','Other'])assert.ok(!labels.includes(name));await page.getByTestId('service-category-service_2').press('Escape');
+   assert.equal(await page.locator('.jc-service-tree .jc-service-group').count(),2);
+   assert.equal(await page.locator('.jc-service-tree .jc-service-batch-row').count(),2);
+   await page.getByTestId('service-category-service_1').fill('نحت الجسم');await page.getByTestId('service-category-service_1').press('Enter');
+   await page.getByTestId('service-category-service_2-open-options').click();
+   const options=page.getByTestId('service-category-service_2-options');await options.getByRole('option',{name:'نحت الجسم',exact:true}).click();
+   assert.equal(await page.locator('.jc-service-tree .jc-service-group').count(),1,'Same main service must group its subservices together');
+   assert.equal(await page.getByTestId('service-name-service_2').inputValue(),'Session 2');
+   await page.getByTestId('service-category-service_1-open-options').click();const labels=await page.getByTestId('service-category-service_1-options').getByRole('option').allTextContents();assert.ok(labels.includes('Clinic consults'));for(const name of ['Hair','Nails','Skin','Laser','Massage','Makeup','Other'])assert.ok(!labels.includes(name));await page.getByTestId('service-category-service_1').press('Escape');
    await page.getByTestId('concierge-journey-staff').click();assert.deepEqual(fixture.current().draft.services.map(s=>s.category),['نحت الجسم','نحت الجسم']);await fits(page,'Staff identity');
    await page.getByTestId('staff-detail-pages-staff_1-next').click();await fits(page,'Staff branch schedule');
-   await page.getByTestId('concierge-journey-services').click();if(await page.getByTestId('service-detail-pages-service_1-next').isVisible())await page.getByTestId('service-detail-pages-service_1-next').click();assert.equal(await page.getByTestId('service-category-service_1').inputValue(),'نحت الجسم');
+   await page.getByTestId('concierge-journey-services').click();assert.equal(await page.getByTestId('service-category-service_1').inputValue(),'نحت الجسم');
    await page.locator('.jc-service-bulk>summary').click();await fits(page,'Shared service selection');await page.getByTestId('service-bulk-detail-pages-next').click();await fits(page,'Shared service details');
    await page.getByTestId('concierge-journey-review').click();await page.getByTestId('concierge-review-open').click();await page.getByTestId('draft-branch_1').locator(':scope>summary').click();await page.getByTestId('concierge-record-branch_1-pages-next').click();await fits(page,'Review branch schedule');
    assert.deepEqual(fixture.errors,[]);assert.ok(page.url().endsWith('/clinic-setup'));console.log(`PASS categories, saved drafts, all week/breaks, branch/staff parts fit ${width}x${height} ${lang}`);

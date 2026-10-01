@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import { AUDIENCES, FIELD_TYPES, SERVICE_TEMPLATES, createDefinition, type ServiceDefinition, type DefinitionField, type TemplateId } from '@workspace/service-definition';
 import './services.css';
-export function DefinitionEditor({value,onChange,language='ar'}:{value:ServiceDefinition|null|undefined;onChange:(d:ServiceDefinition|null)=>void;language?:'ar'|'en'}) {
+export function DefinitionEditor({value,onChange,language='ar',showSection=true}:{value:ServiceDefinition|null|undefined;onChange:(d:ServiceDefinition|null)=>void;language?:'ar'|'en';showSection?:boolean}) {
  const uid=useId(),w=(a:string,e:string)=>language==='ar'?a:e;
  if(!value)return <div className="sv-editor-section"><p className="sv-help">{w('هذه خدمة قديمة بدون تعريف مرن. بياناتها وحجوزاتها محفوظة.','This legacy service has no flexible definition. Its data and bookings are preserved.')}</p><button type="button" className="sv-button" onClick={()=>onChange(createDefinition('custom',language))}>{w('أضف تصميمًا وحقول حجز','Add a design and booking fields')}</button></div>;
  const d=value,change=(patch:Partial<ServiceDefinition>)=>onChange({...d,...patch});
@@ -9,8 +9,8 @@ export function DefinitionEditor({value,onChange,language='ar'}:{value:ServiceDe
  const audiences:Record<string,string>={unspecified:w('غير محدد','Not specified'),all:w('للجميع','All'),men:w('رجال','Men'),women:w('نساء','Women'),children:w('أطفال','Children')};
  const fieldLabels:Record<string,string>={short_text:w('نص قصير','Short text'),long_text:w('نص طويل','Long text'),select:w('اختيار واحد','Single choice'),number:w('رقم','Number'),boolean:w('نعم / لا','Yes / No')};
  return <div className="sv-definition-editor">
-  <div className="sv-field-grid"><label className="sv-field">{w('قالب العرض','Presentation template')}<select value={d.template} onChange={e=>{const template=e.target.value as TemplateId,preset=SERVICE_TEMPLATES.find(t=>t.id===template)!;change({template,section:SERVICE_TEMPLATES.some(t=>Object.values(t.section).includes(d.section))?preset.section[language]:d.section});}}>{SERVICE_TEMPLATES.map(t=><option key={t.id} value={t.id}>{t.label[language]}</option>)}</select></label>
-   <label className="sv-field">{w('قسم الخدمات','Service section')}<input maxLength={80} value={d.section} onChange={e=>change({section:e.target.value})}/></label>
+  <div className="sv-field-grid"><label className="sv-field">{w('قالب العرض','Presentation template')}<select value={d.template} onChange={e=>{const template=e.target.value as TemplateId,preset=SERVICE_TEMPLATES.find(t=>t.id===template)!;change({template,section:showSection&&SERVICE_TEMPLATES.some(t=>Object.values(t.section).includes(d.section))?preset.section[language]:d.section});}}>{SERVICE_TEMPLATES.map(t=><option key={t.id} value={t.id}>{t.label[language]}</option>)}</select></label>
+   {showSection&&<label className="sv-field">{w('الخدمة الرئيسية','Main service')}<input maxLength={80} value={d.section} onChange={e=>change({section:e.target.value})}/></label>}
    <label className="sv-field">{w('الفئة المستهدفة','Audience')}<select value={d.audience} onChange={e=>change({audience:e.target.value as ServiceDefinition['audience']})}>{AUDIENCES.map(a=><option key={a} value={a}>{audiences[a]}</option>)}</select></label>
    <label className="sv-field">{w('المنطقة، عند الحاجة','Area, when relevant')}<input maxLength={100} value={d.bodyArea??''} onChange={e=>change({bodyArea:e.target.value.trim()?e.target.value:null})}/></label></div>
   <label className="sv-field">{w('وصف إداري مختصر للخدمة','Short administrative description')}<textarea maxLength={500} value={d.description??''} onChange={e=>change({description:e.target.value.trim()?e.target.value:null})}/></label>

@@ -418,3 +418,26 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 @media(max-height:720px){.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-journey-description{display:none}.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-stage{gap:4px}.jc-dialog.jc-setup-mode .jc-structured-setup,.jc-dialog.jc-setup-mode .jc-structured-list{gap:6px}.jc-dialog .weekly-schedule-paged{gap:6px}}
 @media(max-height:720px){.jc-dialog .staff-branch-schedules>legend{display:none}}
 @media(max-height:720px){.jc-dialog.jc-setup-mode .jc-review{padding-block:6px;gap:4px}.jc-dialog.jc-setup-mode .jc-review .jc-record{padding-block:8px}}
+
+/* Service setup uses the available screen for a grouped, editable table. */
+.jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-controls{width:min(1480px,calc(100vw - 48px));max-width:none!important;overflow:hidden!important}
+.jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-panel-step{overflow:hidden;min-height:0;flex:1}
+.jc-dialog.jc-setup-mode .jc-service-tree{min-height:0;gap:10px;flex:1}
+.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-batch-rows{display:grid;gap:24px;overflow-y:auto;overflow-x:hidden;min-height:0;flex:1;padding:4px 12px 16px}
+.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-group{min-width:0;display:grid;gap:0}
+.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-group-heading{display:flex;align-items:center;gap:12px;border:1px solid #526986;background:#223b58;padding:12px 16px;border-radius:14px;margin:0}
+.jc-service-main-index{display:grid;place-items:center;width:36px;height:36px;flex:none;border-radius:10px;background:#b4d4ff;color:#17304d;font-weight:700}
+.jc-service-main-field{display:grid;gap:4px;flex:1;min-width:0;max-width:520px}.jc-service-main-field h3{font-size:12px;margin:0;color:#c2d2e8}.jc-service-child-count{margin-inline-start:auto;font-size:12px;color:#c2d2e8;white-space:nowrap}
+.jc-dialog .jc-service-tree .jc-service-group-heading .jc-button{font-size:12px;min-height:38px;padding:8px 12px;white-space:nowrap;background:#b4d4ff;color:#17304d}
+.jc-service-tree-children{position:relative;display:grid;gap:10px;margin-inline-start:24px;padding:12px 0 0 24px;padding-inline-start:24px;padding-inline-end:0}
+.jc-service-tree-children::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:34px;width:2px;background:#7ba8d8}
+.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-batch-row{position:relative;display:grid;gap:8px;margin:0;min-width:0;padding:12px 16px;background:#1b2941;border-radius:12px;overflow:visible}
+.jc-service-tree .jc-service-batch-row::before{content:'';position:absolute;inset-inline-start:-24px;top:32px;width:24px;height:2px;background:#7ba8d8}
+.jc-service-tree .jc-service-batch-title{gap:10px;padding:0;margin:0}.jc-service-tree .jc-service-batch-title>strong{max-width:none;overflow-wrap:anywhere}.jc-service-tree .jc-service-index{font-size:12px;width:auto;min-width:36px}.jc-service-tree .jc-service-state{font-size:11px;padding:4px 8px}
+.jc-service-table-fields{display:grid;grid-template-columns:minmax(180px,2fr) minmax(84px,.8fr) minmax(84px,.8fr) minmax(110px,1fr) minmax(140px,1.3fr);gap:10px;min-width:0;align-items:start}
+.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-name-field{grid-column:auto}
+.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-field{font-size:11px;gap:4px;min-width:0}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-field input,.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-field select{min-height:38px;padding:7px 9px;font-size:13px;min-width:0;width:100%}
+.jc-service-tree .jc-service-follow-up{grid-column:1/-1;margin:0;min-height:24px;font-size:12px;white-space:normal}
+.jc-dialog.jc-setup-mode .jc-service-tree>.jc-service-batch-actions{margin:0;flex:none;position:static;padding:10px 12px}
+@media(max-width:900px){.jc-service-table-fields{grid-template-columns:repeat(4,minmax(0,1fr))}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-name-field{grid-column:span 2}.jc-service-tree .jc-service-child-count{display:none}}
+@media(max-width:640px){.jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-controls{width:calc(100vw - 16px)}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-batch-rows{padding:2px 4px 12px;gap:18px}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-group-heading{padding:10px;gap:8px;flex-wrap:wrap}.jc-service-main-field{flex-basis:calc(100% - 48px)}.jc-dialog .jc-service-tree .jc-service-group-heading>.jc-button{margin-inline-start:auto}.jc-service-tree-children{margin-inline-start:12px;padding-inline-start:12px}.jc-service-tree .jc-service-batch-row::before{inset-inline-start:-12px;width:12px}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-batch-row{padding:10px;gap:8px}.jc-service-table-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.jc-service-tree .jc-service-batch-title{flex-wrap:wrap}.jc-service-tree .jc-service-batch-title>strong{flex:1;min-width:0}.jc-service-tree .jc-service-main-index{width:30px;height:30px}}

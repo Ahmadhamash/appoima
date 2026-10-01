@@ -1,17 +1,18 @@
 import type { ServiceDefinition, IntakeSnapshot } from '@workspace/service-definition';
 import type {Payment} from './patient-billing';
+import { formatInstantTime } from './time-format';
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import { useI18n } from './i18n';
 import { useToast } from '@/hooks/use-toast';
-import type { Option } from './setup-api';
+import type { Option, Week } from './setup-api';
 export const STATUSES = ['pending','confirmed','checked_in','in_service','completed','cancelled','no_show'] as const;
 export type Status = typeof STATUSES[number];
 export type Slot = {startsAt: string; endsAt: string; roomId: number|null};
 export type CustomerChoice = Option & {phone?: string|null; email?: string|null};
 export type Catalog = {
-  branches: (Option & {timeZone: string})[];
+  branches: (Option & {timeZone: string; openingHours: Week})[];
   services: (Option & {durationMinutes: number; followUpEnabled: boolean; price: string; currency: string; requiresRoom: boolean; requiredEquipment: string[]; definition?: ServiceDefinition|null})[];
   employees: Option[]; canBook: boolean; canReadAll: boolean; canSearchCustomers: boolean; canAddCustomer: boolean;
 };
@@ -69,7 +70,7 @@ export function localDate(zone: string, instant: Date = new Date()) {
   return `${parts.find((p)=>p.type==='year')!.value}-${parts.find((p)=>p.type==='month')!.value}-${parts.find((p)=>p.type==='day')!.value}`;
 }
 export function formatAppointmentTime(value: string, zone: string, lang: string, full = false): string {
-  return new Intl.DateTimeFormat(lang==='ar'?'ar-JO':'en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23',...(full?{year:'numeric',month:'short',day:'numeric'} as const:{})}).format(new Date(value));
+  return formatInstantTime(value, zone, lang, full);
 }
 export function shiftLocalDate(value: string, days: number): string {
   const d=new Date(`${value}T12:00:00Z`);d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);
