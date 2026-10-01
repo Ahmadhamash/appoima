@@ -162,3 +162,4 @@ export const SERVICE_DEFINITION_SCHEMA: JsonShape = object({
 });
 
 export * from './workspace-profile';
+export * from './phone';

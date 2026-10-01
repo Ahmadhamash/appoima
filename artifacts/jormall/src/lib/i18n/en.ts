@@ -563,6 +563,7 @@ export const en = {
     invalid_permission: "Choose valid access permissions.",
     duplicate_selection: "Select each record only once.",
     contact_required: "Enter a phone number or email address.",
+    invalid_phone: "Choose a country code and enter a valid phone number using digits only.",
     invalid_value: "Check this value.",
     invalid_duration: "Enter a duration from 1 to 1,440 minutes.",
     invalid_capacity: "Enter a capacity from 1 to 1,000.",

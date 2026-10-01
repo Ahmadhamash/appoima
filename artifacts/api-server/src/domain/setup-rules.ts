@@ -29,6 +29,12 @@ export function isTimeZone(value: string): boolean {
   try { new Intl.DateTimeFormat("en", { timeZone: value }).format(); return true; } catch { return false; }
 }
 export function hasOpenHours(value: unknown): boolean { return DAYS.some((d) => normalizeWeek(value)[d].length > 0); }
+/** Apply branch filters before pagination; cards retain clinic-wide counts. */
+export function branchListPage<T extends {name:string;timeZone:string;openingHours:unknown}>(rows:T[], p:{page:number;pageSize:number;search:string;openingHours?:'configured';timeZone?:string}) {
+  const timeZones = [...new Set(rows.map(row=>row.timeZone))].sort().map(timeZone=>({timeZone,count:rows.filter(row=>row.timeZone===timeZone).length}));
+  const filtered=rows.filter(row=>(!p.search||row.name.toLocaleLowerCase().includes(p.search.toLocaleLowerCase()))&&(!p.openingHours||hasOpenHours(row.openingHours))&&(!p.timeZone||row.timeZone===p.timeZone));
+  return {items:filtered.slice((p.page-1)*p.pageSize,p.page*p.pageSize),total:filtered.length,page:p.page,pageSize:p.pageSize,branchSummary:{total:rows.length,withOpeningHours:rows.filter(row=>hasOpenHours(row.openingHours)).length,timeZones}};
+}
 export function effectivePermissions(permissions: readonly string[]): Set<string> {
   const result = new Set(permissions);
   for (const p of permissions) if (p.endsWith(".manage")) result.add(p.replace(/\.manage$/, ".read"));

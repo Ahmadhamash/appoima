@@ -5,9 +5,9 @@ import {
 } from "@workspace/db";
 import { forbidden, notFound, conflict, badRequest } from "../lib/errors";
 import { hasPermission, ROLE_PRESETS, ALL_PERMISSIONS, type Permission } from "../domain/permissions";
-import { normalizeWeek, withinGrantCeiling, compatibleBranch } from "../domain/setup-rules";
+import { normalizeWeek, withinGrantCeiling, compatibleBranch, branchListPage } from "../domain/setup-rules";
 import { roomHasEquipment } from "../domain/equipment";
-import type { BranchInput, ServiceInput, ServiceBatchInput, RoomInput, CustomerInput, EmployeeInput, NewEmployeeInput, PageInput, EmployeePageInput } from "../domain/setup-validation";
+import type { BranchInput, ServiceInput, ServiceBatchInput, RoomInput, CustomerInput, EmployeeInput, NewEmployeeInput, PageInput, EmployeePageInput, BranchPageInput } from "../domain/setup-validation";
 import { employeeSchema } from "../domain/setup-validation";
 import { createStaffAccount, hashPassword } from "./auth";
 import { recordAudit } from "./audit";
@@ -72,12 +72,10 @@ async function validateEmployees(tx: Tx, clinicId: number, ids: number[], branch
 const audit = (tx: Tx, actor: User, action: string, entityType: string, entityId: number, details?: Record<string, unknown>) =>
   recordAudit({ clinicId: actor.clinicId, actorUserId: actor.id, action, entityType, entityId, details }, tx);
 
-export async function listBranches(actor: User, p: PageInput) {
+export async function listBranches(actor: User, p: BranchPageInput) {
   ensure(actor, "settings.read");
-  const condition = and(eq(branchesTable.clinicId, clinicOf(actor)), p.search ? ilike(branchesTable.name, `%${p.search}%`) : undefined);
-  const rows = await db.select().from(branchesTable).where(condition).orderBy(asc(branchesTable.name), asc(branchesTable.id)).limit(p.pageSize).offset((p.page - 1) * p.pageSize);
-  const [count] = await db.select({ total: sql<number>`count(*)::int` }).from(branchesTable).where(condition);
-  return pageResult(rows.map((r) => ({ ...r, openingHours: normalizeWeek(r.openingHours) })), count!.total, p);
+  const rows = await db.select().from(branchesTable).where(eq(branchesTable.clinicId, clinicOf(actor))).orderBy(asc(branchesTable.name), asc(branchesTable.id));
+  return branchListPage(rows.map(r=>({...r,openingHours:normalizeWeek(r.openingHours)})),p);
 }
 export async function getBranch(actor: User, id: number) {
   ensure(actor, "settings.read");

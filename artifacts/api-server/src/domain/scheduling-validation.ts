@@ -1,6 +1,7 @@
 import { consumptionPayloadSchema } from './operations-validation';
 import {productSelectionsSchema} from './patient-billing';
 import { z } from 'zod';
+import { contactPhone } from './setup-validation';
 import { APPOINTMENT_STATUSES, validDate } from './scheduling-rules';
 const id = z.number().int().positive();
 const queryId = z.coerce.number().int().positive().optional();
@@ -24,7 +25,7 @@ export const catalogSchema = z.object({ branchId: queryId, serviceId: queryId })
 export const transitionSchema = z.object({ overrideReason:z.string().trim().max(1000).default(''),status: z.enum(APPOINTMENT_STATUSES), expectedVersion: id, reason: z.string().trim().max(1000).default(''), notes: notes.optional(), notesLang: lang.optional(), consumptionApproved:z.literal(true).optional(),consumption: consumptionPayloadSchema.optional(), idempotencyKey: key }).strict().refine((v) => !v.consumption || v.status === 'completed', 'consumption_requires_completed').refine((v) => !['cancelled','no_show'].includes(v.status) || v.reason.length > 0, 'reason_required').refine((v) => v.notes === undefined || v.notesLang !== undefined, 'notes_language_required');
 export const rescheduleSchema = z.object({ employeeId: id, startsAt: instant, expectedVersion: id, reason: z.string().trim().min(1).max(1000), idempotencyKey: key }).strict();
 export const appointmentNotesSchema = z.object({ notes, notesLang: lang, expectedVersion: id, idempotencyKey: key }).strict();
-export const bookingCustomerSchema = z.object({ name: z.string().trim().min(1).max(120), nameLang: lang, branchId: id.nullable().default(null), phone: z.string().trim().max(50).nullable().default(null), email: z.union([z.string().trim().email().max(200), z.literal(''), z.null()]).default(null), idempotencyKey: key }).strict().refine((v) => Boolean(v.phone || v.email), 'contact_required');
+export const bookingCustomerSchema = z.object({ name: z.string().trim().min(1).max(120), nameLang: lang, branchId: id.nullable().default(null), phone: contactPhone, email: z.union([z.string().trim().email().max(200), z.literal(''), z.null()]).default(null), idempotencyKey: key }).strict().refine((v) => Boolean(v.phone || v.email), 'contact_required');
 export type BookingInput = z.infer<typeof bookingSchema>;
 export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 export type CalendarInput = z.infer<typeof calendarSchema>;

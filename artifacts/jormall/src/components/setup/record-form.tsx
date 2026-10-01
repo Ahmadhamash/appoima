@@ -1,4 +1,6 @@
-import { parseServiceDefinition, definitionIssues, type ServiceDefinition } from '@workspace/service-definition';
+import { parseServiceDefinition, definitionIssues, normalizePhone, type ServiceDefinition } from '@workspace/service-definition';
+import { PhoneField } from '@/components/phone-field';
+import { phoneValidationMessage } from '@/components/phone-input';
 import { DefinitionEditor } from '@/components/services/definition-editor';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -133,6 +135,8 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
     if (!draft.name.trim()) fail('name','nameRequired');
     if ((isEmployee || draft.email) && !validEmail(draft.email) && (isEmployee || resource === 'customers')) fail('email','emailInvalid');
     if (resource === 'customers' && !draft.phone.trim() && !draft.email.trim()) fail('phone','contact_required');
+    if (draft.phone.trim() && !normalizePhone(draft.phone)) e.phone = phoneValidationMessage(lang);
+    if (resource === 'branches' && draft.mapUrl.trim()) { try { const url = new URL(draft.mapUrl); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw Error(); } catch { e.mapUrl = lang === 'ar' ? 'أدخل رابط خريطة صالحًا يبدأ بـ https:// أو http://.' : 'Enter a valid map link starting with https:// or http://.'; } }
     if (resource === 'branches' && !hoursValid(draft.openingHours)) fail('openingHours','invalid_hours');
     if (resource === 'rooms' && !draft.branchId) fail('branchId','branch_required');
     if (resource === 'rooms' && (!Number.isInteger(Number(draft.capacity)) || Number(draft.capacity)<1 || Number(draft.capacity)>1000)) fail('capacity','invalid_capacity');
@@ -161,6 +165,7 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
   }
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (draft.phone.trim() && !normalizePhone(draft.phone)) { setErrors(old => ({...old, phone: phoneValidationMessage(lang)})); return; }
     if(assistantKey){const keys=['name','nameLang','email','phone','jobTitle','price','currency','category','timeZone','role','requiresRoom','followUpEnabled','openingHours','workingHours','breaks'] as const;const fields:Record<string,unknown>={};for(const key of keys)if(touched.current.has(key))fields[key]=draft[key];for(const key of ['durationMinutes','capacity'] as const)if(touched.current.has(key))fields[key]=Number(draft[key]);if(touched.current.has('branchId'))fields.branchKey=draft.branchId?`branch_${draft.branchId}`:null;window.dispatchEvent(new CustomEvent('jormall:concierge-review-record',{detail:{resource,key:assistantKey,fields}}));return;}
     if (mutation.isPending || !validate()) return;
     if (isEmployee && step < 3) { setStep((s)=>s+1); return; }
@@ -174,7 +179,7 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
     mutation.mutate(body);
   }
   const fieldLabel = (key: string) => key==='price'&&resource==='services' ? lang==='ar'?'أتعاب الطبيب / الخدمة (JOD)':'Doctor / service fee (JOD)' : t(`p2.fields.${key}`);
-  const input = (key: 'name'|'phone'|'email'|'jobTitle'|'price'|'capacity'|'durationMinutes', type='text', required=false) => <FormField key={key} label={fieldLabel(key)} value={draft[key]} onChange={(e)=>set(key,e.target.value)} type={type} required={required} error={errors[key]} data-testid={`input-${key}`} maxLength={key==='name'||key==='jobTitle'?120:key==='phone'?50:key==='email'?200:undefined} dir={key==='name' ? draft.nameLang==='ar'?'rtl':'ltr' : ['phone','email','price','capacity','durationMinutes'].includes(key)?'ltr':undefined} lang={key==='name'?draft.nameLang:undefined} inputMode={['price','durationMinutes','capacity'].includes(key)?'decimal':undefined}/>;
+  const input = (key: 'name'|'phone'|'email'|'jobTitle'|'price'|'capacity'|'durationMinutes', type='text', required=false) => key === 'phone' ? <PhoneField key={key} label={fieldLabel(key)} value={draft.phone} onChange={value=>set('phone',value)} error={errors.phone} testId="input-phone"/> : <FormField key={key} label={fieldLabel(key)} value={draft[key]} onChange={(e)=>set(key,e.target.value)} type={type} required={required} error={errors[key]} data-testid={`input-${key}`} maxLength={key==='name'||key==='jobTitle'?120:key==='email'?200:undefined} dir={key==='name' ? draft.nameLang==='ar'?'rtl':'ltr' : ['email','price','capacity','durationMinutes'].includes(key)?'ltr':undefined} lang={key==='name'?draft.nameLang:undefined} inputMode={['price','durationMinutes','capacity'].includes(key)?'decimal':undefined}/>;
   const nameFields = <>{input('name','text',true)}<SelectField label={fieldLabel('nameLang')} value={draft.nameLang} onChange={(v)=>set('nameLang',v as 'en'|'ar')} testId="select-nameLang"><option value="en">{t('common.english')}</option><option value="ar">{t('common.arabic')}</option></SelectField><p className="text-xs text-muted-foreground sm:col-span-2">{t('p2.localNameHint')}</p></>;
   function changeBranch(value: string) {
     touched.current.add('branchId');

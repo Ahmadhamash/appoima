@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { requireAuth, requirePasswordChanged, requirePermission } from "../middlewares/auth";
 import { forbidden } from "../lib/errors";
-import { branchSchema, serviceSchema, serviceBatchSchema, roomSchema, customerSchema, employeeSchema, newEmployeeSchema, pageSchema, employeePageSchema } from "../domain/setup-validation";
+import { branchSchema, serviceSchema, serviceBatchSchema, roomSchema, customerSchema, employeeSchema, newEmployeeSchema, pageSchema, employeePageSchema, branchPageSchema } from "../domain/setup-validation";
 import * as setup from "../services/setup";
 import {roomOverview,roomSchedule,createRoomBlock,removeRoomBlock} from '../services/room-workflows';
 import {roomBlockSchema,roomRangeSchema} from '../domain/room-workflow-validation';
@@ -18,7 +18,7 @@ router.get("/clinic/options", async (req, res) => {
   res.json(await setup.setupOptions(req.user!, resource));
 });
 
-router.get("/clinic/branches", requirePermission("settings.read"), async (req, res) => res.json(await setup.listBranches(req.user!, pageSchema.parse(req.query))));
+router.get("/clinic/branches", requirePermission("settings.read"), async (req, res) => res.json(await setup.listBranches(req.user!, branchPageSchema.parse(req.query))));
 router.get("/clinic/branches/:id", requirePermission("settings.read"), async (req, res) => res.json({ item: await setup.getBranch(req.user!, id(req.params["id"])) }));
 router.post("/clinic/branches", requirePermission("settings.manage"), async (req, res) => res.status(201).json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body)) }));
 router.put("/clinic/branches/:id", requirePermission("settings.manage"), async (req, res) => res.json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body), id(req.params["id"])) }));

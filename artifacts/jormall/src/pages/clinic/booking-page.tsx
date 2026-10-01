@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { FormError, FormField } from '@/components/form-field';
+import { PhoneField } from '@/components/phone-field';
 import { EnteredName, SelectField, TextareaField } from '@/components/setup/controls';
 import { DayBoard } from '@/components/scheduling/day-board';
 import { api } from '@/lib/api';
@@ -44,7 +45,7 @@ function InlineCustomer({onSelected,onClose}: {onSelected:(customer:CustomerChoi
       <h3 className="font-semibold">{t('p3.addCustomer')}</h3>
       <SelectField label={t('p2.fields.nameLang')} value={nameLang} onChange={(v)=>setNameLang(v as 'en'|'ar')} testId="inline-customer-language"><option value="en">English</option><option value="ar">العربية</option></SelectField>
       <FormField label={t('p2.fields.name')} value={name} onChange={(e)=>setName(e.target.value)} required maxLength={120} dir={nameLang==='ar'?'rtl':'ltr'} lang={nameLang} testId="inline-customer-name"/>
-      <FormField label={t('p2.fields.phone')} type="tel" value={phone} onChange={(e)=>setPhone(e.target.value)} maxLength={50} dir="ltr" testId="inline-customer-phone"/>
+      <PhoneField label={t('p2.fields.phone')} value={phone} onChange={setPhone} testId="inline-customer-phone"/>
       <FormField label={t('p2.fields.email')} type="email" value={email} onChange={(e)=>setEmail(e.target.value)} maxLength={200} dir="ltr" testId="inline-customer-email"/>
       <FormError message={validation|| (command.error?errorMessage(command.error):undefined)}/>
       <div className="flex flex-wrap gap-2"><Button type="submit" data-testid="inline-customer-save">{command.isPending?t('common.loading'):t('p3.saveCustomer')}</Button><Button type="button" variant="outline" onClick={onClose} data-testid="inline-customer-back">{t('p3.existingCustomer')}</Button></div>

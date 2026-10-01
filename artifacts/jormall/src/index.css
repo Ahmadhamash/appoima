@@ -2,6 +2,17 @@
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 
+.phone-field { display: grid; gap: .4rem; min-width: 0; font-size: .875rem; }
+.phone-field > label { font-weight: 600; }
+.phone-controls { display: flex; gap: .5rem; min-width: 0; }
+.phone-controls > select, .phone-controls > input { border: 1px solid hsl(var(--border)); border-radius: .65rem; background: transparent; color: inherit; padding: .65rem .75rem; min-width: 0; }
+.phone-controls > select { width: 45%; max-width: 15rem; }
+.phone-controls > input { flex: 1; width: 55%; }
+.phone-controls > :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.phone-controls > input[aria-invalid="true"] { border-color: #c33131; }
+.phone-field > small { font-size: .75rem; opacity: .85; }
+.phone-field > .phone-error { color: #c33131; }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

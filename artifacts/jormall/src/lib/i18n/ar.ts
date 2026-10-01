@@ -565,6 +565,7 @@ export const ar: Dictionary = {
     invalid_permission: "اختر صلاحيات صحيحة.",
     duplicate_selection: "اختر كل سجل مرة واحدة فقط.",
     contact_required: "أدخل رقم هاتف أو بريدًا إلكترونيًا.",
+    invalid_phone: "اختر رمز الدولة وأدخل رقم هاتف صحيحًا بالأرقام فقط.",
     invalid_value: "راجع هذه القيمة.",
     invalid_duration: "أدخل مدة بين دقيقة و١٤٤٠ دقيقة.",
     invalid_capacity: "أدخل سعة بين ١ و١٠٠٠.",

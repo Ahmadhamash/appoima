@@ -1,6 +1,7 @@
 import { DAYS, type Draft, type Language, type Week, type StaffDraft } from './contract';
 import { el, button } from './dom';
 import { setupPager } from './paging';
+import { createPhoneInput } from '../phone-input';
 
 const emptyWeek = (): Week => Object.fromEntries(DAYS.map(day => [day, []])) as unknown as Week;
 /** Explicit fields keep setup independent of AI interpretation. */
@@ -13,7 +14,13 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
  field(form, kind === 'staff' ? w('كم موظف بدك تضيف؟', 'How many staff members?') : w('كم فرع عندك؟', 'How many branches?'), count);
  const textField = (host: HTMLElement, row: any, key: string, title: string, required = false, type = 'text', max = 120) => {
   const input = el('input'); input.type = type; input.value = row[key] ?? ''; input.required = required; input.maxLength = max; input.dataset.testid = `setup-${row.key}-${key}`;
-  input.oninput = () => { row[key] = input.value.trim() || null; if (key === 'name') row.nameLang = /[\u0600-\u06ff]/.test(input.value) ? 'ar' : 'en'; changed(draft); }; field(host, title, input);
+  const validate = () => {
+   let invalid = required && !input.value.trim();
+   if (type === 'email' && input.value) invalid ||= !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value.trim());
+   if (type === 'url' && input.value) { try { const url = new URL(input.value); invalid ||= !['http:', 'https:'].includes(url.protocol) || !!url.username || !!url.password; } catch { invalid = true; } }
+   input.setCustomValidity(invalid ? w('أدخل قيمة صحيحة لهذا الحقل.', 'Enter a valid value for this field.') : '');
+  };
+  input.oninput = () => { validate(); row[key] = input.value.trim() || null; if (key === 'name') row.nameLang = /[\u0600-\u06ff]/.test(input.value) ? 'ar' : 'en'; changed(draft); }; validate(); field(host, title, input);
  };
  const schedule = (host: HTMLElement, row: any, key: string, title: string) => {
   const section = el('details', 'jc-structured-hours'); section.append(el('summary', '', title));
@@ -41,7 +48,7 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
    } else {
     const person = row as StaffDraft;
     textField(fields, person, 'email', w('البريد الإلكتروني للدخول', 'Sign-in email'), true, 'email', 200);
-    textField(fields, person, 'phone', w('الهاتف (اختياري)', 'Phone (optional)'), false, 'tel', 50);
+    fields.append(createPhoneInput({value:person.phone??'',label:w('الهاتف (اختياري)', 'Phone (optional)'),language,testId:`setup-${row.key}-phone`,onChange:value=>{person.phone=value||null;changed(draft);}}).node);
     textField(fields, person, 'jobTitle', w('المسمى الوظيفي (اختياري)', 'Job title (optional)'));
     const select = (title: string, key: 'role' | 'branchKey', options: [string, string][]) => { const input = el('select'); input.required = true; input.dataset.testid = `setup-${row.key}-${key}`; for (const [value, label] of [['', w('اختر', 'Choose')], ...options]) { const option = el('option', '', label); option.value = value!; input.append(option); } input.value = person[key] ?? ''; input.onchange = () => { const value = input.value || null; if (person[key] === value) return; (person as any)[key] = value; if (key === 'branchKey') { person.serviceKeys = (person.serviceKeys ?? []).filter(k => draft.services.some(s => s.key === k && (s.branchScope === 'all' || s.branchKey === person.branchKey))); render(index); } else changed(draft); }; field(fields, title, input); };
     select(w('الدور', 'Role'), 'role', [['secretary', w('سكرتير / سكرتيرة', 'Secretary')], ['doctor', w('طبيب', 'Doctor')], ['service_provider', w('مقدم خدمة', 'Service provider')], ['other_staff', w('موظف آخر', 'Other staff')]]);

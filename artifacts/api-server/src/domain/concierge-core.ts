@@ -1,4 +1,4 @@
-import { WORKSPACE_FIELDS, type WorkspaceField } from '@workspace/service-definition';
+import { WORKSPACE_FIELDS, normalizePhone, type WorkspaceField } from '@workspace/service-definition';
 /** Provider-independent onboarding contract. Model output is DATA, never an executable command. */
 import { SERVICE_DEFINITION_SCHEMA, parseServiceDefinition, definitionIssues, normalizeServiceName, type ServiceDefinition } from '@workspace/service-definition';
 import { DAYS, validRanges, isTimeZone, normalizeWeek, type Week } from './setup-rules';
@@ -171,7 +171,7 @@ export function draftIssues(draft: Draft, existingBranches: string[] = [], exist
     for(const issue of definitionIssues(s.definition))issues.push({key:s.key,...issue});
   }
   for (const r of draft.rooms) { required(r, ['name','branchKey','capacity','serviceKeys']); reference(r); for (const key of r.serviceKeys ?? []) if (!services.has(key)) issues.push({key:r.key,field:'serviceKeys',code:'invalid_reference'}); }
-  for (const p of draft.staff) { required(p, ['name','email','role','workingHours','breaks','serviceKeys']); reference(p); for (const key of p.serviceKeys ?? []) if (!services.has(key)) issues.push({key:p.key,field:'serviceKeys',code:'invalid_reference'}); }
+  for (const p of draft.staff) { required(p, ['name','email','role','workingHours','breaks','serviceKeys']); reference(p); if(p.phone&&!normalizePhone(p.phone))issues.push({key:p.key,field:'phone',code:'invalid_phone'}); for (const key of p.serviceKeys ?? []) if (!services.has(key)) issues.push({key:p.key,field:'serviceKeys',code:'invalid_reference'}); }
   if (!KINDS.some(k => draft[k].length)) issues.push({key:'draft',field:'draft',code:'empty'});
   return issues;
 }

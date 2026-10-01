@@ -1,3 +1,4 @@
+import { normalizePhone } from './phone';
 /** Tenant workspace identity, not a public website or an executable theme. */
 export const WORKSPACE_FIELDS = ['nameAr','nameEn','subtitleAr','subtitleEn','phone','email','address','website','logoDataUrl','primaryColor','accentColor'] as const;
 export const JORMALL_PRIMARY = '#087CB8';
@@ -30,7 +31,7 @@ export function parseWorkspaceProfile(value:unknown):WorkspaceProfile {
   out[f]=typeof raw==='string'?raw.trim()||null:null;
  }
  if(!out.nameAr&&!out.nameEn)errors.push('name');
- if(out.phone&&!/^[+\d][\d ()-]{4,29}$/.test(out.phone))errors.push('phone');
+ if(out.phone){const phone=normalizePhone(out.phone);if(phone)out.phone=phone;else errors.push('phone');}
  if(out.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out.email))errors.push('email');
  if(out.website&&!publicHttpsUrl(out.website))errors.push('website');
  if(out.logoDataUrl&&!validWorkspaceLogo(out.logoDataUrl))errors.push('logoDataUrl');

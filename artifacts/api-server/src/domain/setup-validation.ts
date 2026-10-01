@@ -1,4 +1,4 @@
-import { parseServiceDefinition, definitionIssues, type ServiceDefinition } from "@workspace/service-definition";
+import { parseServiceDefinition, definitionIssues, normalizePhone, type ServiceDefinition } from "@workspace/service-definition";
 import { z } from "zod";
 import { DAYS, validRanges, validBreaks, validTimeOff, isTimeZone, type Week } from "./setup-rules";
 import { ALL_PERMISSIONS } from "./permissions";
@@ -12,7 +12,12 @@ const range = z.object({ open: z.string(), close: z.string() }).strict();
 const day = z.array(range).max(8).refine(validRanges, "invalid_hours");
 export const weekSchema = z.object({ mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day }).strict();
 const defaultWeek = () => Object.fromEntries(DAYS.map((d) => [d, []])) as unknown as Week;
-const contactPhone = z.string().trim().max(50).nullable().optional().transform((v) => v || null);
+export const contactPhone = z.string().trim().max(50).nullable().optional().transform((value, ctx) => {
+  if (!value) return null;
+  const phone = normalizePhone(value);
+  if (phone) return phone;
+  ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'invalid_phone' }); return z.NEVER;
+});
 const contactEmail = z.union([z.string().trim().email().max(200), z.literal(""), z.null()]).optional().transform((v) => v ? v.toLowerCase() : null);
 export const branchSchema = z.object({ address: z.string().trim().max(400).nullable().optional(), mapUrl: z.string().max(500).url().refine(value => { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password; }).nullable().optional(), name, nameLang: lang, timeZone: z.string().refine(isTimeZone, "invalid_timezone"), openingHours: weekSchema }).strict();
 export const serviceDefinitionSchema = z.unknown().transform((value, ctx): ServiceDefinition | null => {
@@ -63,6 +68,7 @@ export const employeeSchema = z.object(employeeFields).strict().refine(checkBrea
 export const newEmployeeSchema = z.object({ ...employeeFields, workingHours: weekSchema.optional(), initialPassword: z.string().min(10).max(200) }).strict().refine(v => v.workingHours === undefined || checkBreaks({...v,workingHours:v.workingHours}), { path: ["breaks"], message: "break_outside_hours" });
 export const pageSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(20), search: z.string().trim().max(120).default("") });
 export const employeePageSchema = pageSchema.extend({ role: z.enum(["manager", "secretary", "doctor", "service_provider", "other_staff"]).optional(), branchId: z.coerce.number().int().positive().optional(), status: z.enum(["active", "inactive"]).optional() });
+export const branchPageSchema = pageSchema.extend({ openingHours: z.enum(['configured']).optional(), timeZone: z.string().max(100).refine(isTimeZone, 'invalid_timezone').optional() });
 export type BranchInput = z.infer<typeof branchSchema>;
 export type ServiceInput = z.infer<typeof serviceSchema>;
 export type ServiceBatchInput = z.infer<typeof serviceBatchSchema>;
@@ -72,3 +78,4 @@ export type EmployeeInput = z.infer<typeof employeeSchema>;
 export type NewEmployeeInput = z.infer<typeof newEmployeeSchema>;
 export type PageInput = z.infer<typeof pageSchema>;
 export type EmployeePageInput = z.infer<typeof employeePageSchema>;
+export type BranchPageInput = z.infer<typeof branchPageSchema>;
