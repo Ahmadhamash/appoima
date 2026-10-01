@@ -25,12 +25,12 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
   input.oninput = () => { validate(); row[key] = input.value.trim() || null; if (key === 'name') row.nameLang = /[\u0600-\u06ff]/.test(input.value) ? 'ar' : 'en'; changed(draft); }; validate(); field(host, title, input);
  };
  const schedule = (host: HTMLElement, row: any, key: string, title: string) => {
-  const section = el('details', 'jc-structured-hours'); section.append(el('summary', '', title));
+  const section = el('section', 'jc-structured-hours');section.dataset.setupTitle=title;section.append(el('h3', '', title));
   const week: Week = row[key] ?? emptyWeek(); row[key] = week;
-  section.append(createBranchHoursEditor(week,{id:`setup-${row.key}`,language},next=>{row[key]=next;changed(draft);}).node);host.append(section);
+  section.append(createBranchHoursEditor(week,{id:`setup-${row.key}`,language,pagedDays:true},next=>{row[key]=next;changed(draft);}).node);host.append(section);return section;
  };
  const render = (page = Number(list.dataset.setupPage) || 0) => {
-  const staffPages = new Map(Array.from(list.querySelectorAll<HTMLElement>('[data-testid="setup-staff-card"]')).map((card, index) => [index, Number(card.dataset.setupPage) || 0]));
+  const staffPages = new Map(Array.from(list.querySelectorAll<HTMLElement>('.jc-service-batch-row')).map((card, index) => [index, Number(card.dataset.setupPage) || 0]));
   list.replaceChildren();
   const cards: HTMLElement[] = [];
   draft[kind].forEach((row, index) => {
@@ -39,7 +39,8 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
    if (kind === 'branches') {
     textField(fields, row, 'address', w('موقع الفرع: المدينة، الشارع، المبنى', 'Branch address: city, street, building'), true, 'text', 400);
     textField(fields, row, 'mapUrl', w('رابط الموقع على الخريطة (اختياري)', 'Map link (optional)'), false, 'url', 500);
-    card.append(fields); schedule(card, row, 'openingHours', w('أيام وساعات الدوام', 'Opening days and hours'));
+    fields.dataset.setupTitle=w('بيانات الفرع','Branch details');card.append(fields);const hours=schedule(card, row, 'openingHours', w('أيام وساعات الدوام', 'Opening days and hours'));
+    const detailPager=setupPager(card,[fields,hours],language,`branch-detail-pages-${row.key}`);if(detailPager)card.insertBefore(detailPager,fields);card.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:staffPages.get(index)??0}));
    } else {
     const person = row as StaffDraft;
     textField(fields, person, 'email', w('البريد الإلكتروني للدخول', 'Sign-in email'), true, 'email', 200);
@@ -54,16 +55,17 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
     const services = el('fieldset'); services.append(el('legend', '', w('الخدمات التي يقدمها', 'Services provided')));
     for (const service of draft.services.filter(s => s.branchScope === 'all' || person.branchSchedules?.some(shift=>shift.branchKey===s.branchKey))) { const label = el('label', 'jc-check'), check = el('input'); check.type = 'checkbox'; check.checked = !!person.serviceKeys?.includes(service.key); check.onchange = () => { person.serviceKeys = check.checked ? [...person.serviceKeys ?? [], service.key] : (person.serviceKeys ?? []).filter(k => k !== service.key); changed(draft); }; label.append(check, document.createTextNode(service.name ?? '')); services.append(label); } assignments.append(services);
     const shiftBranches=draft.branches.map(b=>({key:b.key,name:b.name??w('فرع','Branch'),timeZone:b.timeZone??'Asia/Amman',openingHours:b.openingHours}));
-    assignments.prepend(createStaffBranchSchedules(shiftBranches,person.branchSchedules,language,`setup-${person.key}-branches`,next=>{const keysChanged=JSON.stringify(next.map(s=>s.branchKey))!==JSON.stringify(person.branchSchedules?.map(s=>s.branchKey));person.branchSchedules=next;person.branchKey=next.length===1?next[0]!.branchKey:null;person.workingHours=next[0]?.workingHours??null;person.breaks=next[0]?.breaks??emptyWeek();person.serviceKeys=(person.serviceKeys??[]).filter(k=>draft.services.some(s=>s.key===k&&(s.branchScope==='all'||next.some(n=>n.branchKey===s.branchKey))));changed(draft);if(keysChanged)render(index);}).node);
+    assignments.prepend(createStaffBranchSchedules(shiftBranches,person.branchSchedules,language,`setup-${person.key}-branches`,next=>{const keysChanged=JSON.stringify(next.map(s=>s.branchKey))!==JSON.stringify(person.branchSchedules?.map(s=>s.branchKey));person.branchSchedules=next;person.branchKey=next.length===1?next[0]!.branchKey:null;person.workingHours=next[0]?.workingHours??null;person.breaks=next[0]?.breaks??emptyWeek();person.serviceKeys=(person.serviceKeys??[]).filter(k=>draft.services.some(s=>s.key===k&&(s.branchScope==='all'||next.some(n=>n.branchKey===s.branchKey))));changed(draft);if(keysChanged)render(index);},true).node);
     card.append(assignments);
-    const detailPager = setupPager(card, [fields, assignments], language, `staff-detail-pages-${row.key}`);
+    fields.dataset.setupTitle=w('بيانات الموظف','Staff details');assignments.dataset.setupTitle=w('الدوام حسب الفرع','Schedule per branch');services.dataset.setupTitle=w('الخدمات','Services');services.remove();card.append(services);
+    const detailPager = setupPager(card, [fields, assignments,services], language, `staff-detail-pages-${row.key}`);
     if (detailPager) card.insertBefore(detailPager, fields);
     card.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: staffPages.get(index) ?? 0 }));
    } if(kind==='branches'&&archiveBranch)card.append(button(w('حذف الفرع','Delete branch'),()=>{if(!window.confirm(w('حذف هذا الفرع؟ سيتم نقل بياناته وكل السجلات المرتبطة به إلى الأرشيف.','Delete this branch? Its data and related records will move to the archive.')))return;void archiveBranch(row.key,draft);},'jc-button jc-remove',`setup-delete-${row.key}`));cards.push(card);
   }); changed(draft);
   list.append(...cards);
-  if (kind === 'staff') {
-   const pager = setupPager(list, cards, language, 'concierge-staff-pages');
+  {
+   const pager = setupPager(list, cards, language, `concierge-${kind==='staff'?'staff':'branch'}-pages`);
    if (pager) list.prepend(pager);
    list.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: page }));
   }
@@ -81,18 +83,19 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
   event.preventDefault(); error.hidden = true;
   const invalidField = Array.from(form.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')).find(input => !input.validity.valid);
   if (invalidField) {
-   const card = invalidField.closest<HTMLElement>('[data-testid="setup-staff-card"]');
-   if (card) list.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: Array.from(list.querySelectorAll('[data-testid="setup-staff-card"]')).indexOf(card) }));
-   if (card) card.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: invalidField.closest('.jc-staff-assignments') ? 1 : 0 }));
+   const card = invalidField.closest<HTMLElement>('.jc-service-batch-row');
+   if (card) list.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: Array.from(list.querySelectorAll('.jc-service-batch-row')).indexOf(card) }));
+   if (card) card.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: invalidField.closest('.jc-staff-assignments,.jc-structured-hours') ? 1 : 0 }));
+   invalidField.closest('.weekly-schedule')?.dispatchEvent(new CustomEvent('jormall:schedule-reveal',{detail:invalidField.dataset.testid}));
    const hours = invalidField.closest('details'); if (hours) hours.open = true;
    invalidField.reportValidity(); return;
   }
   const invalidIndex = draft[kind].findIndex(row => { if('branchSchedules' in row){return !row.branchSchedules?.length||row.branchSchedules.some(s=>!DAYS.some(d=>s.workingHours[d].length)||DAYS.some(d=>s.workingHours[d].some(r=>!r.open||!r.close||r.open>=r.close)));}const hours = 'openingHours' in row ? row.openingHours : row.workingHours; return !hours || !DAYS.some(day => hours[day].length) || DAYS.some(day => hours[day].some(r => !r.open || !r.close || r.open >= r.close)); });
   if (invalidIndex >= 0) {
-   if (kind === 'staff') list.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: invalidIndex }));
+   list.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: invalidIndex }));
    error.textContent = w('حدّد يوم عمل واحدًا على الأقل لكل سجل، ووقت انتهاء بعد البداية.', 'Choose at least one working day per record, with the end after the start.'); error.hidden = false;
    const card = list.querySelectorAll<HTMLElement>('[data-testid="setup-staff-card"], [data-testid="setup-branches-card"]')[invalidIndex];
-   if (kind === 'staff') card?.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: 1 }));
+   card?.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: 1 }));
    for (const details of card?.querySelectorAll('details') ?? []) details.open = true;
    return;
   }

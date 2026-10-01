@@ -241,8 +241,9 @@ private fieldEvent=(event:Event)=>{if(this.closed||this.session?.sourceImport)re
  private serviceBatchView(block:HTMLElement):boolean{
   if(!this.session||this.session.serviceWizard||this.session.workflow?.step!=='services')return false;
 
+  if(!this.serviceOptions&&!this.optionsLoading&&!this.optionsError)void this.loadServiceOptions();
   const source=this.draftWorking?.revision===this.session.revision?this.draftWorking.draft:this.session.draft;
-  block.append(buildServiceBatch(source,this.language,(draft,advance)=>this.saveStepDraft(draft,advance),draft=>this.backStep(draft),draft=>{this.draftWorking={revision:this.session!.revision,draft};}));return true;
+  block.append(buildServiceBatch(source,this.language,(draft,advance)=>this.saveStepDraft(draft,advance),draft=>this.backStep(draft),draft=>{this.draftWorking={revision:this.session!.revision,draft};},this.serviceOptions?.categories??[]));return true;
  }
  private roomBatchView(block:HTMLElement):boolean{
   if(!this.session||this.session.serviceWizard||this.session.workflow?.step!=='rooms')return false;
@@ -535,7 +536,7 @@ private async lookupCompany(raw:string){const query=raw.trim().slice(0,120);if(!
  private async loadServiceOptions(){
   if(this.optionsLoading||this.closed)return;this.optionsLoading=true;this.optionsError=false;
   try{this.serviceOptions=await this.api.request<ServiceOptions>('/service-options');}catch{if(!this.closed)this.optionsError=true;}
-  finally{this.optionsLoading=false;if(!this.closed)this.renderWizard();}
+  finally{this.optionsLoading=false;if(!this.closed){if(this.session?.serviceWizard)this.renderWizard();else if(this.session?.workflow?.step==='services')this.render();}}
  }
  private async saveServiceDraft(draft:Draft){
   if(!this.session||this.busy||this.voiceSaving)throw new ConciergeHTTPError('concierge_busy',409);

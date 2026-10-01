@@ -321,6 +321,14 @@ export async function setEmployeeActive(actor: User, id: number, isActive: boole
 }
 
 /** Purpose-limited labels for form selections, not a bypass to private resource details. */
+export async function serviceCategories(actor: User) {
+  ensure(actor, 'services.read');
+  const rows = await db.selectDistinct({name:servicesTable.category}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicOf(actor)),activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.category));
+  const unique = new Map<string,string>();
+  for(const row of rows){const name=row.name.trim().replace(/\s+/g,' ');if(name&&!unique.has(name.normalize('NFKC').toLocaleLowerCase()))unique.set(name.normalize('NFKC').toLocaleLowerCase(),name);}
+  return [...unique.values()];
+}
+
 export async function setupOptions(actor: User, resource: SetupResource) {
   ensure(actor, `${resourceArea[resource]}.read`);
   const clinicId = clinicOf(actor);
@@ -328,7 +336,7 @@ export async function setupOptions(actor: User, resource: SetupResource) {
   const services = ["rooms", "employees"].includes(resource) ? await db.select({ id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId, isActive: servicesTable.isActive, definition: servicesTable.definition, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.name)) : [];
   const employees = resource === "services" ? await db.select({ id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang, branchId: usersTable.branchId, branchSchedules: usersTable.branchSchedules, isActive: usersTable.isActive }).from(usersTable).where(and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), inArray(usersTable.role, ['doctor', 'service_provider']))).orderBy(asc(usersTable.name)) : [];
   const canManageStaff = resource === "employees" && hasPermission(actor, "employees.manage");
-  return { branches, services, employees,
+  return { branches, services, employees, categories:resource==='services'?await serviceCategories(actor):[],
     timeZones: resource === "branches" ? [...new Set(["Asia/Amman", "UTC", ...(Intl as unknown as {supportedValuesOf(k: string): string[]}).supportedValuesOf("timeZone")])] : [],
     currencies: resource === "services" ? (Intl as unknown as {supportedValuesOf(k: string): string[]}).supportedValuesOf("currency") : [],
     grantablePermissions: canManageStaff ? ALL_PERMISSIONS.filter((p) => hasPermission(actor, p)) : [],

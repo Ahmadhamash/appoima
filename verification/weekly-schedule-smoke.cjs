@@ -51,10 +51,12 @@ async function editBranch(page, id, manual) {
   await page.getByTestId(check('thu')).check();
   await page.getByTestId(time('open')).fill('10:00');
   await page.getByTestId(time('close')).fill('18:00');
+  if (!manual) await page.getByTestId(`${id}-mon-detail-pages-next`).click();
   await page.getByTestId(`${id}-breaks-mon-add`).click();
   await page.getByTestId(`${id}-breaks-mon-0-open`).fill('13:00');
   await page.getByTestId(`${id}-breaks-mon-0-close`).fill('14:00');
   await page.getByTestId(`${id}-breaks-mon-add`).click();
+  if (!manual) await page.getByTestId(`${id}-mon-breaks-pages-next`).click();
   await page.getByTestId(`${id}-breaks-mon-1-open`).fill('16:00');
   await page.getByTestId(`${id}-breaks-mon-1-close`).fill('16:15');
   await page.getByTestId(`${id}-copy-day`).selectOption('mon');
@@ -62,6 +64,7 @@ async function editBranch(page, id, manual) {
   assert.equal(await page.getByTestId(`${id}-breaks-tue-0-open`).inputValue(), '13:00');
   assert.equal(await page.getByTestId(`${id}-breaks-thu-1-close`).inputValue(), '16:15');
   assert.equal(await page.getByTestId(check('wed')).isChecked(), false);
+  if (!manual) await page.getByTestId(`${id}-mon-breaks-pages-previous`).click();
   await page.getByTestId(`${id}-breaks-mon-0-open`).fill('09:00');
   assert.equal(await page.getByTestId(`${id}-apply-all`).isDisabled(), true);
 }
@@ -71,7 +74,8 @@ async function fit(page) {
   assert.deepEqual(wide, [], 'Schedule controls must fit the viewport');
 }
 
-(async () => {
+module.exports = { mount };
+if (require.main === module) (async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
   try {
     for (const [width, lang] of [[1440, 'en'], [390, 'ar']]) {
@@ -111,7 +115,7 @@ async function fit(page) {
       try {
         const { page } = guided;
         await page.goto(base + '/clinic-setup'); await page.getByTestId('setup-branch_1-name').waitFor();
-        await page.getByTestId('setup-branch_1').locator('..').locator('summary').click();
+        if (await page.getByTestId('branch-detail-pages-branch_1-next').isEnabled()) await page.getByTestId('branch-detail-pages-branch_1-next').click();
         await editBranch(page, 'setup-branch_1', false);
         await page.getByTestId('setup-branches-continue').click(); assert.equal(guided.writes.filter(w => w.path === '/api/concierge/draft').length, 0);
         await page.getByTestId('setup-branch_1-breaks-mon-0-open').fill('13:00'); await fit(page);
@@ -122,14 +126,14 @@ async function fit(page) {
         }
         await page.getByTestId('concierge-journey-staff').click();
         for (const day of ['mon', 'tue', 'thu']) assert.deepEqual(guided.current().draft.branches[0].openingHours[day], expectedOpening);
-        await page.getByTestId('staff-detail-pages-staff_1').getByRole('button').last().click();
+        await page.getByTestId('staff-detail-pages-staff_1-next').click();
         const id = 'setup-staff_1-branches-branch_1';
-        await page.getByTestId(`${id}-workingHours-tue`).check(); await page.getByTestId(`${id}-breaks-mon-add`).click();
+        await page.getByTestId(`${id}-workingHours-tue`).check(); await page.getByTestId(`${id}-mon-detail-pages-next`).click(); await page.getByTestId(`${id}-breaks-mon-add`).click();
         await page.getByTestId(`${id}-breaks-mon-0-open`).fill('13:00'); await page.getByTestId(`${id}-breaks-mon-0-close`).fill('14:00');
         await page.getByTestId(`${id}-apply-all`).click();
         await page.getByTestId('concierge-journey-branches').click();
         const shift = guided.current().draft.staff[0].branchSchedules[0]; assert.deepEqual(shift.breaks.mon, shift.breaks.tue);
-        await page.getByTestId('setup-branch_1').locator('..').locator('summary').click();
+        if (await page.getByTestId('branch-detail-pages-branch_1-next').isEnabled()) await page.getByTestId('branch-detail-pages-branch_1-next').click();
         assert.equal(await page.getByTestId('setup-branch_1-breaks-mon-0-open').inputValue(), '13:00');
         assert.equal(await page.getByTestId('setup-branch_1-openingHours-mon-0-close').inputValue(), '18:00');
         await page.getByTestId('concierge-journey-review').click(); await page.getByTestId('concierge-review-open').click();
@@ -137,9 +141,11 @@ async function fit(page) {
         await page.getByTestId('concierge-record-branch_1-pages').getByRole('button').last().click();
         assert.equal(await page.getByTestId('draft-branch_1-breaks-tue-1-open').inputValue(), '16:00');
         const before = guided.writes.length;
+        await page.getByTestId('draft-branch_1-mon-detail-pages-next').click();
         await page.getByTestId('draft-branch_1-breaks-mon-0-open').fill('09:00');
         await page.getByTestId('concierge-save-draft').click(); assert.equal(guided.writes.length, before, 'Review must not save invalid breaks');
         await page.getByTestId('draft-branch_1-breaks-mon-0-open').fill('13:00');
+        await page.getByTestId('draft-branch_1-mon-detail-pages-previous').click();
         await page.getByTestId('draft-branch_1-openingHours-mon-0-close').fill('19:00');
         await page.getByTestId('draft-branch_1-apply-all').click(); await fit(page);
         await page.getByTestId('concierge-save-draft').click();
@@ -149,6 +155,7 @@ async function fit(page) {
         await page.getByTestId('concierge-review-pages').getByRole('button').last().click();
         const reviewId = 'draft-staff_1-branches-branch_1';
         for (let i = 0; i < 8 && !await page.getByTestId(`${reviewId}-copy-day`).isVisible(); i++) await page.getByTestId('concierge-record-staff_1-pages').getByRole('button').last().click();
+        await page.getByTestId(`${reviewId}-day-tue`).click();
         await page.getByTestId(`${reviewId}-workingHours-tue-0-open`).fill('10:00');
         await page.getByTestId(`${reviewId}-copy-day`).selectOption('tue'); await page.getByTestId(`${reviewId}-apply-all`).click();
         await page.getByTestId('concierge-save-draft').click();

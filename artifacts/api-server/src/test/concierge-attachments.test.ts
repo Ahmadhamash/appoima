@@ -29,9 +29,9 @@ describe('Setup attachments and Jordan defaults',()=>{
   const sole=importPublicDetails(emptyDraft(),{branches:[{name:'One'}],services:[{name:'Laser'}]},{branches:[],services:[]});
   expect(sole.services[0]?.branchScope).toBe('branch');expect(sole.services[0]?.branchKey).toBe(sole.branches[0]?.key);
  });
- it('requires a custom label for Other and preserves it through validation',()=>{
+ it('preserves manager supplied labels through validation',()=>{
   const draft=importPublicDetails(emptyDraft(),{branches:[{name:'One'}],services:[{name:'Custom offering'}]},{branches:[],services:[]});
-  draft.services[0]!.category='Other';expect(draftIssues(draft).some(issue=>issue.field==='customCategory')).toBe(true);
+  draft.services[0]!.category='تصنيف المدير';expect(draftIssues(draft).some(issue=>issue.field==='category')).toBe(false);
   draft.services[0]!.definition={...createDefinition('custom','ar'),section:'تصنيف المدير',medicalScope:'medical'};
   expect(draftIssues(parseDraft(draft)).some(issue=>issue.field==='customCategory')).toBe(false);
   expect(parseDraft(draft).services[0]!.definition!.section).toBe('تصنيف المدير');

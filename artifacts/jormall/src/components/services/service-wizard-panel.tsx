@@ -1,3 +1,4 @@
+import { CategoryField } from '../category-field';
 import { useEffect, useState } from 'react';
 import { SERVICE_TEMPLATES, createDefinition, parseServiceDefinition, ServiceDefinitionError, type TemplateId, type IntakeAnswers } from '@workspace/service-definition';
 import type { Session, Draft, ServiceDraft, ServiceOptions, Review } from '../concierge/contract';
@@ -8,7 +9,7 @@ import { IntakeFields } from './intake-fields';
 type Language='ar'|'en';
 const emptyOptions:ServiceOptions={branches:[],employees:[],rooms:[]};
 function newService(template:TemplateId,language:Language):ServiceDraft {
- return {key:`service_${createRequestId().replace(/-/g,'').slice(0,20)}`,name:null,nameLang:language,branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:SERVICE_TEMPLATES.find(t=>t.id===template)!.category,requiresRoom:null,employeeIds:[],roomIds:[],definition:createDefinition(template,language)};
+ return {key:`service_${createRequestId().replace(/-/g,'').slice(0,20)}`,name:null,nameLang:language,branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:null,requiresRoom:null,employeeIds:[],roomIds:[],definition:createDefinition(template,language)};
 }
 function ServiceEditor({initial,options,language,busy,onCancel,onSave}:{initial:ServiceDraft;options:ServiceOptions;language:Language;busy:boolean;onCancel:()=>void;onSave:(s:ServiceDraft)=>Promise<void>}) {
  const [service,setService]=useState<ServiceDraft>(()=>({...structuredClone(initial),currency:'JOD'})),[error,setError]=useState(''),[answers,setAnswers]=useState<IntakeAnswers>({});
@@ -29,7 +30,8 @@ function ServiceEditor({initial,options,language,busy,onCancel,onSave}:{initial:
    <details className="sv-assignment"><summary>{w('مقدّمو الخدمة والغرف','Service providers and rooms')}</summary><p className="sv-help">{w('لن يظهر وقت متاح للحجز بدون مقدّم خدمة وجدول دوام صالح، وغرفة متاحة إذا كانت مطلوبة.','Booking availability requires an assigned provider, valid working hours and an available room when required.')}</p><fieldset className="sv-pickers"><legend>{w('مقدّمو الخدمة','Service providers')}</legend>{employees.length?employees.map(e=><label className="sv-check" key={e.id}><input type="checkbox" checked={service.employeeIds?.includes(e.id)??false} onChange={event=>change({employeeIds:event.target.checked?[...(service.employeeIds??[]),e.id]:(service.employeeIds??[]).filter(id=>id!==e.id)})}/>{e.name}</label>):<p className="sv-help">{w('لا يوجد موظفون متاحون ضمن صلاحياتك ونطاق الفرع. أكملهم من قسم الموظفين.','No employees available for this scope/access. Configure them in Employees.')}</p>}</fieldset>
     {service.requiresRoom&&<fieldset className="sv-pickers"><legend>{w('الغرف المتاحة','Available rooms')}</legend>{rooms.length?rooms.map(r=><label className="sv-check" key={r.id}><input type="checkbox" checked={service.roomIds?.includes(r.id)??false} onChange={e=>change({roomIds:e.target.checked?[...(service.roomIds??[]),r.id]:(service.roomIds??[]).filter(id=>id!==r.id)})}/>{r.name}</label>):<p className="sv-help">{w('أكمل الغرف وربطها بالخدمات من قسم الغرف.','Configure and link service rooms in Rooms.')}</p>}</fieldset>}
    </details>
-   <DefinitionEditor value={service.definition} onChange={definition=>{change({definition,category:SERVICE_TEMPLATES.find(t=>t.id===definition?.template)?.category??'Other'});setAnswers({});}} language={language}/>
+   <CategoryField label={w('التصنيف','Category')} value={service.category??''} options={options.categories??[]} language={language} onChange={value=>change({category:value.trim()||null})} testId="wizard-service-category"/>
+   <DefinitionEditor value={service.definition} onChange={definition=>{change({definition});setAnswers({});}} language={language}/>
    <details className="sv-preview-details" open><summary>{w('معاينة فورية للتصميم','Live design preview')}</summary><ServiceCard service={service} language={language} draft/><IntakeFields definition={service.definition} answers={answers} onChange={setAnswers} language={language} preview/></details>
    {error&&<p className="sv-error" role="alert">{error}</p>}
    <div className="sv-editor-actions"><button className="sv-button sv-primary" type="button" onClick={()=>void save()} data-testid="wizard-save-service">{busy?w('جارٍ الحفظ…','Saving…'):w('حفظ في المسودة','Save to draft')}</button><button type="button" className="sv-button" onClick={onCancel}>{w('إلغاء التعديل','Cancel edits')}</button></div>

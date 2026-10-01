@@ -10,14 +10,13 @@ export type TimeOff = { startsAt: string; endsAt: string; note: string };
 export const emptyWeek = (): Week => ({ mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] });
 export type StaffRole = Exclude<UserRole, 'platform_owner'>;
 export const STAFF_ROLES: StaffRole[] = ['manager', 'secretary', 'doctor', 'service_provider', 'other_staff'];
-export const CATEGORIES = ['Hair', 'Nails', 'Skin', 'Laser', 'Massage', 'Makeup', 'Other'] as const;
 export const PERMISSION_AREAS = ['appointments', 'customers', 'employees', 'services', 'rooms', 'inventory', 'settings'];
 export function can(user: SessionUser | null, permission: string): boolean {
   return Boolean(user && user.role !== 'platform_owner' && (user.permissions.includes(permission) || (permission.endsWith('.read') && user.permissions.includes(permission.replace(/\.read$/, '.manage')))));
 }
 export type Option = { id: number; name: string; nameLang: 'en' | 'ar'; branchSchedules?:StaffBranchSchedule[];branchId?: number | null; timeZone?: string; openingHours?: Week; isActive?: boolean; definition?: ServiceDefinition | null; requiredEquipment?: string[] };
 export type StaffBranchSchedule={branchId:number;workingHours:Week;breaks:Week};
-export type Options = { branches: Option[]; services: Option[]; employees: Option[]; timeZones: string[]; currencies: string[]; grantablePermissions: string[]; rolePresets: Partial<Record<StaffRole, string[]>> };
+export type Options = { categories?:string[];branches: Option[]; services: Option[]; employees: Option[]; timeZones: string[]; currencies: string[]; grantablePermissions: string[]; rolePresets: Partial<Record<StaffRole, string[]>> };
 export type RecordItem = Option & {
   branchSchedules?:StaffBranchSchedule[];archivedAt?:string|null;
   address?: string | null; mapUrl?: string | null;
@@ -26,7 +25,7 @@ export type RecordItem = Option & {
   role?: StaffRole; jobTitle?: string | null; permissions?: string[]; canEditAccess?: boolean;
   mustChangePassword?: boolean; workingHours?: Week; breaks?: Week; timeOff?: TimeOff[];
   timeZone?: string; openingHours?: Week; durationMinutes?: number; price?: string;
-  currency?: string; category?: typeof CATEGORIES[number]; requiresRoom?: boolean;
+  currency?: string; category?: string; requiresRoom?: boolean;
   requiredEquipment?: string[]; extra?: {equipment?: string[]};
   followUpEnabled?: boolean;
   employeeIds?: number[]; serviceIds?: number[]; capacity?: number; status?: 'available' | 'maintenance';

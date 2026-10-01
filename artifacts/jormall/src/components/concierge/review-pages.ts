@@ -37,4 +37,5 @@ export function reviewRecordPages(card:HTMLDetailsElement,language:Language,key:
 export function revealReviewField(card:HTMLDetailsElement,input:HTMLElement){
  const pages=Array.from(card.querySelectorAll<HTMLElement>(':scope>.jc-record-page-body>.jc-record-page'));
  const index=pages.findIndex(part=>part.contains(input));if(index>=0)card.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:index}));
+ input.closest('.weekly-schedule')?.dispatchEvent(new CustomEvent('jormall:schedule-reveal',{detail:input.dataset.testid}));
 }

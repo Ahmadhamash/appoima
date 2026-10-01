@@ -120,6 +120,13 @@
       "when": 1790848800000,
       "tag": "0016_branch_archives_staff_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790852400000,
+      "tag": "0017_custom_service_categories",
+      "breakpoints": true
     }
   ]
 }

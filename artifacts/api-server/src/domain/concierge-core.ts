@@ -9,7 +9,7 @@ export const KINDS: Kind[] = ['branches', 'services', 'rooms', 'staff'];
 export const CONSENT_VERSION = 'concierge-openai-soniox-2026-09-22';
 export const LIMITS = { records: 50, patches: 20, messageChars: 6000, replyChars: 1400, history: 24, uploadBytes: 32 * 1024 * 1024, textFileChars: 60000, dailyTurns: 80, dailyUploads: 10, dailySpeechChars: 24000, dailyVoiceSessions: 4, voiceSeconds: 3300, retentionDays: 30 } as const;
 export type BranchDraft = { address?: string | null; mapUrl?: string | null; key: string; existingId: number | null; name: string | null; nameLang: Language | null; timeZone: string | null; openingHours: Week | null };
-export type ServiceDraft = { followUpEnabled?: boolean | null; definition?: ServiceDefinition | null; branchScope?: 'all' | 'branch' | null; employeeIds?: number[] | null; roomIds?: number[] | null; key: string; name: string | null; nameLang: Language | null; branchKey: string | null; durationMinutes: number | null; price: string | null; currency: string | null; category: 'Hair' | 'Nails' | 'Skin' | 'Laser' | 'Massage' | 'Makeup' | 'Other' | null; requiresRoom: boolean | null };
+export type ServiceDraft = { followUpEnabled?: boolean | null; definition?: ServiceDefinition | null; branchScope?: 'all' | 'branch' | null; employeeIds?: number[] | null; roomIds?: number[] | null; key: string; name: string | null; nameLang: Language | null; branchKey: string | null; durationMinutes: number | null; price: string | null; currency: string | null; category: string | null; requiresRoom: boolean | null };
 export type RoomDraft = { key: string; name: string | null; nameLang: Language | null; branchKey: string | null; capacity: number | null; serviceKeys: string[] | null };
 export type DraftBranchSchedule={branchKey:string;workingHours:Week;breaks:Week};
 export type StaffDraft = { key: string; name: string | null; nameLang: Language | null; email: string | null; phone: string | null; jobTitle: string | null; branchSchedules?:DraftBranchSchedule[]|null; branchKey: string | null; role: 'secretary' | 'doctor' | 'service_provider' | 'other_staff' | null; serviceKeys: string[] | null; workingHours: Week | null; breaks: Week | null };
@@ -32,7 +32,7 @@ const array = (items: Shape): Shape => ({ type: 'array', items });
 const week = object(Object.fromEntries(DAYS.map(d => [d, array(object({ open: string, close: string }))])));
 const base = { key: string, name: nullable(string), nameLang: nullable(enumeration(['ar', 'en'])) };
 const branchShape = object({ ...base, address: nullable(string), mapUrl: nullable(string), existingId: nullable(number), timeZone: nullable(string), openingHours: nullable(week) });
-export const serviceShape = object({ ...base, definition: nullable(SERVICE_DEFINITION_SCHEMA), branchScope: nullable(enumeration(['all','branch'])), employeeIds: nullable(array(number)), roomIds: nullable(array(number)), branchKey: nullable(string), durationMinutes: nullable(number), price: nullable(string), currency: nullable(string), category: nullable(enumeration(['Hair','Nails','Skin','Laser','Massage','Makeup','Other'])), requiresRoom: nullable(boolean), followUpEnabled: nullable(boolean) });
+export const serviceShape = object({ ...base, definition: nullable(SERVICE_DEFINITION_SCHEMA), branchScope: nullable(enumeration(['all','branch'])), employeeIds: nullable(array(number)), roomIds: nullable(array(number)), branchKey: nullable(string), durationMinutes: nullable(number), price: nullable(string), currency: nullable(string), category: nullable(string), requiresRoom: nullable(boolean), followUpEnabled: nullable(boolean) });
 const roomShape = object({ ...base, branchKey: nullable(string), capacity: nullable(number), serviceKeys: nullable(array(string)) });
 const staffShape = object({ ...base, branchSchedules:nullable(array(object({branchKey:string,workingHours:week,breaks:week}))), email: nullable(string), phone: nullable(string), jobTitle: nullable(string), branchKey: nullable(string), role: nullable(enumeration(['secretary','doctor','service_provider','other_staff'])), serviceKeys: nullable(array(string)), workingHours: nullable(week), breaks: nullable(week) });
 export const DRAFT_SCHEMA = object({ branches: array(branchShape), services: array(serviceShape), rooms: array(roomShape), staff: array(staffShape) });
@@ -95,6 +95,7 @@ export function parseDraft(raw: unknown): Draft {
   if (new Set(draft.branches.filter(b => b.existingId !== null).map(b => b.existingId)).size !== draft.branches.filter(b => b.existingId !== null).length) fail();
   const serviceNames = new Set<string>();
   for (const s of draft.services) {
+    if(s.category!==null){if(!s.category.trim()||s.category.length>80||/[\u0000-\u001f\u007f]/u.test(s.category))fail();s.category=s.category.trim().replace(/\s+/g,' ');}
     if (s.definition) { try { s.definition = parseServiceDefinition(s.definition); } catch { fail(); } }
     for (const selection of [s.employeeIds,s.roomIds]) if (selection && (selection.some(id=>!Number.isSafeInteger(id)||id<=0) || new Set(selection).size!==selection.length)) fail();
     if (s.branchScope === 'all' && s.branchKey !== null) fail();
@@ -171,7 +172,6 @@ export function draftIssues(draft: Draft, existingBranches: string[] = [], exist
   for (const s of draft.services) {
     required(s, ['name','durationMinutes','price','currency','category','requiresRoom','branchScope']); reference(s);
     if(s.branchScope==='branch'&&!s.branchKey)issues.push({key:s.key,field:'branchKey',code:'required'});
-    if(s.category==='Other'&&(!s.definition||['خدمات العيادة','Clinic services'].includes(s.definition.section)))issues.push({key:s.key,field:'customCategory',code:'required'});
     for(const issue of definitionIssues(s.definition))issues.push({key:s.key,...issue});
   }
   for (const r of draft.rooms) { required(r, ['name','branchKey','capacity','serviceKeys']); reference(r); for (const key of r.serviceKeys ?? []) if (!services.has(key)) issues.push({key:r.key,field:'serviceKeys',code:'invalid_reference'}); }

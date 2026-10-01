@@ -1,19 +1,26 @@
 import { el, button } from './concierge/dom';
 import { DAYS, type Week, type Language } from './concierge/contract';
 import { branchHoursFromSchedule, scheduleFromBranchHours, scheduleDayValid, type WeeklySchedule } from './weekly-schedule-rules';
+import { setupPager } from './concierge/paging';
 
 type Day = typeof DAYS[number];
 type Options = {
   id: string; language: Language; label?: string; hint?: string;
   hoursKey?: 'workingHours' | 'openingHours'; manualBranch?: boolean; branch?: boolean;
+  pagedDays?: boolean;
 };
 
 export function createWeeklySchedule(initial: WeeklySchedule, options: Options, onChange: (value: WeeklySchedule) => void) {
   let value = structuredClone(initial);
-  const { id, language, manualBranch = false, branch = false, hoursKey = 'workingHours' } = options;
+  const { id, language, manualBranch = false, branch = false, hoursKey = 'workingHours', pagedDays = false } = options;
   const ar = language === 'ar', w = (a: string, e: string) => ar ? a : e;
   const names = ar ? ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'] : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const root = el('fieldset', 'weekly-schedule'); root.dataset.testid = id;
+  root.classList.toggle('weekly-schedule-paged',pagedDays);
+  let activeDay:Day=DAYS.find(day=>value.workingHours[day].length)??'mon';
+  const detailPages=new Map<Day,number>();
+  const intervalPages=new Map<string,number>();
+  const dayChoices=el('div','weekly-schedule-day-choices');
   if (options.label) root.append(el('legend', '', options.label));
   root.append(el('p', 'weekly-schedule-hint', options.hint ?? w(
     'حدّد أيام الدوام، ثم انسخ الوقت والبريكات من يوم واحد إلى كل الأيام المحددة في هذا الفرع.',
@@ -38,7 +45,7 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
     render(); onChange(structuredClone(value));
     status.textContent = w(`تم تطبيق الوقت والبريكات على ${selected.length} أيام دوام.`, `Hours and breaks applied to ${selected.length} working days.`);
   }, 'weekly-schedule-apply', `${id}-apply-all`);
-  toolbar.append(sourceLabel, apply); root.append(toolbar, status, days);
+  toolbar.append(sourceLabel, apply); if(pagedDays)root.append(dayChoices);root.append(toolbar, status, days);
   source.onchange = () => refresh();
 
   const checkId = (day: Day) => manualBranch ? `${id}-${day}-open` : `${id}-${hoursKey}-${day}`;
@@ -60,7 +67,8 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
       const valid = validDay(day), card = days.querySelector<HTMLElement>(`[data-day="${day}"]`);
       const message = valid ? '' : w('راجع الأوقات: النهاية بعد البداية، والبريكات ضمن الدوام وبدون تداخل (حتى 8 فترات).', 'Check times: the end must follow the start; breaks must fit within work hours without overlap (up to 8 intervals).');
       for (const input of card?.querySelectorAll<HTMLInputElement>('input[type=time]') ?? []) {
-        input.setCustomValidity(message); input.setAttribute('aria-invalid', String(!valid));
+        const invalid=input.dataset.testid?.includes('-breaks-')?!valid:!scheduleDayValid(value.workingHours[day],[]);
+        input.setCustomValidity(invalid?message:''); input.setAttribute('aria-invalid', String(invalid));
       }
       const error = card?.querySelector<HTMLElement>('.weekly-schedule-error');
       if (error) { error.textContent = message; error.hidden = valid; }
@@ -79,20 +87,29 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
   }
 
   function render() {
-    days.replaceChildren();
+    for(const day of DAYS){const card=days.querySelector<HTMLElement>(`[data-day="${day}"]`);if(card){detailPages.set(day,Number(card.dataset.setupPage)||0);for(const key of ['hours','breaks'])intervalPages.set(`${day}-${key}`,Number(card.querySelector<HTMLElement>(`.weekly-schedule-${key}`)?.dataset.setupPage)||0);}}
+    days.replaceChildren();dayChoices.replaceChildren();
+    const showDay=(day:Day)=>{activeDay=day;for(const card of days.children)(card as HTMLElement).hidden=(card as HTMLElement).dataset.day!==day;for(const control of dayChoices.querySelectorAll<HTMLButtonElement>('button'))control.setAttribute('aria-pressed',String(control.dataset.day===day));};
     for (const [index, day] of DAYS.entries()) {
       const card = el('section', 'weekly-schedule-day'); card.dataset.day = day;
       const header = el('div', 'weekly-schedule-day-header'), label = el('label'), check = el('input');
       check.type = 'checkbox'; check.checked = value.workingHours[day].length > 0; check.dataset.testid = checkId(day);
       label.append(check, document.createTextNode(names[index]!)); header.append(label);
+      if(pagedDays){
+        check.setAttribute('aria-label',names[index]!);label.replaceChildren(check);
+        const dayName=innerWidth<=640?(ar?['اثن','ثلا','أرب','خمي','جمع','سبت','أحد'][index]!:names[index]!.slice(0,3)):names[index]!;
+        const edit=button(dayName,()=>showDay(day),'weekly-schedule-day-select',`${id}-day-${day}`);edit.title=names[index]!;edit.setAttribute('aria-label',names[index]!);edit.dataset.day=day;edit.setAttribute('aria-pressed',String(activeDay===day));header.append(edit);dayChoices.append(header);card.hidden=activeDay!==day;
+        card.append(el('h4','weekly-schedule-active-day',names[index]!));
+      }
       if (!check.checked) header.append(el('span', 'weekly-schedule-closed', w('إجازة', 'Closed')));
-      card.append(header);
+      if(!pagedDays)card.append(header);
       check.onchange = () => {
         value.workingHours[day] = check.checked ? [{ open: '09:00', close: '17:00' }] : [];
         if (!check.checked) value.breaks[day] = [];
         render(); emit();
       };
       if (check.checked) {
+        const workPart=el('div','weekly-schedule-work-part');
         const ranges = (key: 'workingHours' | 'breaks', host: HTMLElement) => {
           value[key][day].forEach((range, rangeIndex) => {
             const row = el('div', 'weekly-schedule-range');
@@ -110,8 +127,8 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
             host.append(row);
           });
         };
-        const hours = el('div', 'weekly-schedule-hours'); ranges('workingHours', hours); card.append(hours);
-        if (value.workingHours[day].length < 8) card.append(button(w('فترة دوام إضافية', 'Add work interval'), () => {
+        const hours = el('div', 'weekly-schedule-hours'); ranges('workingHours', hours); workPart.append(hours);
+        if (value.workingHours[day].length < 8) workPart.append(button(w('فترة دوام إضافية', 'Add work interval'), () => {
           const close = value.workingHours[day].at(-1)!.close;
           const start = minutes(close);
           value.workingHours[day].push({ open: close, close: time(Math.min(start + 60, 1439)) }); render(); emit();
@@ -119,7 +136,14 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
         const breaks = el('div', 'weekly-schedule-breaks'), breakHeader = el('div', 'weekly-schedule-break-header');
         breakHeader.append(el('span', '', w('البريكات (اختياري)', 'Breaks (optional)')));
         if (value.breaks[day].length < 8) breakHeader.append(button(w('+ إضافة بريك', '+ Add break'), () => addBreak(day), 'weekly-schedule-add-break', `${id}-breaks-${day}-add`));
-        breaks.append(breakHeader); ranges('breaks', breaks); card.append(breaks);
+        breaks.append(breakHeader); ranges('breaks', breaks);
+        card.append(workPart,breaks);
+        if(pagedDays){
+          const pager=setupPager(card,[workPart,breaks],language,`${id}-${day}-detail-pages`);
+          if(pager){const caption=pager.querySelector('span')!;const label=()=>{caption.textContent=Number(card.dataset.setupPage)?w('البريكات','Breaks'):w('ساعات الدوام','Working hours');};pager.addEventListener('click',label);card.insertBefore(pager,workPart);card.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:detailPages.get(day)??0}));label();}
+          for(const [host,key]of [[hours,'hours'],[breaks,'breaks']]as const){const rows=Array.from(host.querySelectorAll<HTMLElement>(':scope > .weekly-schedule-range'));const nav=setupPager(host,rows,language,`${id}-${day}-${key}-pages`);if(nav)host.append(nav);host.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:intervalPages.get(`${day}-${key}`)??0}));}
+        }
+      }else if(pagedDays){card.append(el('p','weekly-schedule-hint',w('يوم إجازة. حدّد هذا اليوم من الأعلى لإضافة الدوام.','Closed. Select this day above to add working hours.')));
       }
       const error = el('p', 'weekly-schedule-error'); error.setAttribute('role', 'alert'); error.hidden = true; card.append(error); days.append(card);
     }
@@ -127,6 +151,12 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
   }
   render();
   root.addEventListener('jormall:schedule-refresh', refresh);
+  root.addEventListener('jormall:schedule-reveal',event=>{
+    if(!pagedDays)return;const testId=String((event as CustomEvent).detail),input=Array.from(days.querySelectorAll<HTMLInputElement>('input')).find(node=>node.dataset.testid===testId);if(!input)return;
+    const card=input.closest<HTMLElement>('.weekly-schedule-day')!;activeDay=card.dataset.day as Day;for(const node of days.children)(node as HTMLElement).hidden=node!==card;
+    for(const button of dayChoices.querySelectorAll('button'))button.setAttribute('aria-pressed',String((button as HTMLElement).dataset.day===activeDay));
+    const breaks=!!input.closest('.weekly-schedule-breaks');card.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:breaks?1:0}));const host=input.closest<HTMLElement>('.weekly-schedule-hours,.weekly-schedule-breaks');const rows=Array.from(host?.querySelectorAll(':scope > .weekly-schedule-range')??[]);host?.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:rows.indexOf(input.closest('.weekly-schedule-range')!)}));
+  });
   return { node: root, setValue(next: WeeklySchedule) { if (JSON.stringify(next) === JSON.stringify(value)) return; value = structuredClone(next); render(); } };
 }
 

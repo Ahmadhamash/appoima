@@ -1,3 +1,4 @@
+import { CategoryField } from '../category-field';
 import { createDefinition } from '@workspace/service-definition';
 import { useId, useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormError } from '@/components/form-field';
 import { api } from '@/lib/api';
 import { useI18n, useErrorMessage } from '@/lib/i18n';
-import { CATEGORIES, type Options } from '@/lib/setup-api';
+import { type Options } from '@/lib/setup-api';
 import { CheckField, MultiPicker, SelectField, controlClass } from './controls';
 import { EquipmentPicker } from './equipment-picker';
 
@@ -23,7 +24,7 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
   const [nextKey, setNextKey] = useState(2);
   const [branchId, setBranchId] = useState<number | null>(null);
   const currency = 'JOD';
-  const [category, setCategory] = useState<typeof CATEGORIES[number]>('Other');
+  const [category, setCategory] = useState('');
   const [requiresRoom, setRequiresRoom] = useState(false);
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [requiredEquipment, setRequiredEquipment] = useState<string[]>([]);
@@ -41,6 +42,7 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const group = section.trim();
+    if(!category.trim()||category.trim().length>80){setError(ar?'اكتب التصنيف (حتى 80 حرفًا).':'Enter a category (up to 80 characters).');return;}
     const names = rows.map(row => row.name.trim());
     if (!noEquipment && !requiredEquipment.length) { setError(ar ? 'حدد المعدات المطلوبة أو أكد أن الخدمة لا تحتاج معدات.' : 'Choose equipment or confirm none is needed.'); return; }
     if (!group || group.length > 80) { setError(ar ? 'اكتب اسم الخدمة الرئيسية (حتى 80 حرفًا).' : 'Enter a main service name (up to 80 characters).'); return; }
@@ -67,6 +69,7 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
         <datalist id={sectionListId}>{sections.map(name => <option key={name} value={name}/>)}</datalist>
         <p className="mt-2 text-xs text-[#786f62]">{ar ? 'اكتب اسم قسم جديد أو اختر قسمًا موجودًا لتظهر تحته الخدمات الفرعية.' : 'Enter a new section or choose an existing one for these subservices.'}</p>
       </div>
+      <CategoryField label={ar?'التصنيف':'Category'} value={category} options={options.categories??[]} language={lang} onChange={setCategory} testId="service-batch-category"/>
       <section className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
         <h3 className="font-semibold">{ar ? 'المعدات المطلوبة للخدمة الرئيسية' : 'Equipment for the main service'} *</h3>
         <p className="text-sm text-muted-foreground">{ar ? 'تنطبق على كل الخدمات الفرعية، ويمكن تعديل أي خدمة فرعية وحدها.' : 'Used by every subservice unless you override it below.'}</p>
@@ -86,7 +89,7 @@ export function ServiceBatchForm({ options, sections, onSaved, onCancel }: { opt
           {row.overrideEquipment && <div className="mt-3"><EquipmentPicker value={row.requiredEquipment} onChange={value => setRows(old => old.map(item => item.key === row.key ? { ...item, requiredEquipment: value } : item))} lang={lang}/></div>}
         </div>)}
       </section>
-      <details className="rounded-2xl border border-[#e2e8f0] bg-white p-4"><summary className="focus-ring cursor-pointer text-sm font-semibold text-[#1b2d48]">{ar ? 'إعدادات القسم والخدمات' : 'Section and service settings'}</summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><SelectField label={ar ? 'الفرع' : 'Branch'} value={branchId ?? ''} onChange={value => setBranchId(value ? Number(value) : null)} testId="service-batch-branch"><option value="">{ar ? 'كل الفروع' : 'All branches'}</option>{options.branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</SelectField><p className="self-center text-xs text-[#718098]">{ar ? 'الأسعار بالدينار الأردني (JOD).' : 'Prices are in Jordanian dinars (JOD).'}</p><SelectField label={ar ? 'التصنيف' : 'Category'} value={category} onChange={value => setCategory(value as typeof category)} testId="service-batch-category">{CATEGORIES.map(value => <option key={value} value={value}>{t(`p2.categories.${value}`)}</option>)}</SelectField><CheckField label={ar ? 'تحتاج غرفة عند الحجز' : 'Requires a room for booking'} checked={requiresRoom} onChange={setRequiresRoom} testId="service-batch-requires-room"/></div><div className="mt-4"><MultiPicker label={ar ? 'الموظفون الذين يقدمون هذه الخدمات' : 'Staff who provide these services'} options={options.employees.filter(employee => branchId === null || employee.branchId == null || employee.branchId === branchId)} selected={employeeIds} onChange={setEmployeeIds} testId="service-batch-employee"/><p className="mt-2 text-xs text-[#718098]">{ar ? 'يمكنك ربط الموظفين لاحقًا من صفحة الموظفين.' : 'You can assign staff later from the employees page.'}</p></div></details>
+      <details className="rounded-2xl border border-[#e2e8f0] bg-white p-4"><summary className="focus-ring cursor-pointer text-sm font-semibold text-[#1b2d48]">{ar ? 'إعدادات القسم والخدمات' : 'Section and service settings'}</summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><SelectField label={ar ? 'الفرع' : 'Branch'} value={branchId ?? ''} onChange={value => setBranchId(value ? Number(value) : null)} testId="service-batch-branch"><option value="">{ar ? 'كل الفروع' : 'All branches'}</option>{options.branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</SelectField><p className="self-center text-xs text-[#718098]">{ar ? 'الأسعار بالدينار الأردني (JOD).' : 'Prices are in Jordanian dinars (JOD).'}</p><CheckField label={ar ? 'تحتاج غرفة عند الحجز' : 'Requires a room for booking'} checked={requiresRoom} onChange={setRequiresRoom} testId="service-batch-requires-room"/></div><div className="mt-4"><MultiPicker label={ar ? 'الموظفون الذين يقدمون هذه الخدمات' : 'Staff who provide these services'} options={options.employees.filter(employee => branchId === null || employee.branchId == null || employee.branchId === branchId)} selected={employeeIds} onChange={setEmployeeIds} testId="service-batch-employee"/><p className="mt-2 text-xs text-[#718098]">{ar ? 'يمكنك ربط الموظفين لاحقًا من صفحة الموظفين.' : 'You can assign staff later from the employees page.'}</p></div></details>
     </fieldset>
     <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-white py-3"><Button type="button" variant="ghost" onClick={onCancel} disabled={mutation.isPending}>{t('common.cancel')}</Button><Button type="button" variant="outline" onClick={onCancel} disabled={mutation.isPending} data-testid="service-batch-back">{t('common.back')}</Button><Button type="submit" disabled={mutation.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90" data-testid="save-service-batch">{mutation.isPending ? t('common.loading') : ar ? `حفظ ${rows.length} خدمة فرعية` : `Save ${rows.length} subservice${rows.length === 1 ? '' : 's'}`}</Button></div>
   </form>;

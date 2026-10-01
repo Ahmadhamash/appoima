@@ -113,6 +113,16 @@ describe("Phase 2 access and account controls",()=>{
 });
 
 describe("Phase 2 validation, persistence and checklist",()=>{
+  it('saves manager-defined categories and only offers this clinic’s saved choices',async()=>{
+    const created=await a.post('/api/clinic/services').send({...serviceBody(branchA),name:'Custom category service',category:'  نحت   الجسم  '});expect(created.status).toBe(201);
+    expect((await a.get(`/api/clinic/services/${created.body.item.id}`)).body.item.category).toBe('نحت الجسم');
+    const another=await b.post('/api/clinic/services').send({...serviceBody(branchB),name:'Private category service',category:'Private category'});expect(another.status).toBe(201);
+    const options=await a.get('/api/clinic/options?for=services');expect(options.body.categories).toContain('نحت الجسم');expect(options.body.categories).not.toContain('Private category');expect(options.body.categories).not.toContain('Nails');
+    const fresh=agent();const manager=await fx.createUser({clinicId:clinicA,role:'manager',permissions:[...ROLE_PRESETS.manager]});await login(fresh,manager.email,manager.password);
+    expect((await fresh.get('/api/clinic/service-categories')).body.items).toContain('نحت الجسم');
+    const batch=await a.post('/api/clinic/services/batch').send({services:[{...serviceBody(branchA),name:'Category batch 1',category:'Consultations'},{...serviceBody(branchA),name:'Category batch 2',category:'Consultations'}]});expect(batch.status).toBe(201);
+    expect((await a.get('/api/clinic/service-categories')).body.items.filter((name:string)=>name==='Consultations')).toHaveLength(1);
+  });
   it("creates a main service with subservices together and rolls back invalid batches",async()=>{
     const definition={...createDefinition('custom','ar'),section:'الليزر',medicalScope:'medical' as const};
     const first={...serviceBody(branchA,[employeeA]),name:'ليزر الوجه',nameLang:'ar',definition,requiredEquipment:['Laser Device']};

@@ -16,7 +16,7 @@ export function publicServiceSuggestions(details:{services:{name:string;detail:s
   }).slice(0,50);
 }
 export function draftFromSuggestion(suggestion:ServiceSuggestion,key:string,language:Language):ServiceDraft {
-  return {key,followUpEnabled:suggestion.followUpEnabled??false,name:suggestion.name,nameLang:nameLanguage(suggestion.name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:'Other',requiresRoom:null,employeeIds:null,roomIds:null,definition:createDefinition('custom',language)};
+  return {key,followUpEnabled:suggestion.followUpEnabled??false,name:suggestion.name,nameLang:nameLanguage(suggestion.name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:null,requiresRoom:null,employeeIds:null,roomIds:null,definition:createDefinition('custom',language)};
 }
 export function changedServiceSources(before:Draft,after:Draft,sources:Record<string,ServiceSource>,source:ServiceSource) {
   const next:Record<string,ServiceSource>={};for(const row of after.services){

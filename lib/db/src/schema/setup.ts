@@ -18,7 +18,7 @@ export const servicesTable = pgTable("services", {
   durationMinutes: integer("duration_minutes").notNull(),
   price: numeric("price", { precision: 12, scale: 3 }).notNull(),
   currency: text("currency").notNull().default("JOD"),
-  category: serviceCategoryEnum("category").notNull(),
+  category: text("category").notNull(),
   definition: jsonb("definition").$type<ServiceDefinition | null>(),
   requiredEquipment: jsonb("required_equipment").$type<string[]>().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
@@ -31,6 +31,7 @@ export const servicesTable = pgTable("services", {
   foreignKey({ name: "services_branch_clinic_fk", columns: [t.clinicId, t.branchId], foreignColumns: [branchesTable.clinicId, branchesTable.id] }),
   check("services_duration_check", sql`${t.durationMinutes} > 0 AND ${t.durationMinutes} <= 1440`),
   check("services_price_check", sql`${t.price} >= 0`),
+  check("services_category_label_check", sql`char_length(btrim(${t.category})) between 1 and 80`),
 ]);
 
 export const roomsTable = pgTable("rooms", {

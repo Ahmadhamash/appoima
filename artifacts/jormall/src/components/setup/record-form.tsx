@@ -1,3 +1,4 @@
+import { CategoryField } from '../category-field';
 import { parseServiceDefinition, definitionIssues, normalizePhone, type ServiceDefinition } from '@workspace/service-definition';
 import { PhoneField } from '@/components/phone-field';
 import { StaffBranchField } from '@/components/staff-branch-field';
@@ -10,7 +11,7 @@ import { FormField, PasswordField, FormError } from '@/components/form-field';
 import { Button } from '@/components/ui/button';
 import { api, ApiError } from '@/lib/api';
 import { useI18n, useErrorMessage } from '@/lib/i18n';
-import { DAYS, CATEGORIES, STAFF_ROLES, PERMISSION_AREAS, emptyWeek, recordPath, type Resource, type Options, type RecordItem, type Week, type StaffRole } from '@/lib/setup-api';
+import { DAYS, STAFF_ROLES, PERMISSION_AREAS, emptyWeek, recordPath, type Resource, type Options, type RecordItem, type Week, type StaffRole } from '@/lib/setup-api';
 import { instantToLocal, localToInstant } from '@/lib/branch-time';
 import { CheckField, SelectField, TextareaField, MultiPicker, RoomServicePicker, HoursEditor, controlClass } from './controls';
 import { EquipmentPicker } from './equipment-picker';
@@ -21,7 +22,7 @@ type Draft = {
   address: string; mapUrl: string;
   definition: ServiceDefinition|null;
   name: string; nameLang: 'en' | 'ar'; branchId: number | null; timeZone: string; openingHours: Week;
-  durationMinutes: string; price: string; currency: string; category: typeof CATEGORIES[number];
+  durationMinutes: string; price: string; currency: string; category: string;
   isActive: boolean; requiresRoom: boolean; followUpEnabled: boolean; requiredEquipment: string[]; roomEquipment: string[]; employeeIds: number[]; serviceIds: number[];
   capacity: string; status: 'available' | 'maintenance'; role: StaffRole; email: string; phone: string;
   jobTitle: string; initialPassword: string; permissions: string[]; workingHours: Week; breaks: Week;
@@ -39,7 +40,7 @@ function initialDraft(record: RecordItem | undefined, lang: 'en' | 'ar', options
     definition: record?.definition??null,
     name: record?.name ?? '', nameLang: record?.nameLang ?? lang, branchId,
     timeZone: record?.timeZone ?? 'Asia/Amman', openingHours: record?.openingHours ?? emptyWeek(),
-    durationMinutes: String(record?.durationMinutes ?? 30), price: record?.price ?? '0', currency: 'JOD', category: record?.category ?? 'Other',
+    durationMinutes: String(record?.durationMinutes ?? 30), price: record?.price ?? '0', currency: 'JOD', category: record?.category ?? '',
     isActive: record?.isActive ?? true, requiresRoom: record?.requiresRoom ?? false, followUpEnabled: record?.followUpEnabled ?? false,
     requiredEquipment: record?.requiredEquipment ?? [], roomEquipment: record?.extra?.equipment ?? [],
     employeeIds: record?.employeeIds ?? [], serviceIds: record?.serviceIds ?? [], capacity: String(record?.capacity ?? 1), status: record?.status ?? 'available',
@@ -78,14 +79,14 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
   },[isEmployee,isNew,draft.branchId,options.branches]);
   useEffect(()=>{if(!isNew||!assistantKey)return;let sequence=0;const timers=new Set<ReturnType<typeof setTimeout>>();const delay=(ms:number)=>new Promise<void>(resolve=>{const timer=setTimeout(()=>{timers.delete(timer);resolve();},ms);timers.add(timer);});
     const stop=()=>{sequence++;timers.forEach(clearTimeout);timers.clear();formRef.current?.querySelectorAll('.jc-ai-field').forEach(e=>e.classList.remove('jc-ai-field'));};
-    const focusField=async(event:Event)=>{const detail=(event as CustomEvent<{resource:string;key:string;field:string}>).detail;if(detail.resource!==resource||detail.key!==assistantKey)return;if(isEmployee)setStep(2);if(['workingHours','breaks'].includes(detail.field))setScheduleOpen(true);await delay(80);const key=detail.field==='branchKey'?'branchId':detail.field;const testId=key==='openingHours'?'opening-hours':key==='workingHours'?'working-hours':key==='breaks'?'breaks':key==='serviceKeys'?'service-choice':`${['nameLang','branchId','timeZone','currency','category','role'].includes(key)?'select':key==='requiresRoom'?'check':'input'}-${key}`;const target=formRef.current?.querySelector<HTMLElement>(`[data-testid="${testId}"]`);formRef.current?.querySelectorAll('.jc-ai-question').forEach(node=>node.classList.remove('jc-ai-question'));if(target){target.classList.add('jc-ai-question');target.scrollIntoView({behavior:'smooth',block:'center'});window.dispatchEvent(new CustomEvent('jormall:concierge-field',{detail:{target,preview:true}}));}};
+    const focusField=async(event:Event)=>{const detail=(event as CustomEvent<{resource:string;key:string;field:string}>).detail;if(detail.resource!==resource||detail.key!==assistantKey)return;if(isEmployee)setStep(2);if(['workingHours','breaks'].includes(detail.field))setScheduleOpen(true);await delay(80);const key=detail.field==='branchKey'?'branchId':detail.field;const testId=key==='openingHours'?'opening-hours':key==='workingHours'?'working-hours':key==='breaks'?'breaks':key==='serviceKeys'?'service-choice':`${['nameLang','branchId','timeZone','currency','role'].includes(key)?'select':key==='requiresRoom'?'check':'input'}-${key}`;const target=formRef.current?.querySelector<HTMLElement>(`[data-testid="${testId}"]`);formRef.current?.querySelectorAll('.jc-ai-question').forEach(node=>node.classList.remove('jc-ai-question'));if(target){target.classList.add('jc-ai-question');target.scrollIntoView({behavior:'smooth',block:'center'});window.dispatchEvent(new CustomEvent('jormall:concierge-field',{detail:{target,preview:true}}));}};
     const prefill=async(event:Event)=>{const detail=(event as CustomEvent<{resource:Resource;key:string;fields:Record<string,unknown>}>).detail;if(detail?.resource!==resource||detail.key!==assistantKey||!detail.fields)return;const turn=++sequence;
       const source=detail.fields,fields:Partial<Draft>={};
       for(const key of ['name','email','phone','jobTitle','price','currency','timeZone'] as const)if(typeof source[key]==='string'&&source[key])Object.assign(fields,{[key]:source[key]});
       for(const key of ['capacity','durationMinutes'] as const)if(typeof source[key]==='number')Object.assign(fields,{[key]:String(source[key])});
       if(typeof source.nameLang==='string'&&['ar','en'].includes(source.nameLang))fields.nameLang=source.nameLang as Draft['nameLang'];
       if(isEmployee&&typeof source.role==='string'&&STAFF_ROLES.includes(source.role as StaffRole))fields.role=source.role as StaffRole;
-      if(resource==='services'&&typeof source.category==='string'&&CATEGORIES.includes(source.category as Draft['category']))fields.category=source.category as Draft['category'];
+      if(resource==='services'&&typeof source.category==='string')fields.category=source.category as Draft['category'];
       if(resource==='services'&&typeof source.followUpEnabled==='boolean')fields.followUpEnabled=source.followUpEnabled;
       if(resource==='services'&&typeof source.requiresRoom==='boolean')fields.requiresRoom=source.requiresRoom;
       for(const key of ['openingHours','workingHours','breaks'] as const)if(source[key]&&typeof source[key]==='object'){Object.assign(fields,{[key]:structuredClone(source[key])});if(key==='workingHours')assistantHours.current=true;}
@@ -94,7 +95,7 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
       await delay(70);const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       for(const [key,value] of Object.entries(fields)){if(sequence!==turn)return;if(touched.current.has(key)||JSON.stringify(draftRef.current[key as keyof Draft])===JSON.stringify(value))continue;
         if(['workingHours','breaks'].includes(key)){setScheduleOpen(true);await delay(60);}
-        const testId=key==='openingHours'?'opening-hours':key==='workingHours'?'working-hours':key==='breaks'?'breaks':`${['nameLang','branchId','timeZone','currency','category','role'].includes(key)?'select':typeof value==='boolean'?'check':'input'}-${key}`;
+        const testId=key==='openingHours'?'opening-hours':key==='workingHours'?'working-hours':key==='breaks'?'breaks':`${['nameLang','branchId','timeZone','currency','role'].includes(key)?'select':typeof value==='boolean'?'check':'input'}-${key}`;
         const target=formRef.current?.querySelector<HTMLElement>(`[data-testid="${testId}"]`);if(target){target.scrollIntoView({behavior:reduced?'instant':'smooth',block:'center'});await delay(reduced?0:160);if(sequence!==turn)return;target.classList.add('jc-ai-field');window.dispatchEvent(new CustomEvent('jormall:concierge-field',{detail:{target}}));await delay(reduced?0:350);}
         const typeable=['name','email','phone','jobTitle','price','capacity','durationMinutes'].includes(key)&&typeof value==='string';
         if(typeable&&!reduced){const chars=Array.from(value);for(let i=1;i<=chars.length;i++){if(sequence!==turn||touched.current.has(key))break;setDraft(old=>({...old,[key]:chars.slice(0,i).join('')}));await delay(Math.max(10,Math.min(28,900/chars.length)));}}
@@ -150,6 +151,7 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
       if (options.services.some(service=>draft.serviceIds.includes(service.id)&&(service.requiredEquipment??[]).some(item=>!names.has(item.trim().toLocaleLowerCase())))) e.roomEquipment=lang==='ar'?'أضف معدات الخدمات المحددة إلى الغرفة أولاً.':'Add the selected services’ equipment to this room first.';
     }
     if (resource === 'services') {
+      if(!draft.category.trim()||draft.category.trim().length>80)e.category=lang==='ar'?'اكتب التصنيف (حتى 80 حرفًا).':'Enter a category (up to 80 characters).';
       if (!record && !assistantKey && !draft.requiredEquipment.length && !noEquipment) e.requiredEquipment = lang === 'ar' ? 'حدد المعدات المطلوبة أو أكد أن الخدمة لا تحتاج معدات.' : 'Choose equipment or confirm none is needed.';
       if(draft.definition){try{const definition=parseServiceDefinition(draft.definition);if(draft.isActive&&definitionIssues(definition).length)e.definition=lang==='ar'?'راجع النطاق الطبي والطلبات غير المدعومة.':'Review medical scope and unsupported requests.';}catch{e.definition=lang==='ar'?'تعريف الخدمة أو حقولها غير مكتمل.':'The service definition or fields are incomplete.';}}
       if (!Number.isInteger(Number(draft.durationMinutes)) || Number(draft.durationMinutes)<1 || Number(draft.durationMinutes)>1440) fail('durationMinutes','invalid_duration');
@@ -211,7 +213,7 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
       {isEmployee && step===1 && <SelectField label={fieldLabel('role')} value={draft.role} onChange={(v)=>{set('role',v as StaffRole);set('permissions',options.rolePresets[v as StaffRole]??[]);}} testId="select-role">{STAFF_ROLES.map((role)=><option key={role} value={role}>{t(`roles.${role}`)}</option>)}</SelectField>}
       {(!isEmployee || step===2) && <><div className="grid min-w-0 gap-4 sm:grid-cols-2">{nameFields}{resource!=='branches'&&!isEmployee && branchField}
       {resource==='branches' && <SelectField label={fieldLabel('timeZone')} value={draft.timeZone} onChange={(v)=>set('timeZone',v)} testId="select-timeZone">{[...new Set([draft.timeZone,...options.timeZones])].map((tz)=><option key={tz} value={tz}>{tz}</option>)}</SelectField>}
-      {resource==='services' && <>{input('durationMinutes','number',true)}{input('price','text',true)}<p className="self-center text-xs text-muted-foreground">{lang==='ar'?'أتعاب الخدمة بالدينار الأردني؛ تُضاف أسعار المنتجات المحتسبة على المريض حسب الكمية.':'Service fees use JOD. Products charged to patients are added separately by quantity.'}</p><SelectField label={fieldLabel('category')} value={draft.category} onChange={(v)=>set('category',v as Draft['category'])} testId="select-category">{CATEGORIES.map((v)=><option key={v} value={v}>{t(`p2.categories.${v}`)}</option>)}</SelectField><CheckField label={lang==='ar'?'رتوش / موعد متابعة — السعر الافتراضي صفر':'Retouch / follow-up appointment — default price zero'} checked={draft.followUpEnabled} onChange={v=>set('followUpEnabled',v)} testId="check-followUpEnabled"/><CheckField label={fieldLabel('requiresRoom')} checked={draft.requiresRoom} onChange={(v)=>set('requiresRoom',v)} testId="check-requiresRoom"/><CheckField label={fieldLabel('isActive')} checked={draft.isActive} onChange={(v)=>set('isActive',v)} testId="check-isActive"/></>}
+      {resource==='services' && <>{input('durationMinutes','number',true)}{input('price','text',true)}<p className="self-center text-xs text-muted-foreground">{lang==='ar'?'أتعاب الخدمة بالدينار الأردني؛ تُضاف أسعار المنتجات المحتسبة على المريض حسب الكمية.':'Service fees use JOD. Products charged to patients are added separately by quantity.'}</p><CategoryField label={fieldLabel('category')} value={draft.category} options={options.categories??[]} language={lang} onChange={v=>set('category',v)} testId="input-category" error={errors.category}/><CheckField label={lang==='ar'?'رتوش / موعد متابعة — السعر الافتراضي صفر':'Retouch / follow-up appointment — default price zero'} checked={draft.followUpEnabled} onChange={v=>set('followUpEnabled',v)} testId="check-followUpEnabled"/><CheckField label={fieldLabel('requiresRoom')} checked={draft.requiresRoom} onChange={(v)=>set('requiresRoom',v)} testId="check-requiresRoom"/><CheckField label={fieldLabel('isActive')} checked={draft.isActive} onChange={(v)=>set('isActive',v)} testId="check-isActive"/></>}
       {resource==='rooms' && <>{input('capacity','number',true)}<SelectField label={fieldLabel('status')} value={draft.status} onChange={(v)=>set('status',v as Draft['status'])} testId="select-status"><option value="available">{t('p2.available')}</option><option value="maintenance">{t('p2.maintenance')}</option></SelectField></>}
 {(isEmployee || resource==='customers') && <>{input('email','email',isEmployee)}{input('phone','tel')}{isEmployee && <>{input('jobTitle')}{isNew && !assistantKey && <PasswordField label={fieldLabel('initialPassword')} value={draft.initialPassword} onChange={(e)=>set('initialPassword',e.target.value)} error={errors.initialPassword} autoComplete="new-password" hint={t('owner.initialPasswordHint')} data-testid="input-initialPassword" minLength={10} maxLength={200}/>}<CheckField label={fieldLabel('isActive')} checked={draft.isActive} onChange={(v)=>set('isActive',v)} testId="check-isActive"/></>}</>}
       </div>

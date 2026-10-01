@@ -24,6 +24,7 @@ export function setupPager(root: HTMLElement, cards: HTMLElement[], language: La
     root.dataset.setupPage = String(page);
     cards.forEach((card, index) => { card.hidden = index !== page; });
     label.textContent = ar ? `${page + 1} من ${cards.length}` : `${page + 1} of ${cards.length}`;
+    if(cards[page]?.dataset.setupTitle)label.textContent=`${cards[page]!.dataset.setupTitle} · ${label.textContent}`;
     previous.disabled = page === 0;
     following.disabled = page === cards.length - 1;
     onPageChanged?.(page);

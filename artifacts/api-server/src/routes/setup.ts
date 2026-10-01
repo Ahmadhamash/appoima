@@ -28,6 +28,7 @@ router.post("/clinic/branches", requirePermission("settings.manage"), async (req
 router.put("/clinic/branches/:id", requirePermission("settings.manage"), async (req, res) => res.json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body), id(req.params["id"])) }));
 
 router.get("/clinic/services", requirePermission("services.read"), async (req, res) => res.json(await setup.listServices(req.user!, pageSchema.parse(req.query))));
+router.get('/clinic/service-categories',requirePermission('services.read'),async(req,res)=>res.json({items:await setup.serviceCategories(req.user!)}));
 router.post("/clinic/services/batch", requirePermission("services.manage"), async (req, res) => res.status(201).json(await setup.saveServicesBatch(req.user!, serviceBatchSchema.parse(req.body))));
 router.get("/clinic/services/:id", requirePermission("services.read"), async (req, res) => res.json({ item: await setup.getService(req.user!, id(req.params["id"])) }));
 router.post("/clinic/services", requirePermission("services.manage"), async (req, res) => res.status(201).json({ item: await setup.saveService(req.user!, serviceSchema.parse(req.body)) }));

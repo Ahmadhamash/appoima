@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');
+const {chromium}=require(process.env.PLAYWRIGHT_PATH||'C:/VSCode-Codex-2/data/tmp/jormall-browser-check/node_modules/playwright-core');
+const {mount}=require('./weekly-schedule-smoke.cjs');
+const base=process.env.SETUP_TEST_URL||'http://localhost:19881';
+(async()=>{const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});try{for(const [width,lang]of [[1440,'en'],[390,'ar']]){
+ const fixture=await mount(browser,width,lang),{page}=fixture;let category='',saved;
+ try{
+  await page.route('**/api/clinic/options*',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({categories:category?[category]:[],branches:[{id:1,name:'Main',nameLang:'en'}],services:[],employees:[],timeZones:['Asia/Amman'],currencies:['JOD'],grantablePermissions:[],rolePresets:{}})}));
+  await page.route('**/api/clinic/services',async route=>{if(route.request().method()==='POST'){saved=route.request().postDataJSON();category=saved.category;await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({item:{id:80}})});}else await route.fulfill({contentType:'application/json',body:JSON.stringify({items:[],total:0,page:1,pageSize:20})});});
+  await page.route('**/api/clinic/services/batch',async route=>{saved=route.request().postDataJSON().services[0];category=saved.category;await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ids:[80]})});});
+  await page.goto(base+'/business/services');await page.getByTestId('add-services').click();await page.getByTestId('service-main-name').fill('Main service');await page.getByTestId('subservice-name-0').fill('New service');await page.getByTestId('subservice-duration-0').fill('30');await page.getByTestId('subservice-price-0').fill('25');await page.getByLabel(lang==='ar'?'لا تحتاج هذه الخدمة معدات':'No equipment needed',{exact:true}).check();
+  await page.getByTestId('save-service-batch').click();assert.equal(saved,undefined,'Category is required');
+  await page.getByTestId('service-batch-category').fill('عناية خاصة');await page.getByTestId('service-batch-category').press('Enter');await page.getByTestId('save-service-batch').click();await page.getByTestId('save-service-batch').waitFor({state:'hidden'});assert.equal(saved.category,'عناية خاصة');
+  await page.getByTestId('add-services').click();await page.getByTestId('service-batch-category-open-options').click();await page.getByTestId('service-batch-category-options').getByRole('option',{name:'عناية خاصة',exact:true}).click();assert.equal(await page.getByTestId('service-batch-category').inputValue(),'عناية خاصة');assert.deepEqual(fixture.errors,[]);console.log(`PASS manual category validation, free entry and reusable saved choices (${width}, ${lang})`);
+ }catch(error){console.error(await page.locator('body').innerText());throw error;}finally{await fixture.context.close();}
+}}finally{await browser.close();}})().catch(error=>{console.error(error);process.exitCode=1;});

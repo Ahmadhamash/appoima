@@ -1,3 +1,4 @@
+import { serviceCategories } from './setup';
 import { archiveDraftBranch } from '../domain/archive-draft-branch';
 import { archiveBranchInTx } from './branch-archive';
 import { activeBranch, activeEmployee } from './branch-scope';
@@ -323,7 +324,7 @@ export async function conciergeServiceOptions(actor:User){
   const branches=await db.select({id:branchesTable.id,name:branchesTable.name}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id)).limit(200);
   const employees=hasPermission(actor,'employees.read')?await db.select({id:usersTable.id,name:usersTable.name,branchId:usersTable.branchId}).from(usersTable).where(and(and(eq(usersTable.clinicId,clinicId), activeEmployee()),eq(usersTable.isActive,true))).orderBy(asc(usersTable.name)).limit(200):[];
   const rooms=hasPermission(actor,'rooms.manage')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name)).limit(200):[];
-  return {branches:branches.map(b=>({...b,key:`branch_${b.id}`})),employees,rooms};
+  return {branches:branches.map(b=>({...b,key:`branch_${b.id}`})),employees,rooms,categories:hasPermission(actor,'services.read')?await serviceCategories(actor):[]};
 }
 export async function acceptServiceSuggestion(actor:User,revision:number,key:string){
   const row=await withSession(actor,async(tx,row,fresh)=>{
@@ -503,7 +504,7 @@ export async function previewConcierge(actor:User) {
   state.draft=withDefaultStaffHours(state.draft,context.branches);
   const issues=draftIssues(state.draft,context.branches.map(b=>b.key),context.services.map(s=>s.key));
   const preview=previewConciergeSetup(fresh,state.draft);
-  return {...preview,revision:row.revision,draft:state.draft,issues:[...issues.filter(i=>!(i.code==='empty'&&state.workspace?.dirty)),...preview.issues],options:{branches:context.branches,services:context.services}};
+  return {...preview,revision:row.revision,draft:state.draft,issues:[...issues.filter(i=>!(i.code==='empty'&&state.workspace?.dirty)),...preview.issues],options:{branches:context.branches,services:context.services,categories:hasPermission(actor,'services.read')?await serviceCategories(actor):[]}};
 }
 export async function applyConcierge(actor:User,revision:number,credentials:{key:string;initialPassword:string;permissions:string[]}[]) {
   const result=await withSession(actor,async(tx,row,fresh)=>{

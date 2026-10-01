@@ -19,7 +19,7 @@ export function localConciergeTurn(draft:Draft,text:string,language:Language,new
   if(/للرجال|رجال|\bmen\b/i.test(name))definition.audience='men';
   if(/للنساء|نساء|\bwomen\b/i.test(name))definition.audience='women';
   if(/لح[يى][ةه]|لحيه|beard/i.test(name))definition.bodyArea=ar?'اللحية':'Beard';
-  const service:ServiceDraft={key:newKey,name,nameLang:nameLanguage(name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:laser?'Laser':'Other',requiresRoom:null,employeeIds:[],roomIds:[],definition};
+  const service:ServiceDraft={key:newKey,name,nameLang:nameLanguage(name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:null,requiresRoom:null,employeeIds:[],roomIds:[],definition};
   next.services.push(service);return {draft:parseDraft(next),workspace,handled:true,reply:setupWorkflow({serviceWizard:true,draft:next},language).prompt};
  }
  const active=setupWorkflow({serviceWizard:true,draft:next},language).focus;

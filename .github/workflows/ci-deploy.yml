@@ -31,7 +31,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - name: Database-independent setup tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/test/branch-location.test.ts src/test/gathering-progress.test.ts src/test/concierge-service-batch.test.ts src/test/setup-phone-validation.test.ts src/test/setup-journey.test.ts src/test/staff-branches.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/test/branch-location.test.ts src/test/gathering-progress.test.ts src/test/concierge-service-batch.test.ts src/test/setup-phone-validation.test.ts src/test/setup-journey.test.ts src/test/staff-branches.test.ts src/test/custom-service-categories.test.ts
       - run: pnpm --filter @workspace/api-server build
       - run: pnpm --filter @workspace/jormall build
       - uses: actions/upload-artifact@v4

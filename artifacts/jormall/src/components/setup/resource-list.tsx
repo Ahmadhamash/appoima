@@ -13,7 +13,7 @@ export function ResourceList({resource,items,options,onOpen,onSelect,selectedId,
     employees:[ar?'الموظف':'Employee',ar?'الدور':'Role',ar?'التخصص':'Specialty',ar?'ساعات العمل اليوم':'Today’s hours',ar?'مواعيد اليوم':'Today’s appointments',ar?'الغرفة':'Room',ar?'الحالة':'Status'],
     customers:[ar?'العميل':'Customer',ar?'التواصل':'Contact',ar?'الفرع':'Branch',ar?'ملاحظات':'Notes'],
   };
-  const serviceGroup=(item:RecordItem)=>item.definition?.section||(item.category?t('p2.categories.'+item.category):item.name);
+  const serviceGroup=(item:RecordItem)=>item.definition?.section||(item.category?item.category:item.name);
   const groups=resource==='services'?Array.from(new Set(items.map(serviceGroup))):[''];
   const branchFor=(item:RecordItem)=>options.branches.find(branch=>branch.id===item.branchId);
   return <div className="space-y-4" data-testid={resource==='services'?'clinic-service-sections':undefined}>

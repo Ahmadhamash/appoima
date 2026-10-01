@@ -31,7 +31,7 @@ export const serviceSchema = z.object({
   durationMinutes: z.number().int().min(1).max(1440),
   price: z.union([z.string(), z.number()]).transform(String).refine((v) => /^\d{1,9}(\.\d{1,3})?$/.test(v), "invalid_price"),
   currency: z.string().trim().toUpperCase().refine((v) => v === 'JOD', "invalid_currency"),
-  category: z.enum(["Hair", "Nails", "Skin", "Laser", "Massage", "Makeup", "Other"]),
+  category: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/).transform(value=>value.replace(/\s+/g,' ')),
   isActive: z.boolean().default(true), requiresRoom: z.boolean().default(false), employeeIds: ids.default([]),
   followUpEnabled: z.boolean().default(false),
   requiredEquipment: z.array(z.string().trim().min(1).max(80)).max(40).default([]),
