@@ -173,6 +173,7 @@ export function RecordForm({ resource, record, options, onSaved, onCancel, assis
   }
   function submit(event: FormEvent) {
     event.preventDefault();
+    if(resource==='branches'||isEmployee&&step>=2){const invalid=formRef.current?.querySelector<HTMLInputElement>('.weekly-schedule input:invalid');if(invalid){const section=invalid.closest('details');if(section)section.open=true;invalid.scrollIntoView({block:'center'});invalid.reportValidity();return;}}
     if (draft.phone.trim() && !normalizePhone(draft.phone)) { setErrors(old => ({...old, phone: phoneValidationMessage(lang)})); return; }
     if(assistantKey){const keys=['name','nameLang','email','phone','jobTitle','price','currency','category','timeZone','role','requiresRoom','followUpEnabled','openingHours','workingHours','breaks'] as const;const fields:Record<string,unknown>={};for(const key of keys)if(touched.current.has(key))fields[key]=draft[key];for(const key of ['durationMinutes','capacity'] as const)if(touched.current.has(key))fields[key]=Number(draft[key]);if(touched.current.has('branchSchedules'))fields.branchSchedules=draft.branchSchedules.map(s=>({branchKey:`branch_${s.branchId}`,workingHours:s.workingHours,breaks:s.breaks}));if(touched.current.has('branchId'))fields.branchKey=draft.branchId?`branch_${draft.branchId}`:null;window.dispatchEvent(new CustomEvent('jormall:concierge-review-record',{detail:{resource,key:assistantKey,fields}}));return;}
     if (mutation.isPending || !validate()) return;

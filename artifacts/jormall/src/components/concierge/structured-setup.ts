@@ -3,6 +3,7 @@ import { el, button } from './dom';
 import { setupPager } from './paging';
 import { createStaffBranchSchedules } from '../staff-branch-schedules';
 import { createPhoneInput } from '../phone-input';
+import { createBranchHoursEditor } from '../weekly-schedule';
 
 const emptyWeek = (): Week => Object.fromEntries(DAYS.map(day => [day, []])) as unknown as Week;
 /** Explicit fields keep setup independent of AI interpretation. */
@@ -26,14 +27,7 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
  const schedule = (host: HTMLElement, row: any, key: string, title: string) => {
   const section = el('details', 'jc-structured-hours'); section.append(el('summary', '', title));
   const week: Week = row[key] ?? emptyWeek(); row[key] = week;
-  const names = ar ? ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'] : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  DAYS.forEach((day, i) => {
-   const line = el('div', 'jc-hours-row'), check = el('input'); check.type = 'checkbox'; check.checked = week[day].length > 0; check.dataset.testid = `setup-${row.key}-${key}-${day}`;
-   const label = el('label', 'jc-check'); label.append(check, document.createTextNode(names[i]!)); line.append(label);
-   const ranges = el('div');
-   const draw = () => { ranges.replaceChildren(); week[day].forEach((range, index) => { const group = el('div', 'jc-hours-row'); for (const part of ['open', 'close'] as const) { const input = el('input'); input.type = 'time'; input.required = true; input.value = range[part]; input.dataset.testid = `setup-${row.key}-${key}-${day}-${index}-${part}`; input.setAttribute('aria-label', `${title} ${names[i]} ${part === 'open' ? w('من', 'from') : w('إلى', 'to')}`); input.oninput = () => { range[part] = input.value; changed(draft); }; group.append(input); } ranges.append(group); }); };
-   check.onchange = () => { week[day] = check.checked ? [{ open: '09:00', close: '17:00' }] : []; draw(); changed(draft); }; draw(); line.append(ranges); section.append(line);
-  }); host.append(section);
+  section.append(createBranchHoursEditor(week,{id:`setup-${row.key}`,language},next=>{row[key]=next;changed(draft);}).node);host.append(section);
  };
  const render = (page = Number(list.dataset.setupPage) || 0) => {
   const staffPages = new Map(Array.from(list.querySelectorAll<HTMLElement>('[data-testid="setup-staff-card"]')).map((card, index) => [index, Number(card.dataset.setupPage) || 0]));

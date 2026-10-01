@@ -1,7 +1,7 @@
-import { useId, type ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useRef, useId, type ReactNode } from 'react';
+import { createBranchHoursEditor } from '../weekly-schedule';
 import { useI18n } from '@/lib/i18n';
-import { DAYS, type Week, type Day, type Option } from '@/lib/setup-api';
+import { DAYS, type Week, type Option } from '@/lib/setup-api';
 export const controlClass = 'focus-ring block min-h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60';
 
 export function SelectField({ label, value, onChange, children, testId, error, required = false }: { label: string; value: string | number; onChange: (v: string) => void; children: ReactNode; testId: string; error?: string; required?: boolean }) {
@@ -35,9 +35,16 @@ export function RoomServicePicker({ options, selected, onChange }: { options: Op
   </fieldset>;
 }
 export function HoursEditor({ label, value, onChange, testId, error, hint }: { label: string; value: Week; onChange: (v: Week) => void; testId: string; error?: string; hint?: string }) {
-  const { t } = useI18n();
-  const updateDay = (day: Day, ranges: Week[Day]) => onChange({ ...value, [day]: ranges });
-  return <fieldset className="min-w-0 space-y-3 rounded-lg border p-3" data-testid={testId}><legend className="px-1 text-sm font-semibold">{label}</legend><p className="text-xs text-muted-foreground">{hint ?? t('p2.rangeHint')}</p>{DAYS.map((day) => <div key={day} className="min-w-0 border-b pb-3 last:border-b-0"><div className="flex flex-wrap items-center justify-between gap-1"><span className="text-sm font-medium">{t(`p2.days.${day}`)}</span><CheckField label={value[day].length ? t('p2.open') : t('p2.closed')} checked={value[day].length > 0} onChange={(open) => updateDay(day, open ? [{open:'09:00',close:'17:00'}] : [])} testId={`${testId}-${day}-open`}/></div>{value[day].map((range, index) => <div key={index} className="mt-2 grid min-w-0 grid-cols-2 gap-2"><label className="min-w-0 text-xs">{t('p2.from')}<input type="time" className={`${controlClass} mt-1 px-1`} value={range.open} onChange={(e) => updateDay(day, value[day].map((r,i) => i===index ? {...r,open:e.target.value} : r))} data-testid={`${testId}-${day}-${index}-from`}/></label><label className="min-w-0 text-xs">{t('p2.to')}<input type="time" className={`${controlClass} mt-1 px-1`} value={range.close} onChange={(e) => updateDay(day, value[day].map((r,i) => i===index ? {...r,close:e.target.value} : r))} data-testid={`${testId}-${day}-${index}-to`}/></label><button type="button" className="focus-ring col-span-2 justify-self-start rounded text-xs text-destructive underline" onClick={() => updateDay(day, value[day].filter((_,i) => i!==index))} data-testid={`${testId}-${day}-${index}-remove`}>{t('p2.removeRange')}</button></div>)}{value[day].length > 0 && value[day].length < 8 && <Button type="button" variant="ghost" size="sm" onClick={() => updateDay(day,[...value[day],{open:'17:30',close:'19:00'}])} className="mt-2" data-testid={`${testId}-${day}-add`}>{t('p2.addRange')}</Button>}</div>)}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</fieldset>;
+  const { lang } = useI18n();
+  const host = useRef<HTMLDivElement>(null), widget = useRef<ReturnType<typeof createBranchHoursEditor> | null>(null);
+  const callback = useRef(onChange), latest = useRef(value); callback.current = onChange; latest.current = value;
+  useEffect(() => {
+    const editor = createBranchHoursEditor(latest.current, { id: testId, language: lang, label, hint, manualBranch: true }, next => callback.current(next));
+    widget.current = editor; host.current?.replaceChildren(editor.node);
+    return () => { editor.node.remove(); widget.current = null; };
+  }, [lang, label, hint, testId]);
+  useEffect(() => widget.current?.setValue(value), [value]);
+  return <div className="min-w-0 space-y-2"><div ref={host}/>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}</div>;
 }
 export function HoursReadout({ value }: { value: Week }) {
   const { t } = useI18n();

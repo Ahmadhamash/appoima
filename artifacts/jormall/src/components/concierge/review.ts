@@ -5,6 +5,7 @@ import { createPhoneInput, phoneValidationMessage } from '../phone-input';
 import { DAYS,KINDS,type Draft,type Kind,type Language,type Review,type Week,type Provision } from './contract';
 import { el,button } from './dom';
 import { text } from './copy';
+import { createBranchHoursEditor } from '../weekly-schedule';
 import { setupPager } from './paging';
 type Row=Draft[Kind][number];
 const emptyWeek=()=>Object.fromEntries(DAYS.map(day=>[day,[]])) as unknown as Week;
@@ -13,8 +14,7 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
  for(const service of draft.services){if(!service.branchScope&&service.branchKey){service.branchScope='branch';dirty=true;}else if(!service.branchScope&&draft.branches.length===1){service.branchScope='branch';service.branchKey=draft.branches[0]!.key;dirty=true;}if(service.currency!=='JOD'){service.currency='JOD';dirty=true;}}
  const header=el('div');header.append(el('h2','',tr('review')),el('p','jc-muted',tr('draftNote')),el('p','jc-muted',tr('scopeNote')));root.append(header);
  const warning=data.issues.length?el('p','jc-error',tr('missing')):null;if(warning){warning.setAttribute('role','status');root.append(warning);}
- const scheduleRenders=new Map<string,()=>void>();
- const staffHours=(row:Row)=>{if(!('workingHours' in row))return null;return draft.branches.find(b=>b.key===row.branchKey)?.openingHours??data.options.branches.find(b=>b.key===row.branchKey)?.openingHours??null;};
+
  const credentials=new Map<string,{password:HTMLInputElement;checks:Map<string,HTMLInputElement>}>();
  const savedRoles=new Map(draft.staff.map(p=>[p.key,p.role]));
  const total=KINDS.reduce((sum,k)=>sum+draft[k].length,0);if(!total)root.append(el('p','jc-notice',tr('noDraft')));
@@ -35,23 +35,11 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
   return wrap;
  }
  function select(row:Row,key:string,options:{value:string;label:string}[],emptyLabel='choose'){
-  const input=el('select'),record=row as unknown as Record<string,unknown>;const blank=el('option','',tr(emptyLabel));blank.value='';input.append(blank);for(const opt of options){const o=el('option','',opt.label);o.value=opt.value;input.append(o);}input.value=record[key]===null?'':String(record[key]);input.onchange=()=>{record[key]=input.value===''?null:key==='requiresRoom'?input.value==='true':input.value;if(key==='branchKey'&&'workingHours' in row&&row.workingHours===null){const hours=staffHours(row);if(hours){row.workingHours=structuredClone(hours);scheduleRenders.get(row.key)?.();}}if(key==='branchKey'&&draft.services.some(service=>service.key===row.key))record.branchScope=input.value?'branch':'all';markDirty();};return labelField(row,key,input);
+  const input=el('select'),record=row as unknown as Record<string,unknown>;const blank=el('option','',tr(emptyLabel));blank.value='';input.append(blank);for(const opt of options){const o=el('option','',opt.label);o.value=opt.value;input.append(o);}input.value=record[key]===null?'':String(record[key]);input.onchange=()=>{record[key]=input.value===''?null:key==='requiresRoom'?input.value==='true':input.value;if(key==='branchKey'&&draft.services.some(service=>service.key===row.key))record.branchScope=input.value?'branch':'all';markDirty();};return labelField(row,key,input);
  }
- function schedule(row:Row,key:'openingHours'|'workingHours'|'breaks'){
-  const record=row as unknown as Record<string,unknown>,fieldset=el('fieldset','jc-week jc-week-paged'),legend=el('legend','',tr(key));fieldset.append(legend);if(invalid(row.key,key))legend.append(el('span','',` · ${tr('required')}`));
-  const body=el('div');fieldset.append(body);let dayPage=0;const rangePages=new Map<string,number>();
-  const render=()=>{body.replaceChildren();const week=record[key] as Week|null,host=el('div','jc-schedule-pages'),days:HTMLElement[]=[],rangeHosts=new Map<string,HTMLElement>();const controls=el('div','jc-schedule-selects'),dayPicker=el('select'),rangePicker=el('select');dayPicker.dataset.testid=`draft-${row.key}-${key}-dayPicker`;dayPicker.setAttribute('aria-label',language==='ar'?'اليوم':'Day');rangePicker.dataset.testid=`draft-${row.key}-${key}-rangePicker`;rangePicker.setAttribute('aria-label',language==='ar'?'فترة الدوام':'Time interval');for(const [index,day] of DAYS.entries()){const option=el('option','',tr(day));option.value=String(index);dayPicker.append(option);}dayPicker.value=String(dayPage);controls.append(dayPicker,rangePicker);body.append(controls);
-   if(!week){body.append(button(tr(key==='breaks'?'noBreaks':'closedWeek'),()=>{record[key]=emptyWeek();markDirty();render();},'jc-link'));}
-   for(const day of DAYS){const line=el('div','jc-day'),dayLabel=el('div','jc-day-name',tr(day)),ranges=el('div','jc-ranges');line.append(dayLabel,ranges);const current=week?.[day]??[],rangeRows:HTMLElement[]=[];
-    if(current.length===0)ranges.append(el('span','jc-muted',week?tr('closed'):tr('scheduleUnknown')));
-    current.forEach((range,index)=>{const r=el('div','jc-range');for(const slot of ['open','close'] as const){const label=el('label','',tr(slot==='open'?'openTime':'closeTime')),input=el('input');input.type='time';input.value=range[slot];input.required=true;input.dataset.testid=`draft-${row.key}-${key}-${day}-${index}-${slot}`;input.setAttribute('aria-label',`${tr(day)} ${tr(key)} ${tr(slot==='open'?'openTime':'closeTime')}`);input.oninput=()=>{range[slot]=input.value;markDirty();};label.append(input);r.append(label);}r.append(button('×',()=>{current.splice(index,1);markDirty();render();},'jc-link'));(r.lastElementChild as HTMLElement).setAttribute('aria-label',tr('removeRange'));ranges.append(r);rangeRows.push(r);});rangeHosts.set(day,ranges);
-    const rangePager=setupPager(ranges,rangeRows,language,`concierge-ranges-${row.key}-${key}-${day}`);if(rangePager)ranges.prepend(rangePager);
-    ranges.addEventListener('click',()=>{rangePages.set(day,Number(ranges.dataset.setupPage)||0);});ranges.addEventListener('jormall:setup-page',event=>{rangePages.set(day,Number((event as CustomEvent).detail)||0);});ranges.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:rangePages.get(day)??0}));
-    const add=button(`+ ${tr('addRange')}`,()=>{if(!record[key])record[key]=emptyWeek();const w=record[key] as Week;w[day].push({open:'',close:''});rangePages.set(day,w[day].length-1);markDirty();render();},'jc-link');add.disabled=current.length>=8;ranges.append(add);host.append(line);days.push(line);
-   }
-   body.append(host);const nav=setupPager(host,days,language,`concierge-days-${row.key}-${key}`);if(nav)host.prepend(nav);host.addEventListener('click',()=>{dayPage=Number(host.dataset.setupPage)||0;});host.addEventListener('jormall:setup-page',event=>{dayPage=Number((event as CustomEvent).detail)||0;});host.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:dayPage}));
-   const fillRanges=()=>{rangePicker.replaceChildren();const day=DAYS[dayPage]!,count=(record[key] as Week|null)?.[day].length??0;rangePicker.hidden=count<2;for(let index=0;index<count;index++){const option=el('option','',language==='ar'?`الفترة ${index+1}`:`Interval ${index+1}`);option.value=String(index);rangePicker.append(option);}rangePicker.value=String(rangePages.get(day)??0);};fillRanges();dayPicker.onchange=()=>{dayPage=Number(dayPicker.value);host.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:dayPage}));fillRanges();};rangePicker.onchange=()=>{rangeHosts.get(DAYS[dayPage]!)?.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Number(rangePicker.value)}));};
-  };if(key==='workingHours')scheduleRenders.set(row.key,render);render();return fieldset;
+ function schedule(row:Row,key:'openingHours'){
+  const branch=row as Draft['branches'][number];
+  return createBranchHoursEditor(branch.openingHours??emptyWeek(),{id:`draft-${row.key}`,language,label:tr(key)},next=>{branch.openingHours=next;markDirty();}).node;
  }
  const branchOptions=[...data.options.branches.map(b=>({value:b.key,label:b.name})),...draft.branches.filter(b=>!data.options.branches.some(e=>e.key===b.key)).map(b=>({value:b.key,label:b.name??tr('newRecord')}))];
  const serviceOptions=[...data.options.services.map(s=>({value:s.key,label:s.name})),...draft.services.map(s=>({value:s.key,label:s.name??tr('newRecord')}))];
@@ -82,14 +70,19 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
  }
  const cards=Array.from(root.querySelectorAll<HTMLElement>('.jc-record'));const pager=setupPager(root,cards,language,'concierge-review-pages');if(pager){root.classList.add('jc-paged-review');root.insertBefore(pager,cards[0]!);}
  const confirmation=el('label','jc-check');confirm=el('input');confirm.type='checkbox';confirm.dataset.testid='concierge-confirm';confirmation.append(confirm,el('span','',language==='ar'?'راجعت البيانات وأوافق على حفظ الإعداد.':'I reviewed the details and approve this setup.'));root.append(confirmation);
+ const scheduleInvalid=()=>{
+  const input=root.querySelector<HTMLInputElement>('.weekly-schedule input:invalid');if(!input)return false;
+  const card=input.closest<HTMLDetailsElement>('.jc-record');if(card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));card.open=true;revealReviewField(card,input);}
+  input.scrollIntoView({block:'center'});input.reportValidity();return true;
+ };
  const actions=el('div','jc-review-actions');
- save=button(tr('saveDraft'),()=>{if(busy)return;busy=true;disable(true);void callbacks.save(draft).catch(()=>{}).finally(()=>{busy=false;disable(false);});},'jc-button','concierge-save-draft');
- apply=button(language==='ar'?'اعتمد الإعداد':'Confirm setup',()=>{if(busy||!confirm.checked)return;const provision:Provision[]=[];
+ save=button(tr('saveDraft'),()=>{if(busy||scheduleInvalid())return;busy=true;disable(true);void callbacks.save(draft).catch(()=>{}).finally(()=>{busy=false;disable(false);});},'jc-button','concierge-save-draft');
+ apply=button(language==='ar'?'اعتمد الإعداد':'Confirm setup',()=>{if(busy||!confirm.checked||scheduleInvalid())return;const provision:Provision[]=[];
   const badPhone=draft.staff.find(person=>person.phone&&!normalizePhone(person.phone));if(badPhone){callbacks.error(phoneValidationMessage(language));const input=root.querySelector<HTMLInputElement>(`[data-testid="draft-${badPhone.key}-phone"]`),card=input?.closest<HTMLDetailsElement>('.jc-record');if(input&&card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));card.open=true;revealReviewField(card,input);input.reportValidity();}return;}
   for(const person of draft.staff){if(savedRoles.get(person.key)!==person.role){callbacks.error(tr('missing'));return;}const c=credentials.get(person.key)!;if(c.password.value.length<10){callbacks.error(tr('passwordRequired'));const card=c.password.closest<HTMLDetailsElement>('.jc-record');if(card){const index=Array.from(root.querySelectorAll('.jc-record')).indexOf(card);root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:index}));card.open=true;revealReviewField(card,c.password);}c.password.focus();return;}provision.push({key:person.key,initialPassword:c.password.value,permissions:[...c.checks].filter(([,input])=>input.checked).map(([p])=>p)});}
   busy=true;disable(true);void (async()=>{if(dirty){const fresh=await callbacks.save(draft);if(!fresh||fresh.issues.length)return;}await callbacks.apply(provision);})().catch(()=>{}).finally(()=>{for(const p of provision)p.initialPassword='';busy=false;disable(false);});
  },'jc-button jc-primary','concierge-apply');
- function disable(value:boolean){for(const c of root.querySelectorAll<HTMLInputElement|HTMLButtonElement|HTMLSelectElement>('input,button,select'))c.disabled=value;if(!value){save.disabled=!dirty;apply.disabled=!confirm.checked||(!dirty&&data.issues.length>0)||total===0;confirm.disabled=false;root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Number(root.dataset.setupPage)||0}));}}
+ function disable(value:boolean){for(const c of root.querySelectorAll<HTMLInputElement|HTMLButtonElement|HTMLSelectElement>('input,button,select'))c.disabled=value;if(!value){root.querySelectorAll('.weekly-schedule').forEach(node=>node.dispatchEvent(new CustomEvent('jormall:schedule-refresh')));save.disabled=!dirty;apply.disabled=!confirm.checked||(!dirty&&data.issues.length>0)||total===0;confirm.disabled=false;root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Number(root.dataset.setupPage)||0}));}}
  confirm.onchange=()=>{apply.disabled=!confirm.checked||(!dirty&&data.issues.length>0)||total===0;};
  actions.append(button(tr('back'),()=>{for(const c of credentials.values())c.password.value='';callbacks.back();},'jc-link','concierge-review-back'),save,apply);root.append(actions);disable(false);return root;
 }

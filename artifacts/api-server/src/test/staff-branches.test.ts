@@ -8,6 +8,15 @@ const hours=(open:string,close:string,day='mon')=>normalizeWeek({[day]:[{open,cl
 const shift=(branchId:number,open:string,close:string,day='mon')=>({branchId,workingHours:hours(open,close,day),breaks:empty});
 const branches=[{id:1,timeZone:'Asia/Amman'},{id:2,timeZone:'Asia/Amman'}];
 describe('staff schedules across branches',()=>{
+ it('keeps full appointments outside branch closures and provider breaks, including their boundaries',()=>{
+  const branchHours=normalizeWeek({mon:[{open:'10:00',close:'13:00'},{open:'14:00',close:'16:00'},{open:'16:15',close:'18:00'}]});
+  const slots=computeSlots({date:'2026-10-05',timeZone:'Asia/Amman',branchHours,workingHours:hours('10:00','18:00'),breaks:hours('15:00','15:30'),timeOff:[],durationMinutes:45,employeeId:1,requiresRoom:false,roomIds:[],busy:[],now:Date.parse('2026-10-01')});
+  const local=slots.map(slot=>({start:wallTime(slot.startsAt,'Asia/Amman').slice(11),end:wallTime(slot.endsAt,'Asia/Amman').slice(11)}));
+  for(const pause of [{open:'13:00',close:'14:00'},{open:'15:00',close:'15:30'},{open:'16:00',close:'16:15'}])expect(local.every(slot=>slot.end<=pause.open||slot.start>=pause.close)).toBe(true);
+  expect(local.some(slot=>slot.end==='13:00')).toBe(true);
+  expect(local.some(slot=>slot.start==='14:00')).toBe(true);
+  expect(local.at(-1)!.end).toBe('18:00');
+ });
  it('rejects overlapping work even when a break would hide part of the overlap',()=>{const a=shift(1,'09:00','12:00');a.breaks=hours('11:00','12:00');expect(staffScheduleIssue([a,shift(2,'11:00','15:00')],branches)).toBe('staff_branch_hours_overlap');});
  it('allows adjacent shifts and different working days',()=>{expect(staffScheduleIssue([shift(1,'09:00','12:00'),shift(2,'12:00','17:00')],branches)).toBeNull();expect(staffScheduleIssue([shift(1,'09:00','12:00'),shift(2,'09:00','12:00','tue')],branches)).toBeNull();});
  it('compares actual time across time zones, including seasonal changes',()=>{expect(staffScheduleIssue([shift(1,'09:00','10:00'),shift(2,'06:00','07:00')],[branches[0]!,{id:2,timeZone:'UTC'}])).toBe('staff_branch_hours_overlap');expect(staffScheduleIssue([shift(1,'09:00','10:00'),shift(2,'01:00','02:00')],[branches[0]!,{id:2,timeZone:'America/New_York'}],Date.parse('2026-10-01'))).toBe('staff_branch_hours_overlap');});
