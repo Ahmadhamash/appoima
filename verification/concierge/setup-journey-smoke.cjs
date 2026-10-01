@@ -65,7 +65,7 @@ async function layout(page){
    await page.reload();await page.getByTestId('setup-branch_1-name').waitFor();assert.equal(await page.getByTestId('setup-branch_1-name').inputValue(),'Edited branch');
    await layout(page);await screenshot(page,`journey-${width}`);
    await page.getByTestId('concierge-step-back').click();await page.waitForFunction(()=>document.querySelector('[data-testid=concierge-journey-company]')?.getAttribute('aria-current')==='step');
-   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
    assert.equal(await page.getByText('وقفنا الميكروفون لما غبت عن الصفحة. شغّله لما ترجع.').count(),0);
    assert.deepEqual(state.errors,[]);console.log(`PASS: journey saves edits, revisits sections, resumes and exposes Back (${width}px, ${language})`);
   }catch(e){console.error(state.errors,await page.locator('body').innerText());throw e;}finally{await state.context.close();}
