@@ -1,6 +1,6 @@
 import { activeBranch, activeEmployee } from './branch-scope';
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, isNull } from 'drizzle-orm';
 import { branchesTable, usersTable, servicesTable, roomsTable, serviceEmployeesTable, roomServicesTable, inventoryItemsTable, inventoryProductsTable, inventoryMovementsTable, inventoryConsumptionsTable, appointmentsTable, equipmentAssetsTable, equipmentOperatorsTable, employeeCostsTable, roomCostsTable, serviceCostProfilesTable, serviceMaterialCostsTable, serviceEquipmentCostsTable, appointmentCostSnapshotsTable, type User } from '@workspace/db';
 import { hasPermission } from '../domain/permissions';
 import { roomHasEquipment } from '../domain/equipment';
@@ -17,9 +17,9 @@ function authorize(user: User, write = false) {
   // Salary and clinic overhead are manager-only; inventory access alone is insufficient.
   if (user.role !== 'manager' || !['inventory', 'services', 'employees', 'rooms', 'settings'].every(area => hasPermission(user, `${area}.${write ? 'manage' : 'read'}` as 'settings.read'))) throw forbidden();
 }
-async function catalogInTx(tx: OperationsTx, clinicId: number) {
+async function catalogInTx(tx: OperationsTx, clinicId: number, includeDeleted = false) {
   const branches = await tx.select({ id: branchesTable.id, name: branchesTable.name }).from(branchesTable).where(and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id));
-  const services = await tx.select({ id: servicesTable.id, name: servicesTable.name, branchId: servicesTable.branchId, durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, isActive: servicesTable.isActive }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.name));
+  const services = await tx.select({ id: servicesTable.id, name: servicesTable.name, branchId: servicesTable.branchId, durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, isActive: servicesTable.isActive }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId), includeDeleted ? undefined : isNull(servicesTable.deletedAt))).orderBy(asc(servicesTable.name));
   const employees = await tx.select({ id: usersTable.id, name: usersTable.name, branchId: usersTable.branchId, isActive: usersTable.isActive, hourlyCost: employeeCostsTable.hourlyCost }).from(usersTable).leftJoin(employeeCostsTable, and(eq(employeeCostsTable.clinicId, clinicId), eq(employeeCostsTable.employeeId, usersTable.id))).where(and(eq(usersTable.clinicId, clinicId), activeEmployee())).orderBy(asc(usersTable.name));
   const rooms = await tx.select({ id: roomsTable.id, name: roomsTable.name, branchId: roomsTable.branchId, status: roomsTable.status, extra: roomsTable.extra, hourlyCost: roomCostsTable.hourlyCost }).from(roomsTable).leftJoin(roomCostsTable, and(eq(roomCostsTable.clinicId, clinicId), eq(roomCostsTable.roomId, roomsTable.id))).where(and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name));
   const materials = await tx.select({ id: inventoryItemsTable.id, name: inventoryItemsTable.name, branchId: inventoryItemsTable.branchId, unit: inventoryItemsTable.unit, billingType:sql<string>`coalesce(${inventoryItemsTable.extra}->>'billingType','clinic_cost')`, sellingPrice:sql<string|null>`${inventoryItemsTable.extra}->>'sellingPrice'`, unitCost: sql<string | null>`${inventoryItemsTable.extra}->>'unitCost'`, isActive: sql<boolean>`${inventoryItemsTable.isAvailable}=1 and coalesce((${inventoryItemsTable.extra}->>'isActive')::boolean,true)` }).from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId, clinicId), activeBranch(inventoryItemsTable.branchId))).orderBy(asc(inventoryItemsTable.name));
@@ -95,7 +95,7 @@ export async function saveCostProfile(actor: User, serviceId: number, input: Pro
 
 export type CostLine = { kind: 'materials' | 'equipment' | 'employee' | 'room' | 'overhead'; name: string; amount: string | null; quantity?: string; unit?: string; hourlyCost?: string; unitCost?: string; minutes?: number; uses?: number; purchaseCost?: string; residualValue?: string; lifetimeUses?: number; maintenancePerUse?: string; operatingHourlyCost?: string };
 async function quoteInTx(tx: OperationsTx, clinicId: number, serviceId: number, input: QuoteInput, actual?: ActualInput & { appointmentId: number; chargePrice: string | null; chargeCurrency: string | null; productCharges:AppointmentProductCharge[] }) {
-  const c = await catalogInTx(tx, clinicId), service = c.services.find(s => s.id === serviceId);
+  const c = await catalogInTx(tx, clinicId, !!actual), service = c.services.find(s => s.id === serviceId);
   if (!service) throw notFound('record_not_found');
   if (!c.branches.some(b => b.id === input.branchId) || service.branchId && service.branchId !== input.branchId) throw badRequest('costing_invalid_link');
   const profile = await profileInTx(tx, clinicId, serviceId, input.branchId), warnings: string[] = [], lines: CostLine[] = [];

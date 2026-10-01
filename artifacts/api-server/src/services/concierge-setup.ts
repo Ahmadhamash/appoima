@@ -2,7 +2,7 @@ import { activeBranch, activeEmployee } from './branch-scope';
 /** Allowlisted setup apply. Runs inside ONE caller-owned clinic-locked DB transaction. */
 import { normalizeServiceName } from '@workspace/service-definition';
 import { createHash } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { isNull, and, eq, sql } from 'drizzle-orm';
 import { db, branchesTable, servicesTable, roomsTable, usersTable, serviceEmployeesTable, roomServicesTable, type User } from '@workspace/db';
 import { ROLE_PRESETS, ALL_PERMISSIONS, hasPermission } from '../domain/permissions';
 import { withinGrantCeiling, compatibleBranch } from '../domain/setup-rules';
@@ -35,7 +35,7 @@ export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Recor
   for(const [kind,permission] of Object.entries({branches:'settings.manage',services:'services.manage',rooms:'rooms.manage',staff:'employees.manage'} as const))if(draft[kind as keyof Draft].length&&!hasPermission(actor,permission))throw forbidden();
   const existingBranches=await tx.select().from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id)));
   draft=withDefaultStaffHours(draft,existingBranches.map(b=>({...b,key:`branch_${b.id}`})));
-  const existingServices=await tx.select().from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId), activeBranch(servicesTable.branchId)));
+  const existingServices=await tx.select().from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))));
   const branchMap=new Map(existingBranches.map(b=>[`branch_${b.id}`,b.id]));
   const serviceMap=new Map(existingServices.map(s=>[`existing_service_${s.id}`,{id:s.id,branchId:s.branchId}]));
   if(draftIssues(draft,[...branchMap.keys()],[...serviceMap.keys()]).length||previewConciergeSetup(actor,draft).issues.length)throw badRequest('concierge_missing_fields');
@@ -63,7 +63,7 @@ export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Recor
     if(serviceMap.has(s.key))throw badRequest('concierge_invalid_reference');
     const input=serviceSchema.parse({name:s.name,nameLang:language(s),branchId:resolveBranch(s.branchKey),durationMinutes:s.durationMinutes,price:s.price,currency:s.currency,category:s.category,requiresRoom:s.requiresRoom,followUpEnabled:s.followUpEnabled ?? false,isActive:true,employeeIds:s.employeeIds??[],definition:s.definition??null});
     if(existingServices.some(v=>v.branchId===input.branchId&&normalizeServiceName(v.name)===normalizeServiceName(input.name)))throw conflict('concierge_duplicate');
-    const [duplicate]=await tx.select({id:servicesTable.id}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), activeBranch(servicesTable.branchId)),sql`lower(trim(${servicesTable.name})) = lower(${input.name})`,input.branchId===null?sql`${servicesTable.branchId} is null`:eq(servicesTable.branchId,input.branchId))).limit(1);if(duplicate)throw conflict('concierge_duplicate');
+    const [duplicate]=await tx.select({id:servicesTable.id}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))),sql`lower(trim(${servicesTable.name})) = lower(${input.name})`,input.branchId===null?sql`${servicesTable.branchId} is null`:eq(servicesTable.branchId,input.branchId))).limit(1);if(duplicate)throw conflict('concierge_duplicate');
     const {employeeIds,...fields}=input;const [created]=await tx.insert(servicesTable).values({...fields,clinicId}).returning();
     // IDs supplied by the model/client are untrusted; resolve them in this clinic transaction.
     if(employeeIds.length){

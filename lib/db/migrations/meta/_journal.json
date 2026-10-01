@@ -127,6 +127,13 @@
       "when": 1790852400000,
       "tag": "0017_custom_service_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790856000000,
+      "tag": "0018_service_deletion",
+      "breakpoints": true
     }
   ]
 }

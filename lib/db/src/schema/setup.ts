@@ -22,6 +22,7 @@ export const servicesTable = pgTable("services", {
   definition: jsonb("definition").$type<ServiceDefinition | null>(),
   requiredEquipment: jsonb("required_equipment").$type<string[]>().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   requiresRoom: boolean("requires_room").notNull().default(false),
   followUpEnabled: boolean("follow_up_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

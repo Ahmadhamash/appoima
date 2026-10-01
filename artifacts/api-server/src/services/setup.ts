@@ -1,5 +1,5 @@
 import { activeBranch, activeEmployee, employeeAtBranch } from './branch-scope';
-import { and, eq, ilike, or, inArray, sql, asc } from "drizzle-orm";
+import { and, eq, ilike, or, inArray, sql, asc, isNull } from "drizzle-orm";
 import {
   db, usersTable, branchesTable, servicesTable, roomsTable, customersTable,
   serviceEmployeesTable, roomServicesTable, type User,
@@ -62,7 +62,7 @@ async function branchExists(tx: Tx, clinicId: number, id: number | null) {
 }
 async function validateServices(tx: Tx, clinicId: number, ids: number[], branchId: number | null,branchIds?:number[]) {
   if (!ids.length) return;
-  const rows = await tx.select({ id: servicesTable.id, branchId: servicesTable.branchId }).from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId)), inArray(servicesTable.id, ids)));
+  const rows = await tx.select({ id: servicesTable.id, branchId: servicesTable.branchId }).from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))), inArray(servicesTable.id, ids)));
   if (rows.length !== ids.length) throw notFound("record_not_found");
   if (rows.some((s) => branchIds&&s.branchId!==null?!branchIds.includes(s.branchId):!compatibleBranch(s.branchId, branchId))) throw badRequest("branch_mismatch");
 }
@@ -102,7 +102,7 @@ export async function saveBranch(actor: User, input: BranchInput, id?: number) {
 export async function listServices(actor: User, p: PageInput) {
   ensure(actor, "services.read");
   const clinicId = clinicOf(actor);
-  const condition = and(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId)), p.search ? ilike(servicesTable.name, `%${p.search}%`) : undefined);
+  const condition = and(and(eq(servicesTable.clinicId, clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))), p.search ? ilike(servicesTable.name, `%${p.search}%`) : undefined);
   const rows = await db.select().from(servicesTable).where(condition).orderBy(asc(servicesTable.name), asc(servicesTable.id)).limit(p.pageSize).offset((p.page - 1) * p.pageSize);
   const [count] = await db.select({ total: sql<number>`count(*)::int` }).from(servicesTable).where(condition);
   const links = rows.length ? await db.select().from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), inArray(serviceEmployeesTable.serviceId, rows.map((r) => r.id)))) : [];
@@ -111,7 +111,7 @@ export async function listServices(actor: User, p: PageInput) {
 export async function getService(actor: User, id: number) {
   ensure(actor, "services.read");
   const clinicId = clinicOf(actor);
-  const [row] = await db.select().from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId)), eq(servicesTable.id, id)));
+  const [row] = await db.select().from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))), eq(servicesTable.id, id)));
   if (!row) throw notFound("record_not_found");
   const links = await db.select().from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.serviceId, id)));
   return { ...row, employeeIds: links.map((l) => l.employeeId), actualConsumptionAvailable: true };
@@ -126,13 +126,28 @@ export async function saveService(actor: User, input: ServiceInput, id?: number)
       if (linked.some((r) => !compatibleBranch(fields.branchId, r.branchId))) throw badRequest("branch_mismatch");
     }
     const [row] = id
-      ? await tx.update(servicesTable).set(fields).where(and(eq(servicesTable.id, id), and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId)))).returning()
+      ? await tx.update(servicesTable).set(fields).where(and(eq(servicesTable.id, id), and(eq(servicesTable.clinicId, clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))))).returning()
       : await tx.insert(servicesTable).values({ ...fields, clinicId }).returning();
     if (!row) throw notFound("record_not_found");
     await tx.delete(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.serviceId, row.id)));
     if (employeeIds.length) await tx.insert(serviceEmployeesTable).values(employeeIds.map((employeeId) => ({ clinicId, employeeId, serviceId: row.id })));
     await audit(tx, fresh, id ? "service.updated" : "service.created", "service", row.id);
     return { id: row.id };
+  });
+}
+
+/** Remove the catalog entry without breaking appointment, billing or inventory history. */
+export async function deleteService(actor: User, id: number) {
+  return write(actor, 'services.manage', async (tx, clinicId, fresh) => {
+    const [row] = await tx.select().from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), eq(servicesTable.id, id), activeBranch(servicesTable.branchId)));
+    if (!row) throw notFound('record_not_found');
+    if (row.deletedAt) return { id, deletedAt: row.deletedAt.toISOString() };
+    const deletedAt = new Date();
+    await tx.update(servicesTable).set({ deletedAt, isActive: false }).where(and(eq(servicesTable.clinicId, clinicId), eq(servicesTable.id, id)));
+    await tx.delete(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.serviceId, id)));
+    await tx.delete(roomServicesTable).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.serviceId, id)));
+    await audit(tx, fresh, 'service.deleted', 'service', id, { recordsPreserved: true });
+    return { id, deletedAt: deletedAt.toISOString() };
   });
 }
 
@@ -178,7 +193,7 @@ export async function saveRoom(actor: User, input: RoomInput, id?: number) {
     await branchExists(tx, clinicId, fields.branchId);
     await validateServices(tx, clinicId, serviceIds, fields.branchId);
     if (serviceIds.length) {
-      const services = await tx.select({requiredEquipment:servicesTable.requiredEquipment}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), activeBranch(servicesTable.branchId)),inArray(servicesTable.id,serviceIds)));
+      const services = await tx.select({requiredEquipment:servicesTable.requiredEquipment}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))),inArray(servicesTable.id,serviceIds)));
       if (services.some(service=>!roomHasEquipment(service.requiredEquipment,roomFields.extra['equipment']))) throw badRequest('room_missing_equipment');
     }
     if(input.extra?.employeeIds)await validateEmployees(tx,clinicId,input.extra.employeeIds,fields.branchId);
@@ -232,7 +247,7 @@ async function targetEmployee(tx: Tx, clinicId: number, id: number) {
   return row;
 }
 async function replaceEmployeeServices(tx: Tx, clinicId: number, id: number, serviceIds: number[]) {
-  await tx.delete(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.employeeId, id),sql`exists(select 1 from services where services.id=${serviceEmployeesTable.serviceId} and ${activeBranch(servicesTable.branchId)})`));
+  await tx.delete(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.employeeId, id),sql`exists(select 1 from services where services.id=${serviceEmployeesTable.serviceId} and ${and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))})`));
   if (serviceIds.length) await tx.insert(serviceEmployeesTable).values(serviceIds.map((serviceId) => ({ clinicId, serviceId, employeeId: id })));
 }
 export async function listEmployees(actor: User, p: EmployeePageInput) {
@@ -241,7 +256,7 @@ export async function listEmployees(actor: User, p: EmployeePageInput) {
   const condition = and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), p.search ? or(ilike(usersTable.name, pattern), ilike(usersTable.jobTitle, pattern), ilike(usersTable.email, pattern), ilike(usersTable.phone, pattern)) : undefined, p.role ? eq(usersTable.role, p.role) : undefined, p.branchId ? employeeAtBranch(p.branchId) : undefined, p.status ? eq(usersTable.isActive, p.status === 'active') : undefined);
   const rows = await db.select({ id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang, branchId: usersTable.branchId, branchSchedules: usersTable.branchSchedules, email: usersTable.email, phone: usersTable.phone, role: usersTable.role, jobTitle: usersTable.jobTitle, isActive: usersTable.isActive, workingHours: usersTable.workingHours }).from(usersTable).where(condition).orderBy(asc(usersTable.name), asc(usersTable.id)).limit(p.pageSize).offset((p.page - 1) * p.pageSize);
   const [count] = await db.select({ total: sql<number>`count(*)::int` }).from(usersTable).where(condition);
-  const links = rows.length ? await db.select().from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), inArray(serviceEmployeesTable.employeeId, rows.map(row => row.id)),sql`exists(select 1 from services where services.id=${serviceEmployeesTable.serviceId} and ${activeBranch(servicesTable.branchId)})`)) : [];
+  const links = rows.length ? await db.select().from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), inArray(serviceEmployeesTable.employeeId, rows.map(row => row.id)),sql`exists(select 1 from services where services.id=${serviceEmployeesTable.serviceId} and ${and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))})`)) : [];
   const activeIds=new Set((await db.select({id:branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId),activeBranch(branchesTable.id)))).map(b=>b.id));
   for(const row of rows)row.branchSchedules=row.branchSchedules.filter(s=>activeIds.has(s.branchId));
   const all = await db.select({role:usersTable.role,isActive:usersTable.isActive}).from(usersTable).where(and(eq(usersTable.clinicId,clinicId), activeEmployee()));
@@ -252,7 +267,7 @@ export async function getEmployee(actor: User, id: number) {
   const clinicId = clinicOf(actor), manager = hasPermission(actor, "employees.manage");
   const [row] = await db.select({ ...employeePublic, ...(manager ? { permissions: usersTable.permissions } : {}) }).from(usersTable).where(and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), eq(usersTable.id, id)));
   if (!row) throw notFound("record_not_found");
-  const links = await db.select().from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.employeeId, id),sql`exists(select 1 from services where services.id=${serviceEmployeesTable.serviceId} and ${activeBranch(servicesTable.branchId)})`));
+  const links = await db.select().from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.employeeId, id),sql`exists(select 1 from services where services.id=${serviceEmployeesTable.serviceId} and ${and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt))})`));
   const activeIds=new Set((await db.select({id:branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId),activeBranch(branchesTable.id)))).map(b=>b.id));
   row.branchSchedules=row.branchSchedules.filter(s=>activeIds.has(s.branchId));
   const permissions = row.permissions ?? [];
@@ -323,7 +338,7 @@ export async function setEmployeeActive(actor: User, id: number, isActive: boole
 /** Purpose-limited labels for form selections, not a bypass to private resource details. */
 export async function serviceCategories(actor: User) {
   ensure(actor, 'services.read');
-  const rows = await db.selectDistinct({name:servicesTable.category}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicOf(actor)),activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.category));
+  const rows = await db.selectDistinct({name:servicesTable.category}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicOf(actor)),and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt)))).orderBy(asc(servicesTable.category));
   const unique = new Map<string,string>();
   for(const row of rows){const name=row.name.trim().replace(/\s+/g,' ');if(name&&!unique.has(name.normalize('NFKC').toLocaleLowerCase()))unique.set(name.normalize('NFKC').toLocaleLowerCase(),name);}
   return [...unique.values()];
@@ -333,7 +348,7 @@ export async function setupOptions(actor: User, resource: SetupResource) {
   ensure(actor, `${resourceArea[resource]}.read`);
   const clinicId = clinicOf(actor);
   const branches = await db.select({ id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone, openingHours: branchesTable.openingHours }).from(branchesTable).where(and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.name));
-  const services = ["rooms", "employees"].includes(resource) ? await db.select({ id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId, isActive: servicesTable.isActive, definition: servicesTable.definition, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.name)) : [];
+  const services = ["rooms", "employees"].includes(resource) ? await db.select({ id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId, isActive: servicesTable.isActive, definition: servicesTable.definition, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt)))).orderBy(asc(servicesTable.name)) : [];
   const employees = resource === "services" ? await db.select({ id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang, branchId: usersTable.branchId, branchSchedules: usersTable.branchSchedules, isActive: usersTable.isActive }).from(usersTable).where(and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), inArray(usersTable.role, ['doctor', 'service_provider']))).orderBy(asc(usersTable.name)) : [];
   const canManageStaff = resource === "employees" && hasPermission(actor, "employees.manage");
   return { branches, services, employees, categories:resource==='services'?await serviceCategories(actor):[],

@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/app-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { FormError, PasswordField } from '@/components/form-field';
 import { RecordForm } from '@/components/setup/record-form';
 import { ServiceBatchForm } from '@/components/setup/service-batch-form';
@@ -36,6 +37,27 @@ function PasswordReset({ record, onSaved }: {record: RecordItem; onSaved: (messa
     <PasswordField label={t('p2.fields.initialPassword')} value={value} onChange={(e)=>setValue(e.target.value)} minLength={10} maxLength={200} autoComplete="new-password" error={validation} hint={t('owner.initialPasswordHint')} data-testid="reset-password-input"/>
     <FormError message={mutation.error?errorMessage(mutation.error):undefined}/><Button type="submit" disabled={mutation.isPending} data-testid="reset-password-submit">{mutation.isPending?t('common.loading'):t('p2.resetPassword')}</Button>
   </form></details>;
+}
+function DeleteSubservice({record,onSaved}:{record:RecordItem;onSaved:(message:string)=>void}) {
+  const {lang,dir,t}=useI18n(), errorMessage=useErrorMessage(), qc=useQueryClient();
+  const [open,setOpen]=useState(false);
+  const mutation=useMutation({
+    mutationFn:()=>api(`/clinic/services/${record.id}`,{method:'DELETE',body:{confirmed:true}}),
+    onSuccess:()=>{
+      setOpen(false);
+      for(const key of ['scheduling','operations','costing','billing','clinic-workspace','service-categories'])void qc.invalidateQueries({queryKey:[key]});
+      onSaved(lang==='ar'?'تم حذف الخدمة الفرعية.':'Subservice deleted.');
+    },
+  });
+  const label=lang==='ar'?'حذف الخدمة الفرعية':'Delete Subservice';
+  return <AlertDialog open={open} onOpenChange={value=>{if(!mutation.isPending){mutation.reset();setOpen(value);}}}>
+    <AlertDialogTrigger asChild><Button variant="destructive" data-testid="delete-subservice">{label}</Button></AlertDialogTrigger>
+    <AlertDialogContent dir={dir} className="w-[calc(100%_-_2rem)] rounded-xl" data-testid="delete-subservice-confirmation">
+      <AlertDialogHeader className="text-start"><AlertDialogTitle>{label}: <EnteredName item={record}/></AlertDialogTitle><AlertDialogDescription>{lang==='ar'?'هل تريد حذف هذه الخدمة الفرعية؟ ستُزال من قائمة الخدمات ولن تكون متاحة للحجوزات الجديدة. ستبقى المواعيد والسجلات السابقة محفوظة.':'Delete this subservice? It will be removed from the service catalog and unavailable for new bookings. Existing appointments and historical records will be preserved.'}</AlertDialogDescription></AlertDialogHeader>
+      <FormError message={mutation.error?errorMessage(mutation.error):undefined}/>
+      <AlertDialogFooter><AlertDialogCancel disabled={mutation.isPending} data-testid="cancel-delete-subservice">{t('common.cancel')}</AlertDialogCancel><Button variant="destructive" disabled={mutation.isPending} onClick={()=>mutation.mutate()} data-testid="confirm-delete-subservice">{mutation.isPending?t('common.loading'):label}</Button></AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>;
 }
 function RecordDetails({ resource, record, options, manage, onEdit, onSaved }: {resource: Resource; record: RecordItem; options: Options; manage: boolean; onEdit: ()=>void; onSaved: (message: string)=>void}) {
   const { t }=useI18n(), {user}=useAuth(), errorMessage=useErrorMessage();
@@ -65,7 +87,7 @@ function RecordDetails({ resource, record, options, manage, onEdit, onSaved }: {
       {manage&&!canEdit&&<p className="text-sm text-muted-foreground">{t(record.id===user?.id?'p2.selfEdit':'p2.restrictedAccount')}</p>}
       <FormError message={activeMutation.error?errorMessage(activeMutation.error):undefined}/>
     </>}
-    {canEdit&&<div className="flex flex-wrap justify-end gap-2 border-t pt-4">{resource==='employees'&&<Button variant="outline" disabled={activeMutation.isPending} onClick={()=>{if(!record.isActive||window.confirm(t('p2.confirmDeactivate')))activeMutation.mutate();}} data-testid="toggle-employee-active">{t(record.isActive?'p2.deactivate':'p2.activate')}</Button>}<Button onClick={onEdit} data-testid="edit-record">{t('p2.edit')}</Button></div>}
+    {canEdit&&<div className="flex flex-wrap justify-end gap-2 border-t pt-4">{resource==='employees'&&<Button variant="outline" disabled={activeMutation.isPending} onClick={()=>{if(!record.isActive||window.confirm(t('p2.confirmDeactivate')))activeMutation.mutate();}} data-testid="toggle-employee-active">{t(record.isActive?'p2.deactivate':'p2.activate')}</Button>}{resource==='services'&&<DeleteSubservice record={record} onSaved={onSaved}/>}<Button onClick={onEdit} data-testid="edit-record">{t('p2.edit')}</Button></div>}
   </div>;
 }
 function SetupResourcePage({ resource }: {resource: Resource}) {

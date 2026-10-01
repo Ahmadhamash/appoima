@@ -16,7 +16,7 @@ import { localConciergeTurn } from '../domain/local-concierge';
 import { createDefinition, normalizeServiceName } from '@workspace/service-definition';
 import { assertServiceOnly, publicServiceSuggestions, draftFromSuggestion, changedServiceSources, ensureWizardDefinitions, type ServiceSource, type ServiceSuggestion } from '../domain/service-wizard';
 import { randomUUID, createHash } from 'node:crypto';
-import { and, eq, sql, asc } from 'drizzle-orm';
+import { isNull, and, eq, sql, asc } from 'drizzle-orm';
 import { db, branchDraftArchivesTable, managerOnboardingTable as onboarding, usersTable, clinicsTable, branchesTable, servicesTable, roomsTable, appointmentsTable, customersTable, type User, type ManagerOnboarding } from '@workspace/db';
 import { hasPermission, type Permission } from '../domain/permissions';
 import { emptyDraft, parseDraft, mergeDraft, applySharedServiceDetails, draftIssues, fixedSpeech, mentionsUpload, nameLanguage, CONSENT_VERSION, LIMITS, NAVIGATION, KINDS, type Stage, type Draft, type Language, type ConversationMessage, type UploadedDocument, type ServiceDraft } from '../domain/concierge-core';
@@ -94,7 +94,7 @@ function publicSession(row:ManagerOnboarding) {
 export async function businessContext(actor:User) {
   const c=ensureManager(actor);const allowed=(p:Permission)=>hasPermission(actor,p);
   const branches=allowed('settings.read')?await db.select().from(branchesTable).where(and(eq(branchesTable.clinicId,c), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id)).limit(201):[];
-  const services=allowed('services.read')?await db.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId,durationMinutes:servicesTable.durationMinutes,price:servicesTable.price,currency:servicesTable.currency,requiresRoom:servicesTable.requiresRoom}).from(servicesTable).where(and(eq(servicesTable.clinicId,c), activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.id)).limit(201):[];
+  const services=allowed('services.read')?await db.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId,durationMinutes:servicesTable.durationMinutes,price:servicesTable.price,currency:servicesTable.currency,requiresRoom:servicesTable.requiresRoom}).from(servicesTable).where(and(eq(servicesTable.clinicId,c), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt)))).orderBy(asc(servicesTable.id)).limit(201):[];
   const rooms=allowed('rooms.read')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,capacity:roomsTable.capacity}).from(roomsTable).where(and(eq(roomsTable.clinicId,c), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.id)).limit(201):[];
   const staff=allowed('employees.read')?await db.select({id:usersTable.id,name:usersTable.name,role:usersTable.role,branchId:usersTable.branchId,isActive:usersTable.isActive}).from(usersTable).where(and(eq(usersTable.clinicId,c), activeEmployee())).orderBy(asc(usersTable.id)).limit(201):[];
   const [appointmentCount]=allowed('appointments.read')?await db.select({count:sql<number>`count(*)::int`}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,c), activeBranch(appointmentsTable.branchId))):[{count:null}];
