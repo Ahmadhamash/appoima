@@ -120,7 +120,8 @@ describe("Phase 2 validation, persistence and checklist",()=>{
     const options=await a.get('/api/clinic/options?for=services');expect(options.body.categories).toContain('نحت الجسم');expect(options.body.categories).not.toContain('Private category');expect(options.body.categories).not.toContain('Nails');
     const fresh=agent();const manager=await fx.createUser({clinicId:clinicA,role:'manager',permissions:[...ROLE_PRESETS.manager]});await login(fresh,manager.email,manager.password);
     expect((await fresh.get('/api/clinic/service-categories')).body.items).toContain('نحت الجسم');
-    const batch=await a.post('/api/clinic/services/batch').send({services:[{...serviceBody(branchA),name:'Category batch 1',category:'Consultations'},{...serviceBody(branchA),name:'Category batch 2',category:'Consultations'}]});expect(batch.status).toBe(201);
+    const definition={...createDefinition('custom','en'),section:'Consultations',medicalScope:'medical' as const};
+    const batch=await a.post('/api/clinic/services/batch').send({services:[{...serviceBody(branchA),name:'Category batch 1',category:'Consultations',definition},{...serviceBody(branchA),name:'Category batch 2',category:'Consultations',definition}]});expect(batch.status).toBe(201);
     expect((await a.get('/api/clinic/service-categories')).body.items.filter((name:string)=>name==='Consultations')).toHaveLength(1);
   });
   it("creates a main service with subservices together and rolls back invalid batches",async()=>{
@@ -142,7 +143,7 @@ describe("Phase 2 validation, persistence and checklist",()=>{
     expect((await a.post('/api/clinic/branches').send({...branchBody(),timeZone:'Invalid/Planet'})).status).toBe(400);
     expect((await a.post('/api/clinic/branches').send({...branchBody(),openingHours:{...hours,mon:[{open:'09:00',close:'14:00'},{open:'13:00',close:'17:00'}]}})).status).toBe(400);
   });
-  it("rejects invalid category, duration, currency and negative price",async()=>{for(const change of [{category:'Invented'},{durationMinutes:0},{currency:'XYZ'},{price:'-1'}])expect((await a.post('/api/clinic/services').send({...serviceBody(branchA),...change})).status).toBe(400);});
+  it("rejects invalid category, duration, currency and negative price",async()=>{for(const change of [{category:''},{category:'a'.repeat(81)},{category:'Invalid\u0000label'},{durationMinutes:0},{currency:'XYZ'},{price:'-1'}])expect((await a.post('/api/clinic/services').send({...serviceBody(branchA),...change})).status).toBe(400);});
   it("rejects customer without a contact method",async()=>expect((await a.post('/api/clinic/customers').send({...customerBody(branchA),phone:'',email:null})).status).toBe(400));
   it("rejects breaks outside working hours and invalid time off",async()=>{
     expect((await a.post('/api/clinic/employees').send({...employeeBody(branchA),breaks:{...empty(),mon:[{open:'08:00',close:'09:00'}]}})).status).toBe(400);
