@@ -26,7 +26,7 @@ function hasPendingSetup(userId?: number) {
     const saved = localStorage.getItem(`jormall:concierge-checkpoint:${userId}`);
     if (!saved) return false;
     const checkpoint = JSON.parse(saved) as { serviceWizard?: boolean; stage?: string };
-    return checkpoint.stage !== 'complete';
+    return !checkpoint.serviceWizard && checkpoint.stage !== 'complete';
   } catch { return false; }
 }
 
@@ -61,6 +61,9 @@ export function useClinicSetup() {
   });
   const progress = clinic.data?.clinic?.progress;
   const configured = !!progress?.hasBranchHours && !!progress.hasCatalog;
-  const required = !!enabled && (query.isError || clinic.isError || (session ? session.stage !== 'complete' || !configured : !configured || branch.branches.length === 0 || hasPendingSetup(user?.id)));
+  // An existing clinic's service editor is optional work. Reopening it must not
+  // turn a completed clinic back into mandatory onboarding, even with a saved pause.
+  const initialSetupPending = !!session && session.stage !== 'complete' && !session.serviceWizard;
+  const required = !!enabled && (session ? initialSetupPending : !configured || branch.branches.length === 0 || hasPendingSetup(user?.id));
   return { ...query, enabled, required, paused, progress, loading: !!enabled && (query.isPending || clinic.isPending || branch.loading) };
 }
