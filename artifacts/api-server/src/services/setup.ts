@@ -117,7 +117,9 @@ export async function getService(actor: User, id: number) {
   return { ...row, employeeIds: links.map((l) => l.employeeId), actualConsumptionAvailable: true };
 }
 export async function saveService(actor: User, input: ServiceInput, id?: number) {
-  return write(actor, "services.manage", async (tx, clinicId, fresh) => {
+  return write(actor, "services.manage", (tx, clinicId, fresh) => saveServiceInTx(tx, clinicId, fresh, input, id));
+}
+export async function saveServiceInTx(tx: Tx, clinicId: number, fresh: User, input: ServiceInput, id?: number) {
     const { employeeIds, ...fields } = input;
     await branchExists(tx, clinicId, fields.branchId);
     await validateEmployees(tx, clinicId, employeeIds, fields.branchId, true);
@@ -133,7 +135,6 @@ export async function saveService(actor: User, input: ServiceInput, id?: number)
     if (employeeIds.length) await tx.insert(serviceEmployeesTable).values(employeeIds.map((employeeId) => ({ clinicId, employeeId, serviceId: row.id })));
     await audit(tx, fresh, id ? "service.updated" : "service.created", "service", row.id);
     return { id: row.id };
-  });
 }
 
 /** Remove the catalog entry without breaking appointment, billing or inventory history. */

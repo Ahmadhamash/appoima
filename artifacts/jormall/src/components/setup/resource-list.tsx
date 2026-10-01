@@ -1,10 +1,10 @@
 import { EnteredName } from '@/components/setup/controls';
 import { useI18n } from '@/lib/i18n';
-import type { Options, RecordItem, Resource } from '@/lib/setup-api';
+import type { Options, RecordItem, Resource, ServiceGroupSummary } from '@/lib/setup-api';
 import { ChevronLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-export function ResourceList({resource,items,options,onOpen,onSelect,selectedId,onDelete}:{resource:Resource;items:RecordItem[];options:Options;onOpen:(id:number)=>void;onSelect?:(id:number)=>void;selectedId?:number;onDelete?:(item:RecordItem)=>void}) {
+export function ResourceList({resource,items,options,onOpen,onSelect,selectedId,onDelete,serviceGroups,onEditGroup,onDeleteGroup}:{resource:Resource;items:RecordItem[];options:Options;onOpen:(id:number)=>void;onSelect?:(id:number)=>void;selectedId?:number;onDelete?:(item:RecordItem)=>void;serviceGroups?:ServiceGroupSummary[];onEditGroup?:(id:number)=>void;onDeleteGroup?:(id:number)=>void}) {
   const {t,lang}=useI18n(),ar=lang==='ar';
   const columns:Record<Resource,string[]>={
     branches:[ar?'الفرع':'Branch',ar?'المنطقة الزمنية':'Time zone',ar?'مواعيد الدوام':'Working hours'],
@@ -14,15 +14,17 @@ export function ResourceList({resource,items,options,onOpen,onSelect,selectedId,
     customers:[ar?'العميل':'Customer',ar?'التواصل':'Contact',ar?'الفرع':'Branch',ar?'ملاحظات':'Notes'],
   };
   const serviceGroup=(item:RecordItem)=>item.definition?.section||(item.category?item.category:item.name);
-  const groups=resource==='services'?Array.from(new Set(items.map(serviceGroup))):[''];
+  const groups=resource==='services'?(serviceGroups?.map(group=>group.name)??Array.from(new Set(items.map(serviceGroup)))):[''];
   const branchFor=(item:RecordItem)=>options.branches.find(branch=>branch.id===item.branchId);
   return <div className="space-y-4" data-testid={resource==='services'?'clinic-service-sections':undefined}>
-    {groups.map(group=>{
+    {groups.map((group,index)=>{
       const rows=resource==='services'?items.filter(item=>serviceGroup(item)===group):items;
+      const main=serviceGroups?.find(item=>item.name===group);
+      const groupId=main?.id??rows[0]?.id;
       return <section key={group} className="overflow-hidden rounded-2xl border border-[#e0e6ef] bg-white shadow-[0_12px_32px_#1b2d480a]">
         {resource!=='employees'&&<div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8ecf2] px-5 py-4">
-          <h2 className="font-bold text-[#1b2d48]">{group||t('p2.titles.'+resource)}</h2>
-          <span className="rounded-lg bg-[#f8f1e4] px-3 py-1 text-xs font-semibold text-primary">{rows.length}</span>
+          <div className="flex min-w-0 items-center gap-3">{resource==='services'&&<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-sm font-bold text-primary" data-testid={`main-service-number-${groupId}`}>{main?.number??index+1}</span>}<h2 className="break-words font-bold text-[#1b2d48]" data-testid={resource==='services'?`main-service-name-${groupId}`:undefined}>{group||t('p2.titles.'+resource)}</h2></div>
+          {resource==='services'?<div className="flex flex-wrap items-center gap-2">{onEditGroup&&<button type="button" onClick={()=>groupId&&onEditGroup(groupId)} className="focus-ring rounded-lg border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10" data-testid={`edit-main-service-${groupId}`}>{ar?'تعديل':'Edit'}</button>}{onDeleteGroup&&<button type="button" onClick={()=>groupId&&onDeleteGroup(groupId)} className="focus-ring rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50" data-testid={`delete-main-service-${groupId}`}>{ar?'حذف':'Delete'}</button>}</div>:<span className="rounded-lg bg-[#f8f1e4] px-3 py-1 text-xs font-semibold text-primary">{rows.length}</span>}
         </div>}
         <div className="overflow-x-auto">
           <table className={`w-full ${resource==='employees'?'min-w-[1050px]':'min-w-[700px]'} text-start text-sm`}>

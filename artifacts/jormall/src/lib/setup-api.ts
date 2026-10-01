@@ -30,6 +30,8 @@ export type RecordItem = Option & {
   followUpEnabled?: boolean;
   employeeIds?: number[]; serviceIds?: number[]; capacity?: number; status?: 'available' | 'maintenance';
 };
-export type ListResult = { items: RecordItem[]; total: number; page: number; pageSize: number; summary?: { total: number; active: number; doctors: number; roles: Record<string,number> }; branchSummary?: {total:number;withOpeningHours:number;timeZones:{timeZone:string;count:number}[]} };
+export type ServiceGroupSummary = {id:number;name:string;number:number;count:number};
+export type ServiceGroup = {id:number;name:string;revision:string;items:RecordItem[]};
+export type ListResult = { items: RecordItem[]; total: number; page: number; pageSize: number; serviceSummary?:{active:number;inactive:number};serviceGroupTotal?:number;serviceGroups?:ServiceGroupSummary[]; summary?: { total: number; active: number; doctors: number; roles: Record<string,number> }; branchSummary?: {total:number;withOpeningHours:number;timeZones:{timeZone:string;count:number}[]} };
 export const recordPath = (resource: Resource) => `/clinic/${resource}`;
 export const sectionPath = (resource: Resource) => `${resource === 'employees' || resource === 'customers' ? '/people' : '/business'}/${resource === 'branches' ? 'settings' : resource}`;

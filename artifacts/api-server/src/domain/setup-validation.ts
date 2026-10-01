@@ -44,6 +44,12 @@ export const serviceBatchSchema = z.object({ services: z.array(serviceSchema).mi
   const names = value.services.map(service => service.name.trim().toLocaleLowerCase());
   if (new Set(names).size !== names.length) ctx.addIssue({code:z.ZodIssueCode.custom,path:['services'],message:'duplicate_record'});
 });
+export const serviceGroupEditSchema = z.object({
+  name: z.string().trim().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/),
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  services: z.array(z.object({id, service: serviceSchema}).strict()).min(1).max(1000),
+}).strict().refine(value=>new Set(value.services.map(item=>item.id)).size===value.services.length, 'duplicate_selection');
+export const serviceGroupDeleteSchema = z.object({confirmed:z.literal(true),revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export const roomExtraSchema=z.object({
   roomType:z.enum(['laser','treatment','facial','injection','consultation','other']).optional(),description:z.string().trim().max(1500).optional(),
   equipment:z.array(z.string().trim().min(1).max(80)).max(40).optional(),features:z.array(z.string().trim().min(1).max(80)).max(40).optional(),
@@ -68,6 +74,7 @@ export const employeeSchema = z.object(employeeFields).strict().refine(checkBrea
 // Omitted hours inherit the branch at creation; an explicit empty week stays closed.
 export const newEmployeeSchema = z.object({ ...employeeFields, workingHours: weekSchema.optional(), initialPassword: z.string().min(10).max(200) }).strict().refine(v => v.workingHours === undefined || checkBreaks({...v,workingHours:v.workingHours}), { path: ["breaks"], message: "break_outside_hours" });
 export const pageSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(20), search: z.string().trim().max(120).default("") });
+export const serviceGroupPageSchema=pageSchema.extend({status:z.enum(['active','inactive']).optional(),pageServiceIds:z.string().max(20000).regex(/^$|^[1-9]\d*(,[1-9]\d*)*$/).transform(value=>value?value.split(',').map(Number):[]).refine(values=>values.length<=1000&&values.every(Number.isSafeInteger),'invalid_reference').optional()});
 export const employeePageSchema = pageSchema.extend({ role: z.enum(["manager", "secretary", "doctor", "service_provider", "other_staff"]).optional(), branchId: z.coerce.number().int().positive().optional(), status: z.enum(["active", "inactive"]).optional() });
 export const branchPageSchema = pageSchema.extend({ status:z.enum(['active','archived']).default('active'),openingHours: z.enum(['configured']).optional(), timeZone: z.string().max(100).refine(isTimeZone, 'invalid_timezone').optional() });
 export type BranchInput = z.infer<typeof branchSchema>;

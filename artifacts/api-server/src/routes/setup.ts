@@ -5,6 +5,8 @@ import { requireAuth, requirePasswordChanged, requirePermission } from "../middl
 import { forbidden } from "../lib/errors";
 import { branchSchema, serviceSchema, serviceBatchSchema, roomSchema, customerSchema, employeeSchema, newEmployeeSchema, pageSchema, employeePageSchema, branchPageSchema } from "../domain/setup-validation";
 import * as setup from "../services/setup";
+import {serviceGroupEditSchema,serviceGroupDeleteSchema,serviceGroupPageSchema} from '../domain/setup-validation';
+import {listServiceGroups,getServiceGroup,saveServiceGroup,deleteServiceGroup} from '../services/service-groups';
 import {roomOverview,roomSchedule,createRoomBlock,removeRoomBlock} from '../services/room-workflows';
 import {roomBlockSchema,roomRangeSchema} from '../domain/room-workflow-validation';
 
@@ -27,9 +29,15 @@ router.get("/clinic/branches/:id", requirePermission("settings.read"), async (re
 router.post("/clinic/branches", requirePermission("settings.manage"), async (req, res) => res.status(201).json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body)) }));
 router.put("/clinic/branches/:id", requirePermission("settings.manage"), async (req, res) => res.json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body), id(req.params["id"])) }));
 
-router.get("/clinic/services", requirePermission("services.read"), async (req, res) => res.json(await setup.listServices(req.user!, pageSchema.parse(req.query))));
+router.get("/clinic/services", requirePermission("services.read"), async (req, res) => {
+  const grouped=z.enum(['true']).optional().parse(req.query.grouped),p=pageSchema.parse(req.query);
+  res.json(await (grouped?listServiceGroups(req.user!,serviceGroupPageSchema.parse(req.query)):setup.listServices(req.user!,p)));
+});
 router.get('/clinic/service-categories',requirePermission('services.read'),async(req,res)=>res.json({items:await setup.serviceCategories(req.user!)}));
 router.post("/clinic/services/batch", requirePermission("services.manage"), async (req, res) => res.status(201).json(await setup.saveServicesBatch(req.user!, serviceBatchSchema.parse(req.body))));
+router.get('/clinic/services/:id/group',requirePermission('services.read'),async(req,res)=>res.json(await getServiceGroup(req.user!,id(req.params.id))));
+router.put('/clinic/services/:id/group',requirePermission('services.manage'),async(req,res)=>res.json(await saveServiceGroup(req.user!,id(req.params.id),serviceGroupEditSchema.parse(req.body))));
+router.delete('/clinic/services/:id/group',requirePermission('services.manage'),async(req,res)=>{const body=serviceGroupDeleteSchema.parse(req.body);res.json(await deleteServiceGroup(req.user!,id(req.params.id),body.revision));});
 router.get("/clinic/services/:id", requirePermission("services.read"), async (req, res) => res.json({ item: await setup.getService(req.user!, id(req.params["id"])) }));
 router.post("/clinic/services", requirePermission("services.manage"), async (req, res) => res.status(201).json({ item: await setup.saveService(req.user!, serviceSchema.parse(req.body)) }));
 router.put("/clinic/services/:id", requirePermission("services.manage"), async (req, res) => res.json({ item: await setup.saveService(req.user!, serviceSchema.parse(req.body), id(req.params["id"])) }));
