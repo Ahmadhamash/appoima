@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee } from './branch-scope';
 import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, usersTable, clinicsTable, schedulingCommandsTable, type User } from '@workspace/db';
@@ -10,7 +11,7 @@ export function operatingClinic(actor:User):number {
 }
 export async function refreshOperatingActor(tx:OperationsTx,actor:User):Promise<User> {
   const [r]=await tx.select({user:usersTable,status:clinicsTable.status}).from(usersTable).innerJoin(clinicsTable,eq(clinicsTable.id,usersTable.clinicId))
-    .where(and(eq(usersTable.id,actor.id),eq(usersTable.clinicId,operatingClinic(actor))));
+    .where(and(eq(usersTable.id,actor.id),and(eq(usersTable.clinicId,operatingClinic(actor)), activeEmployee())));
   if(!r||!r.user.isActive||r.user.mustChangePassword||r.status!=='active') throw forbidden();
   operatingClinic(r.user);return r.user;
 }

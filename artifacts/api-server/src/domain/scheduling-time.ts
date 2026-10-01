@@ -14,7 +14,7 @@ export function wallTime(instant: Date | number | string, zone: string): string 
 }
 export function branchDate(instant: Date | number | string, zone: string): string { return wallTime(instant, zone).slice(0, 10); }
 /** Gaps and ambiguous wall times are omitted, not guessed. Same conservative policy as staff leave. */
-export function wallConverter(date: string, zone: string): (minute: number) => number | null {
+export function wallConverter(date: string, zone: string, ambiguity?:'earliest'|'latest'): (minute: number) => number | null {
   const base = Date.parse(`${date}T00:00:00Z`), offsets = new Set<number>();
   for (const hours of [-36, -12, 0, 12, 36, 48]) {
     const probe = base + hours * 3600000;
@@ -24,6 +24,7 @@ export function wallConverter(date: string, zone: string): (minute: number) => n
     const target = base + minute * 60000;
     const local = new Date(target).toISOString().slice(0, 16);
     const candidates = [...offsets].map((offset) => target - offset).filter((instant) => wallTime(instant, zone) === local);
+    if(candidates.length>1&&ambiguity)return ambiguity==='earliest'?Math.min(...candidates):Math.max(...candidates);
     return candidates.length === 1 ? candidates[0]! : null;
   };
 }

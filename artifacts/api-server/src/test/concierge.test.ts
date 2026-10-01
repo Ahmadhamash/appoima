@@ -1,3 +1,4 @@
+import {normalizeWeek} from '../domain/setup-rules';
 import * as linkedClinic from '../concierge/linked-clinic';
 /** Real PostgreSQL/Express acceptance suite. Provider HTTP is STUBBED, never live.
  * Requires a migrated disposable database and TEST_DATABASE_DISPOSABLE=1.
@@ -6,7 +7,7 @@ import * as linkedClinic from '../concierge/linked-clinic';
 import {randomUUID} from 'node:crypto';
 import {beforeEach,afterEach,afterAll,describe,it,expect,vi} from 'vitest';
 import {and,eq,inArray,sql} from 'drizzle-orm';
-import {db,usersTable,branchesTable,servicesTable,managerOnboardingTable,auditEventsTable} from '@workspace/db';
+import {db,branchDraftArchivesTable,usersTable,branchesTable,servicesTable,managerOnboardingTable,auditEventsTable} from '@workspace/db';
 import {Fixture,agent,login} from './helpers';
 import {ROLE_PRESETS} from '../domain/permissions';
 import {emptyDraft,type Draft} from '../domain/concierge-core';
@@ -165,6 +166,20 @@ describe('Manager voice concierge: tenant safety, drafts and explicit atomic app
   const s=await save(draft);expect(s.draft.staff[0].workingHours).toEqual(none);
   const applied=await post('/apply',{revision:s.revision,confirmed:true,staff:[{key:'new_staff',initialPassword:'Synthetic-long-password',permissions:[]}]});expect(applied.status).toBe(200);
   const [u]=await db.select().from(usersTable).where(eq(usersTable.id,applied.body.applied.staff[0]));f.userIds.push(u!.id);expect(u!.workingHours).toEqual(none);
+ });
+ it('applies explicit non-overlapping staff schedules for multiple branches and rejects conflicts',async()=>{
+  const draft=makeDraft(),first=draft.branches[0]!,second={...first,key:'second_branch',name:'Second branch',existingId:null};draft.branches.push(second);draft.services[0]!.branchScope='all';draft.services[0]!.branchKey=null;
+  const person:Draft['staff'][number]=staff(`multi-${randomUUID()}@example.test`),morning=normalizeWeek({mon:[{open:'09:00',close:'12:00'}]}),afternoon=normalizeWeek({mon:[{open:'13:00',close:'17:00'}]});person.branchSchedules=[{branchKey:first.key,workingHours:morning,breaks:normalizeWeek({})},{branchKey:second.key,workingHours:afternoon,breaks:normalizeWeek({})}];draft.staff=[person];
+  let saved=await save(draft);const reviewed=await manager.get('/api/concierge/review');expect(reviewed.body.issues).toEqual([]);
+  draft.staff[0]!.branchSchedules![1]!.workingHours=morning;saved=(await put('/draft',{revision:saved.revision,draft})).body;expect((await manager.get('/api/concierge/review')).body.issues.some((i:{code:string})=>i.code==='staff_branch_hours_overlap')).toBe(true);expect((await post('/apply',{revision:saved.revision,confirmed:true,staff:[{key:person.key,initialPassword:'Synthetic-long-password',permissions:[]}]})).status).toBe(400);
+  draft.staff[0]!.branchSchedules![1]!.workingHours=afternoon;saved=(await put('/draft',{revision:saved.revision,draft})).body;
+  const applied=await post('/apply',{revision:saved.revision,confirmed:true,staff:[{key:person.key,initialPassword:'Synthetic-long-password',permissions:[]}]});expect(applied.status,applied.body).toBe(200);const [created]=await db.select().from(usersTable).where(eq(usersTable.id,applied.body.applied.staff[0]));f.userIds.push(created!.id);expect(created!.branchId).toBeNull();expect(created!.branchSchedules.map(s=>s.workingHours)).toEqual([morning,afternoon]);
+ });
+ it('archives a setup branch only after confirmation and retains its draft records',async()=>{
+  const draft=makeDraft();draft.staff=[staff(`archive-${randomUUID()}@example.test`)];const saved=await save(draft),key=draft.branches[0]!.key;
+  expect((await post('/branch-archive',{revision:saved.revision,key,confirmed:false})).status).toBe(400);expect((await post('/branch-archive',{revision:saved.revision-1,key,confirmed:true})).status).toBe(409);
+  const archived=await post('/branch-archive',{revision:saved.revision,key,confirmed:true});expect(archived.status,archived.body).toBe(200);expect(archived.body.draft.branches).toEqual([]);expect(archived.body.draft.services).toEqual([]);expect(archived.body.draft.staff).toEqual([]);
+  const snapshots=await db.select().from(branchDraftArchivesTable).where(eq(branchDraftArchivesTable.clinicId,clinic));expect(snapshots).toHaveLength(1);expect(snapshots[0]!.snapshot.branch).toMatchObject({name:draft.branches[0]!.name});expect(snapshots[0]!.snapshot.staff).toHaveLength(1);expect(JSON.stringify(snapshots)).not.toMatch(/initialPassword|passwordHash/);
  });
  it('requires confirmed=true and complete reviewed data',async()=>{const s=await save(makeDraft());expect((await post('/apply',{revision:s.revision,confirmed:false,staff:[]})).status).toBe(400);expect(await branchCount()).toBe(0);});
  it('applies branches/services atomically and safely replays a duplicate confirmation',async()=>{const s=await save(makeDraft()),body={revision:s.revision,confirmed:true,staff:[]};const a=await post('/apply',body),b=await post('/apply',body);expect(a.status).toBe(200);expect(b.status).toBe(200);expect(b.body.applied).toEqual(a.body.applied);expect(await branchCount()).toBe(1);expect((await db.select().from(servicesTable).where(eq(servicesTable.clinicId,clinic)))).toHaveLength(1);expect(a.body.draft).toEqual(emptyDraft());});

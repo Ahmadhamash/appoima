@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee } from './branch-scope';
 import { createHash } from 'node:crypto';
 import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { appointmentsTable, branchesTable, customersTable, servicesTable, usersTable, waitingEntriesTable, waitingOffersTable, type User } from '@workspace/db';
@@ -15,10 +16,10 @@ const selection={id:appointmentsTable.id,clinicId:appointmentsTable.clinicId,emp
   customer:name(customersTable),service:name(servicesTable),employee:name(usersTable),branch:name(branchesTable)};
 function briefQuery(tx:OperationsTx) {
   return tx.select(selection).from(appointmentsTable)
-    .innerJoin(branchesTable,and(eq(branchesTable.id,appointmentsTable.branchId),eq(branchesTable.clinicId,appointmentsTable.clinicId)))
-    .innerJoin(customersTable,and(eq(customersTable.id,appointmentsTable.customerId),eq(customersTable.clinicId,appointmentsTable.clinicId)))
-    .innerJoin(servicesTable,and(eq(servicesTable.id,appointmentsTable.serviceId),eq(servicesTable.clinicId,appointmentsTable.clinicId)))
-    .innerJoin(usersTable,and(eq(usersTable.id,appointmentsTable.employeeId),eq(usersTable.clinicId,appointmentsTable.clinicId)));
+    .innerJoin(branchesTable,and(eq(branchesTable.id,appointmentsTable.branchId),and(eq(branchesTable.clinicId,appointmentsTable.clinicId), activeBranch(branchesTable.id))))
+    .innerJoin(customersTable,and(eq(customersTable.id,appointmentsTable.customerId),and(eq(customersTable.clinicId,appointmentsTable.clinicId), activeBranch(customersTable.branchId))))
+    .innerJoin(servicesTable,and(eq(servicesTable.id,appointmentsTable.serviceId),and(eq(servicesTable.clinicId,appointmentsTable.clinicId), activeBranch(servicesTable.branchId))))
+    .innerJoin(usersTable,and(eq(usersTable.id,appointmentsTable.employeeId),and(eq(usersTable.clinicId,appointmentsTable.clinicId), activeEmployee())));
 }
 type BriefRow=Awaited<ReturnType<typeof briefQuery>>[number];
 function publicBrief(row:BriefRow):AppointmentBrief {
@@ -26,7 +27,7 @@ function publicBrief(row:BriefRow):AppointmentBrief {
     customer:row.customer,service:row.service,employee:row.employee,branch:row.branch};
 }
 async function readBrief(tx:OperationsTx,actor:User,id:number):Promise<AppointmentBrief> {
-  const [row]=await briefQuery(tx).where(and(eq(appointmentsTable.id,id),eq(appointmentsTable.clinicId,actor.clinicId!)));
+  const [row]=await briefQuery(tx).where(and(eq(appointmentsTable.id,id),and(eq(appointmentsTable.clinicId,actor.clinicId!), activeBranch(appointmentsTable.branchId))));
   if(!row||!canReadAppointment(actor,row))throw notFound('appointment_not_found');
   return publicBrief(row);
 }
@@ -34,7 +35,7 @@ export async function assistantAppointmentChoices(actor:User,raw:unknown) {
   const input=assistantAppointmentsQuery.parse(raw);
   return withOperations(actor,false,async(tx,fresh)=>{
     if(!canUseAssistantAction(fresh,'summarize_appointment'))throw forbidden();
-    const rows=await briefQuery(tx).where(and(eq(appointmentsTable.clinicId,fresh.clinicId!),canReadAll(fresh)?undefined:eq(appointmentsTable.employeeId,fresh.id),
+    const rows=await briefQuery(tx).where(and(and(eq(appointmentsTable.clinicId,fresh.clinicId!), activeBranch(appointmentsTable.branchId)),canReadAll(fresh)?undefined:eq(appointmentsTable.employeeId,fresh.id),
       input.date?sql`(${appointmentsTable.startsAt} AT TIME ZONE ${branchesTable.timeZone})::date = ${input.date}::date`:undefined))
       .orderBy(desc(appointmentsTable.startsAt),desc(appointmentsTable.id)).limit(21).offset((input.page-1)*20);
     return {items:rows.slice(0,20).map(publicBrief),page:input.page,hasMore:rows.length>20};
@@ -70,7 +71,7 @@ export async function prepareAssistantAction(actor:User,raw:unknown):Promise<Ass
         const [offer]=await tx.select({offerId:waitingOffersTable.id,entryId:waitingOffersTable.entryId,status:waitingOffersTable.status,startsAt:waitingOffersTable.startsAt,endsAt:waitingOffersTable.endsAt,
           windowStart:waitingEntriesTable.windowStart,windowEnd:waitingEntriesTable.windowEnd,preferredEmployeeId:waitingEntriesTable.preferredEmployeeId,recordedAt:waitingOffersTable.createdAt,
           entryVersion:waitingEntriesTable.version,entryStatus:waitingEntriesTable.status,offerEntryVersion:waitingOffersTable.entryVersion})
-          .from(waitingOffersTable).innerJoin(waitingEntriesTable,and(eq(waitingEntriesTable.id,waitingOffersTable.entryId),eq(waitingEntriesTable.clinicId,fresh.clinicId!)))
+          .from(waitingOffersTable).innerJoin(waitingEntriesTable,and(eq(waitingEntriesTable.id,waitingOffersTable.entryId),and(eq(waitingEntriesTable.clinicId,fresh.clinicId!), activeBranch(waitingEntriesTable.branchId))))
           .where(and(eq(waitingOffersTable.clinicId,fresh.clinicId!),eq(waitingOffersTable.cancelledAppointmentId,appointment.id),inArray(waitingOffersTable.status,['offered','booked']))).limit(1);
         waiting=offer&&(offer.status==='offered'||offer.status==='booked')?{offerId:offer.offerId,entryId:offer.entryId,status:offer.status,startsAt:offer.startsAt.toISOString(),endsAt:offer.endsAt.toISOString(),
           windowStart:offer.windowStart.toISOString(),windowEnd:offer.windowEnd.toISOString(),hasEmployeePreference:offer.preferredEmployeeId!==null,recordedAt:offer.recordedAt.toISOString()}:null;

@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee, employeeAtBranch } from './branch-scope';
 import { intakeSnapshot, ServiceDefinitionError } from '@workspace/service-definition';
 import {paymentSummary,type ProductSelection} from '../domain/patient-billing';
 import {patientProductOptions,plannedProductSelections,resolveProductCharges} from './patient-billing';
@@ -53,12 +54,12 @@ async function freshActor(tx: Executor, actor: User): Promise<User> {
   const clinicId = scheduleClinic(actor);
   const [fresh] = await tx.select({user: usersTable, clinicStatus: clinicsTable.status}).from(usersTable)
     .innerJoin(clinicsTable, eq(clinicsTable.id, usersTable.clinicId))
-    .where(and(eq(usersTable.id, actor.id), eq(usersTable.clinicId, clinicId)));
+    .where(and(eq(usersTable.id, actor.id), and(eq(usersTable.clinicId, clinicId), activeEmployee())));
   if (!fresh || !fresh.user.isActive || fresh.user.mustChangePassword || fresh.clinicStatus !== 'active') throw forbidden();
   scheduleClinic(fresh.user); return fresh.user;
 }
 async function findAppointment(tx: Executor, actor: User, id: number): Promise<Appointment> {
-  const [a] = await tx.select().from(appointmentsTable).where(and(eq(appointmentsTable.clinicId, scheduleClinic(actor)), eq(appointmentsTable.id, id)));
+  const [a] = await tx.select().from(appointmentsTable).where(and(and(eq(appointmentsTable.clinicId, scheduleClinic(actor)), activeBranch(appointmentsTable.branchId)), eq(appointmentsTable.id, id)));
   // Uniform 404 avoids revealing the existence of another employee's/clinic's appointment.
   if (!a || !canReadAppointment(actor, a)) throw notFound('appointment_not_found');
   return a;
@@ -103,21 +104,21 @@ export async function availability(actor: User, input: AvailabilityInput) {
 export async function createAppointment(actor: User, input: BookingInput) {
   return command(actor, 'book', input, async (_tx, fresh) => requireScheduler(fresh), async (tx, fresh) => {
     const clinicId = scheduleClinic(fresh);
-    const [customer] = await tx.select({id: customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId, clinicId), eq(customersTable.id, input.customerId)));
+    const [customer] = await tx.select({id: customersTable.id}).from(customersTable).where(and(and(eq(customersTable.clinicId, clinicId), activeBranch(customersTable.branchId)), eq(customersTable.id, input.customerId)));
     if (!customer) throw notFound('record_not_found');
     const dates=seriesDates(input.startsAt,input.series?.count??1,input.series?.intervalDays??7);
     if(input.packageId){await ensurePackageReservation(tx,fresh,input.packageId,input.customerId,input.serviceId,dates.length);await enforcePackagePayment(tx,fresh,input.packageId,input.overrideReason);}
     let firstId=0;
     for(const startsAt of dates){
     const context = await selectedSlot(tx, fresh, {...input,startsAt});
-    const [service]=await tx.select({definition:servicesTable.definition,price:servicesTable.price,currency:servicesTable.currency,followUpEnabled:servicesTable.followUpEnabled}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),eq(servicesTable.id,input.serviceId)));
+    const [service]=await tx.select({definition:servicesTable.definition,price:servicesTable.price,currency:servicesTable.currency,followUpEnabled:servicesTable.followUpEnabled}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), activeBranch(servicesTable.branchId)),eq(servicesTable.id,input.serviceId)));
     if(!service)throw notFound('record_not_found');
     if(input.expectedServicePrice!==undefined&&milli(input.expectedServicePrice)!==milli(service.price))throw conflict('billing_price_changed');
     const productSelections=input.productItems??(input.appointmentType==='follow_up'?[]:await plannedProductSelections(tx,clinicId,input.branchId,input.serviceId));
     const productCharges=await resolveProductCharges(tx,clinicId,input.branchId,productSelections);
     if(input.appointmentType==='follow_up'){
       if(!service.followUpEnabled)throw badRequest('follow_up_not_enabled');
-      const [parent]=await tx.select().from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,clinicId),eq(appointmentsTable.id,input.followUpOfId!),eq(appointmentsTable.customerId,input.customerId),eq(appointmentsTable.serviceId,input.serviceId)));
+      const [parent]=await tx.select().from(appointmentsTable).where(and(and(eq(appointmentsTable.clinicId,clinicId), activeBranch(appointmentsTable.branchId)),eq(appointmentsTable.id,input.followUpOfId!),eq(appointmentsTable.customerId,input.customerId),eq(appointmentsTable.serviceId,input.serviceId)));
       if(!parent||parent.status!=='completed'||parent.endsAt.getTime()>Date.parse(input.startsAt))throw badRequest('follow_up_invalid_parent');
     }
     if(input.chargePrice!==undefined&&!['manager','secretary','doctor','service_provider'].includes(fresh.role))throw forbidden();
@@ -135,7 +136,7 @@ export async function createAppointment(actor: User, input: BookingInput) {
   });
 }
 export async function previewBookingSeries(actor:User,input:z.infer<typeof bookingPreviewSchema>){return withOperations(actor,false,async(tx,fresh)=>{
- requireScheduler(fresh);const [customer]=await tx.select({id:customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId,scheduleClinic(fresh)),eq(customersTable.id,input.customerId)));if(!customer)throw notFound('record_not_found');
+ requireScheduler(fresh);const [customer]=await tx.select({id:customersTable.id}).from(customersTable).where(and(and(eq(customersTable.clinicId,scheduleClinic(fresh)), activeBranch(customersTable.branchId)),eq(customersTable.id,input.customerId)));if(!customer)throw notFound('record_not_found');
  const dates=seriesDates(input.startsAt,input.series?.count??1,input.series?.intervalDays??7);if(input.packageId)await ensurePackageReservation(tx,fresh,input.packageId,input.customerId,input.serviceId,dates.length);
  const sessions=[];for(const startsAt of dates){try{const context=await selectedSlot(tx,fresh,{...input,startsAt});sessions.push({startsAt,endsAt:context.selected.endsAt,available:true,error:null});}catch(error){if(!(error instanceof HttpError))throw error;sessions.push({startsAt,endsAt:null,available:false,error:error.code});}}
  return {sessions,canBook:sessions.every(s=>s.available),payment:input.packageId?await packagePaymentCheck(tx,fresh,input.packageId):null};
@@ -148,7 +149,7 @@ export async function saveAppointmentCharge(actor:User,id:number,input:{price:st
     if(['cancelled','no_show'].includes(a.status))throw conflict('invalid_transition');
     const [frozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
     if(frozen)throw conflict('costing_snapshot_locked');
-    await tx.update(appointmentsTable).set({chargePrice:input.price,chargeCurrency:'JOD',version:a.version+1,updatedAt:new Date()}).where(and(eq(appointmentsTable.clinicId,a.clinicId),eq(appointmentsTable.id,id)));
+    await tx.update(appointmentsTable).set({chargePrice:input.price,chargeCurrency:'JOD',version:a.version+1,updatedAt:new Date()}).where(and(and(eq(appointmentsTable.clinicId,a.clinicId), activeBranch(appointmentsTable.branchId)),eq(appointmentsTable.id,id)));
     await syncAppointmentInvoice(tx,fresh,{...a,chargePrice:input.price});
     await recordAudit({clinicId:a.clinicId,actorUserId:fresh.id,action:'appointment.price_changed',entityType:'appointment',entityId:id,details:{before:a.chargePrice,after:input.price,appointmentType:a.appointmentType}},tx);
     return id;
@@ -159,8 +160,8 @@ export async function patientPricing(actor:User,input:{branchId:number;serviceId
   return db.transaction(async tx=>{
     await tx.execute(sql`select pg_advisory_xact_lock_shared(7140002, ${clinicId})`);
     await freshActor(tx,actor);
-    const [branch]=await tx.select({id:branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId),eq(branchesTable.id,input.branchId)));
-    const [service]=await tx.select({price:servicesTable.price,branchId:servicesTable.branchId}).from(servicesTable).where(and(eq(servicesTable.clinicId,clinicId),eq(servicesTable.id,input.serviceId)));
+    const [branch]=await tx.select({id:branchesTable.id}).from(branchesTable).where(and(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id)),eq(branchesTable.id,input.branchId)));
+    const [service]=await tx.select({price:servicesTable.price,branchId:servicesTable.branchId}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), activeBranch(servicesTable.branchId)),eq(servicesTable.id,input.serviceId)));
     if(!branch||!service||service.branchId!==null&&service.branchId!==input.branchId)throw notFound('record_not_found');
     const selections=input.appointmentType==='follow_up'?[]:await plannedProductSelections(tx,clinicId,input.branchId,input.serviceId);
     const products=await resolveProductCharges(tx,clinicId,input.branchId,selections);
@@ -184,7 +185,7 @@ export async function saveAppointmentProducts(actor:User,id:number,input:{items:
     const [frozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
     if(frozen)throw conflict('costing_snapshot_locked');
     const products=await resolveProductCharges(tx,a.clinicId,a.branchId,input.items,a.productCharges);
-    await tx.update(appointmentsTable).set({productCharges:products,productChargesBasis:'manual',version:a.version+1,updatedAt:new Date()}).where(and(eq(appointmentsTable.clinicId,a.clinicId),eq(appointmentsTable.id,id)));
+    await tx.update(appointmentsTable).set({productCharges:products,productChargesBasis:'manual',version:a.version+1,updatedAt:new Date()}).where(and(and(eq(appointmentsTable.clinicId,a.clinicId), activeBranch(appointmentsTable.branchId)),eq(appointmentsTable.id,id)));
     await syncAppointmentInvoice(tx,fresh,{...a,productCharges:products});
     await recordAudit({clinicId:a.clinicId,actorUserId:fresh.id,action:'appointment.product_charges_changed',entityType:'appointment',entityId:id,details:{before:a.productCharges,after:products}},tx);
     return id;
@@ -206,7 +207,7 @@ export async function transitionAppointment(actor: User, id: number, input: Tran
     await packageAppointmentTransition(tx,fresh,before,input.status,input.overrideReason);
     const [after] = await tx.update(appointmentsTable).set({status: input.status, version: before.version + 1, updatedAt: new Date(),
       ...(input.notes !== undefined ? {notes: input.notes, notesLang: input.notesLang!} : {})})
-      .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.clinicId, scheduleClinic(fresh)), eq(appointmentsTable.version, before.version))).returning();
+      .where(and(eq(appointmentsTable.id, id), and(eq(appointmentsTable.clinicId, scheduleClinic(fresh)), activeBranch(appointmentsTable.branchId)), eq(appointmentsTable.version, before.version))).returning();
     if (!after) throw conflict('appointment_changed');
     await history(tx, fresh, 'status_changed', before, after, input.reason);
     if (after.status === 'cancelled') {await cancelAppointmentDeposit(tx,fresh,after);await offerNextReplacement(tx, fresh, after);}
@@ -224,7 +225,7 @@ export async function rescheduleAppointment(actor: User, id: number, input: Resc
     const [after] = await tx.update(appointmentsTable).set({employeeId: input.employeeId, roomId: context.selected.roomId, requiresRoom:context.requiresRoom,
       startsAt: new Date(context.selected.startsAt), endsAt: new Date(context.selected.endsAt),
       status: 'pending', version: before.version + 1, updatedAt: new Date()})
-      .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.clinicId, scheduleClinic(fresh)), eq(appointmentsTable.version, before.version))).returning();
+      .where(and(eq(appointmentsTable.id, id), and(eq(appointmentsTable.clinicId, scheduleClinic(fresh)), activeBranch(appointmentsTable.branchId)), eq(appointmentsTable.version, before.version))).returning();
     if (!after) throw conflict('appointment_changed');
     await history(tx, fresh, 'rescheduled', before, after, input.reason); return id;
   });
@@ -234,7 +235,7 @@ export async function saveAppointmentNotes(actor: User, id: number, input: Appoi
     const before = await findAppointment(tx, fresh, id);
     if (before.version !== input.expectedVersion) throw conflict('appointment_changed');
     const [after] = await tx.update(appointmentsTable).set({notes: input.notes, notesLang: input.notesLang, version: before.version + 1, updatedAt: new Date()})
-      .where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.clinicId, scheduleClinic(fresh)), eq(appointmentsTable.version, before.version))).returning();
+      .where(and(eq(appointmentsTable.id, id), and(eq(appointmentsTable.clinicId, scheduleClinic(fresh)), activeBranch(appointmentsTable.branchId)), eq(appointmentsTable.version, before.version))).returning();
     if (!after) throw conflict('appointment_changed');
     await history(tx, fresh, 'notes_updated', before, after); return id;
   });
@@ -243,7 +244,7 @@ export async function createBookingCustomer(actor: User, input: BookingCustomerI
   return command(actor, 'booking_customer', input, async (_tx, fresh) => { requireScheduler(fresh); if (!hasPermission(fresh, 'customers.manage')) throw forbidden(); }, async (tx, fresh) => {
     const clinicId = scheduleClinic(fresh);
     if (input.branchId !== null) {
-      const [branch] = await tx.select({id: branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.id, input.branchId), eq(branchesTable.clinicId, clinicId)));
+      const [branch] = await tx.select({id: branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.id, input.branchId), and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))));
       if (!branch) throw notFound('record_not_found');
     }
     const [customer] = await tx.insert(customersTable).values({clinicId, branchId: input.branchId, name: input.name, nameLang: input.nameLang,
@@ -256,18 +257,18 @@ export async function createBookingCustomer(actor: User, input: BookingCustomerI
 /** Purpose-limited booking/display metadata; never expose login, permission, leave or private notes. */
 export async function schedulingCatalog(actor: User, input: {branchId?: number; serviceId?: number}) {
   const clinicId = scheduleClinic(actor);
-  const branches = await db.select({id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone}).from(branchesTable).where(eq(branchesTable.clinicId, clinicId)).orderBy(asc(branchesTable.name));
+  const branches = await db.select({id: branchesTable.id, name: branchesTable.name, nameLang: branchesTable.nameLang, timeZone: branchesTable.timeZone}).from(branchesTable).where(and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.name));
   if (input.branchId && !branches.some((b) => b.id === input.branchId)) throw notFound('record_not_found');
   const serviceRows = await db.select({id: servicesTable.id, name: servicesTable.name, nameLang: servicesTable.nameLang, branchId: servicesTable.branchId,
     durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, followUpEnabled:servicesTable.followUpEnabled, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, definition:servicesTable.definition})
-    .from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), eq(servicesTable.isActive, true),
+    .from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId)), eq(servicesTable.isActive, true),
       input.branchId ? or(eq(servicesTable.branchId, input.branchId), sql`${servicesTable.branchId} is null`) : undefined)).orderBy(asc(servicesTable.name));
   if (input.serviceId && !serviceRows.some((s) => s.id === input.serviceId)) throw notFound('record_not_found');
   const links = input.serviceId ? await db.select({employeeId: serviceEmployeesTable.employeeId}).from(serviceEmployeesTable).where(and(eq(serviceEmployeesTable.clinicId, clinicId), eq(serviceEmployeesTable.serviceId, input.serviceId))) : [];
   const employees = await db.select({id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang, branchId: usersTable.branchId})
-    .from(usersTable).where(and(eq(usersTable.clinicId, clinicId), eq(usersTable.isActive, true),
+    .from(usersTable).where(and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), eq(usersTable.isActive, true),
       canReadAll(actor) ? undefined : eq(usersTable.id, actor.id),
-      input.branchId ? or(eq(usersTable.branchId, input.branchId), sql`${usersTable.branchId} is null`) : undefined,
+      input.branchId ? employeeAtBranch(input.branchId) : undefined,
       inArray(usersTable.role, ['doctor', 'service_provider']),
       input.serviceId ? (links.length ? inArray(usersTable.id, links.map((v) => v.employeeId)) : sql`false`) : undefined)).orderBy(asc(usersTable.name));
   return {branches, services: serviceRows, employees, canBook: canSchedule(actor), canReadAll: canReadAll(actor),
@@ -287,16 +288,16 @@ const listSelection = {
 };
 function joinedAppointments(executor: Pick<typeof db, 'select'> = db) {
   return executor.select(listSelection).from(appointmentsTable)
-    .innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), eq(branchesTable.clinicId, appointmentsTable.clinicId)))
-    .innerJoin(customersTable, and(eq(customersTable.id, appointmentsTable.customerId), eq(customersTable.clinicId, appointmentsTable.clinicId)))
-    .innerJoin(usersTable, and(eq(usersTable.id, appointmentsTable.employeeId), eq(usersTable.clinicId, appointmentsTable.clinicId)))
-    .innerJoin(servicesTable, and(eq(servicesTable.id, appointmentsTable.serviceId), eq(servicesTable.clinicId, appointmentsTable.clinicId)));
+    .innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), and(eq(branchesTable.clinicId, appointmentsTable.clinicId), activeBranch(branchesTable.id))))
+    .innerJoin(customersTable, and(eq(customersTable.id, appointmentsTable.customerId), and(eq(customersTable.clinicId, appointmentsTable.clinicId), activeBranch(customersTable.branchId))))
+    .innerJoin(usersTable, and(eq(usersTable.id, appointmentsTable.employeeId), and(eq(usersTable.clinicId, appointmentsTable.clinicId), activeEmployee())))
+    .innerJoin(servicesTable, and(eq(servicesTable.id, appointmentsTable.serviceId), and(eq(servicesTable.clinicId, appointmentsTable.clinicId), activeBranch(servicesTable.branchId))));
 }
 export async function listAppointments(actor: User, input: CalendarInput) {
   const clinicId = scheduleClinic(actor), ownOnly = !canReadAll(actor) || input.mine === 'true';
   if (ownOnly && input.employeeId && input.employeeId !== actor.id) throw forbidden();
   const localDay = sql`(${appointmentsTable.startsAt} AT TIME ZONE ${branchesTable.timeZone})::date`;
-  const condition = and(eq(appointmentsTable.clinicId, clinicId), ownOnly ? eq(appointmentsTable.employeeId, actor.id) : undefined,
+  const condition = and(and(eq(appointmentsTable.clinicId, clinicId), activeBranch(appointmentsTable.branchId)), ownOnly ? eq(appointmentsTable.employeeId, actor.id) : undefined,
     input.employeeId ? eq(appointmentsTable.employeeId, input.employeeId) : undefined,
     input.branchId ? eq(appointmentsTable.branchId, input.branchId) : undefined,
     input.serviceId ? eq(appointmentsTable.serviceId, input.serviceId) : undefined,
@@ -306,7 +307,7 @@ export async function listAppointments(actor: User, input: CalendarInput) {
     input.from ? gte(appointmentsTable.startsAt, new Date(input.from)) : undefined,
     input.to ? lte(appointmentsTable.startsAt, new Date(input.to)) : undefined);
   const rows = await joinedAppointments().where(condition).orderBy(input.date || input.from || input.to ? asc(appointmentsTable.startsAt) : desc(appointmentsTable.startsAt), asc(appointmentsTable.id)).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
-  const [count] = await db.select({total: sql<number>`count(*)::int`}).from(appointmentsTable).innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), eq(branchesTable.clinicId, clinicId))).where(condition);
+  const [count] = await db.select({total: sql<number>`count(*)::int`}).from(appointmentsTable).innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id)))).where(condition);
   return {items: rows.map((a) => ({...a, billing:paymentSummary(a.chargePrice,a.productCharges,a.productChargesBasis), nextActions: allowedTransitions(actor, a).filter((to) => to !== 'no_show' || a.startsAt.getTime() <= Date.now()), canReschedule: canReschedule(actor, a)})),
     total: count!.total, page: input.page, pageSize: input.pageSize, ownOnly};
 }
@@ -317,21 +318,21 @@ export async function getAppointment(actor: User, id: number) {
   await tx.execute(sql`select pg_advisory_xact_lock_shared(7140002, ${clinicId})`);
   actor = await freshActor(tx, actor);
   const a = await findAppointment(tx, actor, id);
-  const [row] = await joinedAppointments(tx).where(and(eq(appointmentsTable.id, id), eq(appointmentsTable.clinicId, scheduleClinic(actor))));
+  const [row] = await joinedAppointments(tx).where(and(eq(appointmentsTable.id, id), and(eq(appointmentsTable.clinicId, scheduleClinic(actor)), activeBranch(appointmentsTable.branchId))));
   if (!row) throw notFound('appointment_not_found');
   let customerDetails: {phone: string|null; email: string|null; notes: string; sensitiveNotes?: string} | undefined;
   if (hasPermission(actor, 'customers.read')) {
     const [customer] = await tx.select({phone: customersTable.phone, email: customersTable.email, notes: customersTable.notes,
-      ...(hasPermission(actor, 'customers.manage') ? {sensitiveNotes: customersTable.sensitiveNotes} : {})}).from(customersTable).where(and(eq(customersTable.clinicId, a.clinicId), eq(customersTable.id, a.customerId)));
+      ...(hasPermission(actor, 'customers.manage') ? {sensitiveNotes: customersTable.sensitiveNotes} : {})}).from(customersTable).where(and(and(eq(customersTable.clinicId, a.clinicId), activeBranch(customersTable.branchId)), eq(customersTable.id, a.customerId)));
     customerDetails = customer;
     if (hasPermission(actor, 'customers.manage')) await recordAudit({clinicId: a.clinicId, actorUserId: actor.id, action: 'customer.sensitive_notes_read', entityType: 'customer', entityId: a.customerId}, tx);
   }
-  const [room] = a.roomId ? await tx.select({id: roomsTable.id, name: roomsTable.name, nameLang: roomsTable.nameLang}).from(roomsTable).where(and(eq(roomsTable.clinicId, a.clinicId), eq(roomsTable.id, a.roomId))) : [];
+  const [room] = a.roomId ? await tx.select({id: roomsTable.id, name: roomsTable.name, nameLang: roomsTable.nameLang}).from(roomsTable).where(and(and(eq(roomsTable.clinicId, a.clinicId), activeBranch(roomsTable.branchId)), eq(roomsTable.id, a.roomId))) : [];
   const events = await tx.select({id: appointmentStatusHistoryTable.id, event: appointmentStatusHistoryTable.event, fromStatus: appointmentStatusHistoryTable.fromStatus,
     toStatus: appointmentStatusHistoryTable.toStatus, at: appointmentStatusHistoryTable.at, reason: appointmentStatusHistoryTable.reason,
     before: appointmentStatusHistoryTable.before, after: appointmentStatusHistoryTable.after,
     actor: {id: usersTable.id, name: usersTable.name, nameLang: usersTable.nameLang}}).from(appointmentStatusHistoryTable)
-    .innerJoin(usersTable, and(eq(usersTable.id, appointmentStatusHistoryTable.actorId), eq(usersTable.clinicId, a.clinicId)))
+    .innerJoin(usersTable, and(eq(usersTable.id, appointmentStatusHistoryTable.actorId), and(eq(usersTable.clinicId, a.clinicId), activeEmployee())))
     .where(and(eq(appointmentStatusHistoryTable.clinicId, a.clinicId), eq(appointmentStatusHistoryTable.appointmentId, id))).orderBy(asc(appointmentStatusHistoryTable.id));
   const [costFrozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
   const packageLink=await appointmentPackage(tx,actor,id);
@@ -348,18 +349,18 @@ export async function getAppointment(actor: User, id: number) {
 export async function customerAppointments(actor: User, customerId: number, input: CalendarInput) {
   scheduleClinic(actor);
   if (!hasPermission(actor, 'customers.read')) throw forbidden();
-  const [customer] = await db.select({id: customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId, actor.clinicId!), eq(customersTable.id, customerId)));
+  const [customer] = await db.select({id: customersTable.id}).from(customersTable).where(and(and(eq(customersTable.clinicId, actor.clinicId!), activeBranch(customersTable.branchId)), eq(customersTable.id, customerId)));
   if (!customer) throw notFound('record_not_found');
   const result=await listAppointments(actor, {...input, customerId});
   const allowed=result.items.filter(item=>canWriteNotes(actor,item));
-  const notes=allowed.length?await db.select({id:appointmentsTable.id,clinicalNotes:appointmentsTable.notes,notesLang:appointmentsTable.notesLang}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,actor.clinicId!),inArray(appointmentsTable.id,allowed.map(item=>item.id)))):[];
+  const notes=allowed.length?await db.select({id:appointmentsTable.id,clinicalNotes:appointmentsTable.notes,notesLang:appointmentsTable.notesLang}).from(appointmentsTable).where(and(and(eq(appointmentsTable.clinicId,actor.clinicId!), activeBranch(appointmentsTable.branchId)),inArray(appointmentsTable.id,allowed.map(item=>item.id)))):[];
   return {...result,items:result.items.map(item=>({...item,...notes.find(note=>note.id===item.id)}))};
 }
 export async function schedulingHome(actor: User, branchId?:number) {
   const clinicId = scheduleClinic(actor), mine = isProvider(actor);
   const localStart = sql`(${appointmentsTable.startsAt} AT TIME ZONE ${branchesTable.timeZone})::date`;
   const today = sql`(now() AT TIME ZONE ${branchesTable.timeZone})::date`;
-  const scoped = and(eq(appointmentsTable.clinicId, clinicId), branchId?eq(appointmentsTable.branchId,branchId):undefined, (mine || !canReadAll(actor)) ? eq(appointmentsTable.employeeId, actor.id) : undefined);
+  const scoped = and(and(eq(appointmentsTable.clinicId, clinicId), activeBranch(appointmentsTable.branchId)), branchId?eq(appointmentsTable.branchId,branchId):undefined, (mine || !canReadAll(actor)) ? eq(appointmentsTable.employeeId, actor.id) : undefined);
   const todayRows = await joinedAppointments().where(and(scoped, sql`${localStart} = ${today}`)).orderBy(asc(appointmentsTable.startsAt)).limit(20);
   const [total] = await db.select({total: sql<number>`count(*)::int`}).from(appointmentsTable).innerJoin(branchesTable, eq(branchesTable.id, appointmentsTable.branchId)).where(and(scoped, sql`${localStart} = ${today}`));
   const [next] = await joinedAppointments().where(and(scoped, inArray(appointmentsTable.status, ['pending','confirmed','checked_in','in_service']), or(inArray(appointmentsTable.status, ['checked_in','in_service']), gte(appointmentsTable.endsAt, new Date()))))
@@ -387,7 +388,7 @@ export async function calendarCounts(actor: User, input: CalendarInput) {
   if (!input.date || !input.through) throw badRequest('invalid_date_range');
   if (ownOnly && input.employeeId && input.employeeId !== actor.id) throw forbidden();
   const day = sql`(${appointmentsTable.startsAt} AT TIME ZONE ${branchesTable.timeZone})::date`;
-  const condition = and(eq(appointmentsTable.clinicId, clinicId), ownOnly ? eq(appointmentsTable.employeeId, actor.id) : undefined,
+  const condition = and(and(eq(appointmentsTable.clinicId, clinicId), activeBranch(appointmentsTable.branchId)), ownOnly ? eq(appointmentsTable.employeeId, actor.id) : undefined,
     input.employeeId ? eq(appointmentsTable.employeeId, input.employeeId) : undefined,
     input.branchId ? eq(appointmentsTable.branchId, input.branchId) : undefined,
     input.serviceId ? eq(appointmentsTable.serviceId, input.serviceId) : undefined,
@@ -395,7 +396,7 @@ export async function calendarCounts(actor: User, input: CalendarInput) {
     input.status ? eq(appointmentsTable.status, input.status) : undefined,
     sql`${day} between ${input.date}::date and ${input.through}::date`);
   const rows = await db.select({date: sql<string>`to_char(${day}, 'YYYY-MM-DD')`, count: sql<number>`count(*)::int`}).from(appointmentsTable)
-    .innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), eq(branchesTable.clinicId, clinicId)))
+    .innerJoin(branchesTable, and(eq(branchesTable.id, appointmentsTable.branchId), and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))))
     .where(condition).groupBy(day).orderBy(day);
   return {days: rows, ownOnly};
 }

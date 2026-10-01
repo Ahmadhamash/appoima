@@ -114,7 +114,7 @@ const en = {
   passwordNote:
     "Entered here only, never sent to the AI. It is hashed on save; staff must change it at first login. Share it securely before saving — it will not be shown afterwards.",
   permissions: "Review exact access",
-  readPermission: "Read",
+  readPermission: "View",
   managePermission: "Manage",
   accountReview: "Account security",
   saved: "Your setup has been saved",
@@ -304,7 +304,7 @@ const ar: Record<Key, string> = {
   passwordNote:
     "تُدخل هون فقط، ولا تُرسل للذكاء الاصطناعي. تُحفظ مُشفّرة بالتجزئة، ويجب تغييرها عند أول دخول. شاركها بشكل آمن قبل الحفظ؛ لن تُعرض بعده.",
   permissions: "راجع الصلاحيات بالتفصيل",
-  readPermission: "قراءة",
+  readPermission: "عرض",
   managePermission: "إدارة",
   accountReview: "أمان الحساب",
   saved: "جهّزنا بياناتك وحفظناها",
@@ -407,6 +407,10 @@ export function text(lang: Language, key: Key | string): string {
 }
 export function errorText(lang: Language, code: string): string {if(code==='concierge_media_too_long')return lang==='ar'?'الصوت أو الفيديو أطول من 10 دقائق. ارفع مقطعًا أقصر.':'Upload an audio or video clip of up to 10 minutes.';if(code==='concierge_media_unreadable')return lang==='ar'?'ما قدرنا نقرأ الصوت أو الفيديو. جرّب ملفًا آخر.':'This audio or video could not be read. Try another file.';if(code==='concierge_media_unavailable')return lang==='ar'?'قراءة الصوت والفيديو غير متاحة حاليًا.':'Audio and video reading is currently unavailable.';
   const special: Record<string, [string, string]> = {
+    staff_branch_hours_overlap:['أوقات عمل الموظف تتداخل بين الفروع. عدّل الأيام أو الساعات ثم حاول مرة أخرى.','This staff member has overlapping shifts across branches. Change the days or hours and try again.'],
+    staff_branch_hours_required:['اختر فرعًا وحدد يوم عمل وساعاته لكل فرع.','Select a branch and specify working days and hours for every selected branch.'],
+    duplicate_branch_schedule:['اختر كل فرع مرة واحدة فقط.','Choose each branch only once.'],
+    invalid_hours:['راجع أوقات البداية والنهاية والاستراحات لكل فرع.','Check the start/end times and breaks for every branch.'],
     concierge_step_incomplete: ['لسه في معلومة ناقصة بهالخطوة. راجع الأسماء والسعة، واحكيلي التفاصيل الناقصة أو اكتبها ثم جرّب تكمل.','This step still needs a detail. Check the names and capacity, tell me what is missing or type it, then continue.'],
     concierge_stream_interrupted: ['انقطع الاتصال قبل تأكيد حفظ المسودة. حدّث الجلسة قبل إعادة المحاولة.','Connection ended before draft confirmation. Refresh the session before retrying.'],
     concierge_definition_required: ['كل خدمة تحتاج تعريفًا. افتح تعديل الخدمة واختر قالبها ثم احفظها.','Every service needs a definition. Edit the service, choose a template, and save.'],

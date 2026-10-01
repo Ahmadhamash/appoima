@@ -1,3 +1,6 @@
+import { archiveDraftBranch } from '../domain/archive-draft-branch';
+import { archiveBranchInTx } from './branch-archive';
+import { activeBranch, activeEmployee } from './branch-scope';
 import { gatheringReporter, type ProgressSink } from '../concierge/progress';
 import { previousSetupStep, canNavigateSetup, nextSetupStep, type JourneyStep } from '../domain/concierge-workflow';
 import { uploadedIdentity } from '../domain/concierge-file-identity';
@@ -13,7 +16,7 @@ import { createDefinition, normalizeServiceName } from '@workspace/service-defin
 import { assertServiceOnly, publicServiceSuggestions, draftFromSuggestion, changedServiceSources, ensureWizardDefinitions, type ServiceSource, type ServiceSuggestion } from '../domain/service-wizard';
 import { randomUUID, createHash } from 'node:crypto';
 import { and, eq, sql, asc } from 'drizzle-orm';
-import { db, managerOnboardingTable as onboarding, usersTable, clinicsTable, branchesTable, servicesTable, roomsTable, appointmentsTable, customersTable, type User, type ManagerOnboarding } from '@workspace/db';
+import { db, branchDraftArchivesTable, managerOnboardingTable as onboarding, usersTable, clinicsTable, branchesTable, servicesTable, roomsTable, appointmentsTable, customersTable, type User, type ManagerOnboarding } from '@workspace/db';
 import { hasPermission, type Permission } from '../domain/permissions';
 import { emptyDraft, parseDraft, mergeDraft, applySharedServiceDetails, draftIssues, fixedSpeech, mentionsUpload, nameLanguage, CONSENT_VERSION, LIMITS, NAVIGATION, KINDS, type Stage, type Draft, type Language, type ConversationMessage, type UploadedDocument, type ServiceDraft } from '../domain/concierge-core';
 import { withDefaultStaffHours } from '../domain/concierge-core';
@@ -47,7 +50,7 @@ export function ensureManager(actor:User) {
 }
 async function freshManager(actor:User, executor:Tx|typeof db=db):Promise<User> {
   const clinicId=ensureManager(actor);
-  const [fresh]=await executor.select().from(usersTable).where(and(eq(usersTable.id,actor.id),eq(usersTable.clinicId,clinicId)));
+  const [fresh]=await executor.select().from(usersTable).where(and(eq(usersTable.id,actor.id),and(eq(usersTable.clinicId,clinicId), activeEmployee())));
   const [clinic]=await executor.select({status:clinicsTable.status}).from(clinicsTable).where(eq(clinicsTable.id,clinicId));
   if(!fresh||clinic?.status!=='active')throw forbidden();ensureManager(fresh);return fresh;
 }
@@ -74,7 +77,7 @@ function consent(row:ManagerOnboarding) { if(row.consentVersion!==CONSENT_VERSIO
 async function change(tx:Tx,row:ManagerOnboarding,fields:Partial<typeof onboarding.$inferInsert>) {
   const nextState=fields.state as State|undefined;
   if(nextState?.draft?.staff.some(p=>p.workingHours===null)){
-    const branches=await tx.select({id:branchesTable.id,openingHours:branchesTable.openingHours}).from(branchesTable).where(eq(branchesTable.clinicId,row.clinicId));
+    const branches=await tx.select({id:branchesTable.id,openingHours:branchesTable.openingHours}).from(branchesTable).where(and(eq(branchesTable.clinicId,row.clinicId), activeBranch(branchesTable.id)));
     fields={...fields,state:{...nextState,draft:withDefaultStaffHours(nextState.draft,branches.map(b=>({...b,key:`branch_${b.id}`})))} as unknown as Record<string,unknown>};
   }
   const [updated]=await tx.update(onboarding).set({...fields,revision:row.revision+1,updatedAt:new Date()}).where(eq(onboarding.id,row.id)).returning();return updated!;
@@ -89,12 +92,12 @@ function publicSession(row:ManagerOnboarding) {
 }
 export async function businessContext(actor:User) {
   const c=ensureManager(actor);const allowed=(p:Permission)=>hasPermission(actor,p);
-  const branches=allowed('settings.read')?await db.select().from(branchesTable).where(eq(branchesTable.clinicId,c)).orderBy(asc(branchesTable.id)).limit(201):[];
-  const services=allowed('services.read')?await db.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId,durationMinutes:servicesTable.durationMinutes,price:servicesTable.price,currency:servicesTable.currency,requiresRoom:servicesTable.requiresRoom}).from(servicesTable).where(eq(servicesTable.clinicId,c)).orderBy(asc(servicesTable.id)).limit(201):[];
-  const rooms=allowed('rooms.read')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,capacity:roomsTable.capacity}).from(roomsTable).where(eq(roomsTable.clinicId,c)).orderBy(asc(roomsTable.id)).limit(201):[];
-  const staff=allowed('employees.read')?await db.select({id:usersTable.id,name:usersTable.name,role:usersTable.role,branchId:usersTable.branchId,isActive:usersTable.isActive}).from(usersTable).where(eq(usersTable.clinicId,c)).orderBy(asc(usersTable.id)).limit(201):[];
-  const [appointmentCount]=allowed('appointments.read')?await db.select({count:sql<number>`count(*)::int`}).from(appointmentsTable).where(eq(appointmentsTable.clinicId,c)):[{count:null}];
-  const [customerCount]=allowed('customers.read')?await db.select({count:sql<number>`count(*)::int`}).from(customersTable).where(eq(customersTable.clinicId,c)):[{count:null}];
+  const branches=allowed('settings.read')?await db.select().from(branchesTable).where(and(eq(branchesTable.clinicId,c), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id)).limit(201):[];
+  const services=allowed('services.read')?await db.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId,durationMinutes:servicesTable.durationMinutes,price:servicesTable.price,currency:servicesTable.currency,requiresRoom:servicesTable.requiresRoom}).from(servicesTable).where(and(eq(servicesTable.clinicId,c), activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.id)).limit(201):[];
+  const rooms=allowed('rooms.read')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,capacity:roomsTable.capacity}).from(roomsTable).where(and(eq(roomsTable.clinicId,c), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.id)).limit(201):[];
+  const staff=allowed('employees.read')?await db.select({id:usersTable.id,name:usersTable.name,role:usersTable.role,branchId:usersTable.branchId,isActive:usersTable.isActive}).from(usersTable).where(and(eq(usersTable.clinicId,c), activeEmployee())).orderBy(asc(usersTable.id)).limit(201):[];
+  const [appointmentCount]=allowed('appointments.read')?await db.select({count:sql<number>`count(*)::int`}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,c), activeBranch(appointmentsTable.branchId))):[{count:null}];
+  const [customerCount]=allowed('customers.read')?await db.select({count:sql<number>`count(*)::int`}).from(customersTable).where(and(eq(customersTable.clinicId,c), activeBranch(customersTable.branchId))):[{count:null}];
   return {branches:branches.slice(0,200).map(b=>({...b,key:`branch_${b.id}`})),services:services.slice(0,200).map(s=>({...s,key:`existing_service_${s.id}`})),rooms:rooms.slice(0,200),staff:staff.slice(0,200),
     counts:{appointments:appointmentCount?.count??null,customers:customerCount?.count??null},
     truncated:{branches:branches.length>200,services:services.length>200,rooms:rooms.length>200,staff:staff.length>200},
@@ -108,7 +111,7 @@ export async function bootstrapConcierge(actor:User) {
 }
 export async function startConcierge(actor:User,language:Language,reopen=false) {
   await freshManager(actor);
-  const [existingBranch]=await db.select({id:branchesTable.id}).from(branchesTable).where(eq(branchesTable.clinicId,actor.clinicId!)).limit(1);
+  const [existingBranch]=await db.select({id:branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.clinicId,actor.clinicId!), activeBranch(branchesTable.id))).limit(1);
   const servicesOnly=!!existingBranch;
   await db.insert(onboarding).values({clinicId:actor.clinicId!,userId:actor.id,language,preferredName:actor.name?.trim().slice(0,80)||'مدير',stage:'choice',state:{...initialState(),serviceWizard:servicesOnly,accessFingerprint:authFingerprint(actor)} as unknown as Record<string,unknown>}).onConflictDoNothing();
   const row=await withSession(actor,async(tx,row,fresh)=>{
@@ -317,9 +320,9 @@ export async function approveConciergeImport(actor:User,revision:number,factIds:
 /** Minimal authorized catalog; no emails, notes, customer data or credentials. */
 export async function conciergeServiceOptions(actor:User){
   actor=await freshManager(actor);const clinicId=ensureManager(actor);
-  const branches=await db.select({id:branchesTable.id,name:branchesTable.name}).from(branchesTable).where(eq(branchesTable.clinicId,clinicId)).orderBy(asc(branchesTable.id)).limit(200);
-  const employees=hasPermission(actor,'employees.read')?await db.select({id:usersTable.id,name:usersTable.name,branchId:usersTable.branchId}).from(usersTable).where(and(eq(usersTable.clinicId,clinicId),eq(usersTable.isActive,true))).orderBy(asc(usersTable.name)).limit(200):[];
-  const rooms=hasPermission(actor,'rooms.manage')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(eq(roomsTable.clinicId,clinicId)).orderBy(asc(roomsTable.name)).limit(200):[];
+  const branches=await db.select({id:branchesTable.id,name:branchesTable.name}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id)).limit(200);
+  const employees=hasPermission(actor,'employees.read')?await db.select({id:usersTable.id,name:usersTable.name,branchId:usersTable.branchId}).from(usersTable).where(and(and(eq(usersTable.clinicId,clinicId), activeEmployee()),eq(usersTable.isActive,true))).orderBy(asc(usersTable.name)).limit(200):[];
+  const rooms=hasPermission(actor,'rooms.manage')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name)).limit(200):[];
   return {branches:branches.map(b=>({...b,key:`branch_${b.id}`})),employees,rooms};
 }
 export async function acceptServiceSuggestion(actor:User,revision:number,key:string){
@@ -355,6 +358,16 @@ export async function selectConciergeStep(actor:User,revision:number,target?:Jou
   return change(tx,row,{state:next as unknown as Record<string,unknown>});
  });return publicSession(result);
 }
+export async function archiveConciergeBranch(actor:User,revision:number,key:string){
+ const result=await withSession(actor,async(tx,row,fresh)=>{
+  noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
+  const state=stateOf(row),archived=archiveDraftBranch(state.draft,key);if(!archived)throw notFound('record_not_found');
+  if(archived.snapshot.branch.existingId)await archiveBranchInTx(tx,fresh,archived.snapshot.branch.existingId);
+  await tx.insert(branchDraftArchivesTable).values({clinicId:fresh.clinicId!,snapshot:archived.snapshot});
+  await audit(tx,fresh,'draft_branch_archived',{key,recordsPreserved:true});
+  return change(tx,row,{state:{...state,draft:archived.draft,completedSteps:(state.completedSteps??[]).filter(s=>s!=='branches'),activeSetupStep:'branches',ui:'none'} as unknown as Record<string,unknown>});
+ });return publicSession(result);
+}
 export const backConciergeStep=(actor:User,revision:number)=>selectConciergeStep(actor,revision);
 export async function finishConciergeStep(actor:User,revision:number){
  const context=await businessContext(actor);
@@ -363,6 +376,7 @@ export async function finishConciergeStep(actor:User,revision:number){
   const state=stateOf(row);state.draft=withDefaultStaffHours(state.draft,context.branches);const flow=setupWorkflow(state,row.language as Language);
   if(flow.step==='company'||flow.step==='review')return row;
   const draft=flow.step==='rooms'?roomsForConfirmation(state.draft,context.services):state.draft;
+  if(flow.step==='staff'){const problem=previewConciergeSetup(fresh,draft).issues.find(i=>i.field==='branchSchedules');if(problem)throw badRequest(problem.code);}
   if(!canFinishStep(flow.step,draft,context))throw conflict('concierge_step_incomplete');
   const completedSteps=Array.from(new Set([...(state.completedSteps??[]),flow.step]));
   const skipRooms=flow.step==='services'&&draft.rooms.length===0&&context.rooms.length===0&&canFinishStep('rooms',draft,context);
@@ -479,7 +493,7 @@ export async function saveConciergeDraft(actor:User,revision:number,raw:unknown)
     if(state.serviceWizard){assertServiceOnly(state.draft,draft);ensureWizardDefinitions(draft);}
     const serviceSources=changedServiceSources(state.draft,draft,state.serviceSources??{},{kind:'manual',label:'تعديل المدير',url:null});
     for(const b of draft.branches)if(b.existingId!==null&&!basis[String(b.existingId)]){
-      const [existing]=await tx.select().from(branchesTable).where(and(eq(branchesTable.clinicId,fresh.clinicId!),eq(branchesTable.id,b.existingId)));if(!existing)throw forbidden();basis[String(b.existingId)]=branchFingerprint(existing);
+      const [existing]=await tx.select().from(branchesTable).where(and(and(eq(branchesTable.clinicId,fresh.clinicId!), activeBranch(branchesTable.id)),eq(branchesTable.id,b.existingId)));if(!existing)throw forbidden();basis[String(b.existingId)]=branchFingerprint(existing);
     }
     await audit(tx,fresh,'draft_edited');return change(tx,row,{state:{...state,draft,excludedServices:serviceExclusions(state.draft,draft,state.excludedServices),serviceSources,branchBasis:basis,ui:'review'} as unknown as Record<string,unknown>});});return publicSession(row);
 }

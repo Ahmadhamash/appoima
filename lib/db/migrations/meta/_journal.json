@@ -113,6 +113,13 @@
       "when": 1790762400000,
       "tag": "0015_branch_locations",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790848800000,
+      "tag": "0016_branch_archives_staff_schedules",
+      "breakpoints": true
     }
   ]
 }

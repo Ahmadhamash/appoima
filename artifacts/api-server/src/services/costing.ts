@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee } from './branch-scope';
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { branchesTable, usersTable, servicesTable, roomsTable, serviceEmployeesTable, roomServicesTable, inventoryItemsTable, inventoryProductsTable, inventoryMovementsTable, inventoryConsumptionsTable, appointmentsTable, equipmentAssetsTable, equipmentOperatorsTable, employeeCostsTable, roomCostsTable, serviceCostProfilesTable, serviceMaterialCostsTable, serviceEquipmentCostsTable, appointmentCostSnapshotsTable, type User } from '@workspace/db';
@@ -17,13 +18,13 @@ function authorize(user: User, write = false) {
   if (user.role !== 'manager' || !['inventory', 'services', 'employees', 'rooms', 'settings'].every(area => hasPermission(user, `${area}.${write ? 'manage' : 'read'}` as 'settings.read'))) throw forbidden();
 }
 async function catalogInTx(tx: OperationsTx, clinicId: number) {
-  const branches = await tx.select({ id: branchesTable.id, name: branchesTable.name }).from(branchesTable).where(eq(branchesTable.clinicId, clinicId)).orderBy(asc(branchesTable.id));
-  const services = await tx.select({ id: servicesTable.id, name: servicesTable.name, branchId: servicesTable.branchId, durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, isActive: servicesTable.isActive }).from(servicesTable).where(eq(servicesTable.clinicId, clinicId)).orderBy(asc(servicesTable.name));
-  const employees = await tx.select({ id: usersTable.id, name: usersTable.name, branchId: usersTable.branchId, isActive: usersTable.isActive, hourlyCost: employeeCostsTable.hourlyCost }).from(usersTable).leftJoin(employeeCostsTable, and(eq(employeeCostsTable.clinicId, clinicId), eq(employeeCostsTable.employeeId, usersTable.id))).where(eq(usersTable.clinicId, clinicId)).orderBy(asc(usersTable.name));
-  const rooms = await tx.select({ id: roomsTable.id, name: roomsTable.name, branchId: roomsTable.branchId, status: roomsTable.status, extra: roomsTable.extra, hourlyCost: roomCostsTable.hourlyCost }).from(roomsTable).leftJoin(roomCostsTable, and(eq(roomCostsTable.clinicId, clinicId), eq(roomCostsTable.roomId, roomsTable.id))).where(eq(roomsTable.clinicId, clinicId)).orderBy(asc(roomsTable.name));
-  const materials = await tx.select({ id: inventoryItemsTable.id, name: inventoryItemsTable.name, branchId: inventoryItemsTable.branchId, unit: inventoryItemsTable.unit, billingType:sql<string>`coalesce(${inventoryItemsTable.extra}->>'billingType','clinic_cost')`, sellingPrice:sql<string|null>`${inventoryItemsTable.extra}->>'sellingPrice'`, unitCost: sql<string | null>`${inventoryItemsTable.extra}->>'unitCost'`, isActive: sql<boolean>`${inventoryItemsTable.isAvailable}=1 and coalesce((${inventoryItemsTable.extra}->>'isActive')::boolean,true)` }).from(inventoryItemsTable).where(eq(inventoryItemsTable.clinicId, clinicId)).orderBy(asc(inventoryItemsTable.name));
-  const equipment = await tx.select().from(equipmentAssetsTable).where(eq(equipmentAssetsTable.clinicId, clinicId)).orderBy(asc(equipmentAssetsTable.name));
-  const operators = await tx.select().from(equipmentOperatorsTable).where(eq(equipmentOperatorsTable.clinicId, clinicId));
+  const branches = await tx.select({ id: branchesTable.id, name: branchesTable.name }).from(branchesTable).where(and(eq(branchesTable.clinicId, clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id));
+  const services = await tx.select({ id: servicesTable.id, name: servicesTable.name, branchId: servicesTable.branchId, durationMinutes: servicesTable.durationMinutes, price: servicesTable.price, currency: servicesTable.currency, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment, isActive: servicesTable.isActive }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinicId), activeBranch(servicesTable.branchId))).orderBy(asc(servicesTable.name));
+  const employees = await tx.select({ id: usersTable.id, name: usersTable.name, branchId: usersTable.branchId, isActive: usersTable.isActive, hourlyCost: employeeCostsTable.hourlyCost }).from(usersTable).leftJoin(employeeCostsTable, and(eq(employeeCostsTable.clinicId, clinicId), eq(employeeCostsTable.employeeId, usersTable.id))).where(and(eq(usersTable.clinicId, clinicId), activeEmployee())).orderBy(asc(usersTable.name));
+  const rooms = await tx.select({ id: roomsTable.id, name: roomsTable.name, branchId: roomsTable.branchId, status: roomsTable.status, extra: roomsTable.extra, hourlyCost: roomCostsTable.hourlyCost }).from(roomsTable).leftJoin(roomCostsTable, and(eq(roomCostsTable.clinicId, clinicId), eq(roomCostsTable.roomId, roomsTable.id))).where(and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name));
+  const materials = await tx.select({ id: inventoryItemsTable.id, name: inventoryItemsTable.name, branchId: inventoryItemsTable.branchId, unit: inventoryItemsTable.unit, billingType:sql<string>`coalesce(${inventoryItemsTable.extra}->>'billingType','clinic_cost')`, sellingPrice:sql<string|null>`${inventoryItemsTable.extra}->>'sellingPrice'`, unitCost: sql<string | null>`${inventoryItemsTable.extra}->>'unitCost'`, isActive: sql<boolean>`${inventoryItemsTable.isAvailable}=1 and coalesce((${inventoryItemsTable.extra}->>'isActive')::boolean,true)` }).from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId, clinicId), activeBranch(inventoryItemsTable.branchId))).orderBy(asc(inventoryItemsTable.name));
+  const equipment = await tx.select().from(equipmentAssetsTable).where(and(eq(equipmentAssetsTable.clinicId, clinicId), activeBranch(equipmentAssetsTable.branchId))).orderBy(asc(equipmentAssetsTable.name));
+  const operators = await tx.select().from(equipmentOperatorsTable).where(and(eq(equipmentOperatorsTable.clinicId, clinicId), activeBranch(equipmentOperatorsTable.branchId)));
   const employeeLinks = await tx.select().from(serviceEmployeesTable).where(eq(serviceEmployeesTable.clinicId, clinicId));
   const roomLinks = await tx.select().from(roomServicesTable).where(eq(roomServicesTable.clinicId, clinicId));
   return { branches, services, employees, rooms, materials, equipment: equipment.map(item => ({ ...item, employeeIds: operators.filter(o => o.equipmentId === item.id).map(o => o.employeeId) })), employeeLinks, roomLinks };
@@ -43,8 +44,8 @@ export async function saveEquipment(actor: User, id: number | null, input: Equip
     if (id) {
       const old = catalog.equipment.find(e => e.id === id); if (!old) throw notFound('record_not_found');
       if (old.branchId !== input.branchId) throw badRequest('costing_branch_locked');
-      await tx.update(equipmentAssetsTable).set(values).where(and(eq(equipmentAssetsTable.clinicId, clinicId), eq(equipmentAssetsTable.id, id)));
-      await tx.delete(equipmentOperatorsTable).where(and(eq(equipmentOperatorsTable.clinicId, clinicId), eq(equipmentOperatorsTable.equipmentId, id)));
+      await tx.update(equipmentAssetsTable).set(values).where(and(and(eq(equipmentAssetsTable.clinicId, clinicId), activeBranch(equipmentAssetsTable.branchId)), eq(equipmentAssetsTable.id, id)));
+      await tx.delete(equipmentOperatorsTable).where(and(and(eq(equipmentOperatorsTable.clinicId, clinicId), activeBranch(equipmentOperatorsTable.branchId)), eq(equipmentOperatorsTable.equipmentId, id)));
     } else {
       const [item] = await tx.insert(equipmentAssetsTable).values({ clinicId, ...values }).returning({ id: equipmentAssetsTable.id }); equipmentId = item!.id;
     }
@@ -57,24 +58,24 @@ export async function saveResourceRate(actor: User, kind: 'employees' | 'rooms' 
   return withOperations(actor, true, async (tx, fresh) => {
     authorize(fresh, true); const clinicId = operatingClinic(fresh);
     if (kind === 'employees') {
-      const [resource] = await tx.select({ id: usersTable.id }).from(usersTable).where(and(eq(usersTable.clinicId, clinicId), eq(usersTable.id, id))); if (!resource) throw notFound('record_not_found');
+      const [resource] = await tx.select({ id: usersTable.id }).from(usersTable).where(and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), eq(usersTable.id, id))); if (!resource) throw notFound('record_not_found');
       await tx.insert(employeeCostsTable).values({ clinicId, employeeId: id, hourlyCost: value }).onConflictDoUpdate({ target: [employeeCostsTable.clinicId, employeeCostsTable.employeeId], set: { hourlyCost: value } });
     } else if (kind === 'rooms') {
-      const [resource] = await tx.select({ id: roomsTable.id }).from(roomsTable).where(and(eq(roomsTable.clinicId, clinicId), eq(roomsTable.id, id))); if (!resource) throw notFound('record_not_found');
+      const [resource] = await tx.select({ id: roomsTable.id }).from(roomsTable).where(and(and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId)), eq(roomsTable.id, id))); if (!resource) throw notFound('record_not_found');
       await tx.insert(roomCostsTable).values({ clinicId, roomId: id, hourlyCost: value }).onConflictDoUpdate({ target: [roomCostsTable.clinicId, roomCostsTable.roomId], set: { hourlyCost: value } });
     } else {
-      const [item] = await tx.select().from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId, clinicId), eq(inventoryItemsTable.id, id))); if (!item) throw notFound('record_not_found');
-      await tx.update(inventoryItemsTable).set({ extra: { ...item.extra, unitCost: value } }).where(and(eq(inventoryItemsTable.clinicId, clinicId), eq(inventoryItemsTable.productId, item.productId)));
+      const [item] = await tx.select().from(inventoryItemsTable).where(and(and(eq(inventoryItemsTable.clinicId, clinicId), activeBranch(inventoryItemsTable.branchId)), eq(inventoryItemsTable.id, id))); if (!item) throw notFound('record_not_found');
+      await tx.update(inventoryItemsTable).set({ extra: { ...item.extra, unitCost: value } }).where(and(and(eq(inventoryItemsTable.clinicId, clinicId), activeBranch(inventoryItemsTable.branchId)), eq(inventoryItemsTable.productId, item.productId)));
       await tx.update(inventoryProductsTable).set({extra:{...item.extra,unitCost:value}}).where(and(eq(inventoryProductsTable.clinicId,clinicId),eq(inventoryProductsTable.id,item.productId)));
     }
     await recordAudit({ clinicId, actorUserId: fresh.id, action: 'costing.rate_saved', entityType: kind, entityId: id }, tx); return { id };
   });
 }
 async function profileInTx(tx: OperationsTx, clinicId: number, serviceId: number, branchId: number) {
-  const where = and(eq(serviceCostProfilesTable.clinicId, clinicId), eq(serviceCostProfilesTable.serviceId, serviceId), eq(serviceCostProfilesTable.branchId, branchId));
+  const where = and(and(eq(serviceCostProfilesTable.clinicId, clinicId), activeBranch(serviceCostProfilesTable.branchId)), eq(serviceCostProfilesTable.serviceId, serviceId), eq(serviceCostProfilesTable.branchId, branchId));
   const [profile] = await tx.select().from(serviceCostProfilesTable).where(where);
-  const materials = await tx.select({ itemId: serviceMaterialCostsTable.itemId, quantity: serviceMaterialCostsTable.quantity }).from(serviceMaterialCostsTable).where(and(eq(serviceMaterialCostsTable.clinicId, clinicId), eq(serviceMaterialCostsTable.serviceId, serviceId), eq(serviceMaterialCostsTable.branchId, branchId))).orderBy(asc(serviceMaterialCostsTable.itemId));
-  const equipment = await tx.select({ equipmentId: serviceEquipmentCostsTable.equipmentId, uses: serviceEquipmentCostsTable.uses, minutes: serviceEquipmentCostsTable.minutes }).from(serviceEquipmentCostsTable).where(and(eq(serviceEquipmentCostsTable.clinicId, clinicId), eq(serviceEquipmentCostsTable.serviceId, serviceId), eq(serviceEquipmentCostsTable.branchId, branchId))).orderBy(asc(serviceEquipmentCostsTable.equipmentId));
+  const materials = await tx.select({ itemId: serviceMaterialCostsTable.itemId, quantity: serviceMaterialCostsTable.quantity }).from(serviceMaterialCostsTable).where(and(and(eq(serviceMaterialCostsTable.clinicId, clinicId), activeBranch(serviceMaterialCostsTable.branchId)), eq(serviceMaterialCostsTable.serviceId, serviceId), eq(serviceMaterialCostsTable.branchId, branchId))).orderBy(asc(serviceMaterialCostsTable.itemId));
+  const equipment = await tx.select({ equipmentId: serviceEquipmentCostsTable.equipmentId, uses: serviceEquipmentCostsTable.uses, minutes: serviceEquipmentCostsTable.minutes }).from(serviceEquipmentCostsTable).where(and(and(eq(serviceEquipmentCostsTable.clinicId, clinicId), activeBranch(serviceEquipmentCostsTable.branchId)), eq(serviceEquipmentCostsTable.serviceId, serviceId), eq(serviceEquipmentCostsTable.branchId, branchId))).orderBy(asc(serviceEquipmentCostsTable.equipmentId));
   return { configured: !!profile, branchId, overhead: profile?.overhead ?? '0.000', materials, equipment };
 }
 export async function saveCostProfile(actor: User, serviceId: number, input: ProfileInput) {
@@ -83,8 +84,8 @@ export async function saveCostProfile(actor: User, serviceId: number, input: Pro
     if (!service) throw notFound('record_not_found');
     if (!c.branches.some(b => b.id === input.branchId) || service.branchId && service.branchId !== input.branchId || input.materials.some(line => !c.materials.some(m => m.id === line.itemId && m.branchId === input.branchId && m.isActive)) || input.equipment.some(line => !c.equipment.some(e => e.id === line.equipmentId && e.branchId === input.branchId && e.isActive))) throw badRequest('costing_invalid_link');
     await tx.insert(serviceCostProfilesTable).values({ clinicId, serviceId, branchId: input.branchId, overhead: input.overhead }).onConflictDoUpdate({ target: [serviceCostProfilesTable.clinicId, serviceCostProfilesTable.serviceId, serviceCostProfilesTable.branchId], set: { overhead: input.overhead } });
-    await tx.delete(serviceMaterialCostsTable).where(and(eq(serviceMaterialCostsTable.clinicId, clinicId), eq(serviceMaterialCostsTable.serviceId, serviceId), eq(serviceMaterialCostsTable.branchId, input.branchId)));
-    await tx.delete(serviceEquipmentCostsTable).where(and(eq(serviceEquipmentCostsTable.clinicId, clinicId), eq(serviceEquipmentCostsTable.serviceId, serviceId), eq(serviceEquipmentCostsTable.branchId, input.branchId)));
+    await tx.delete(serviceMaterialCostsTable).where(and(and(eq(serviceMaterialCostsTable.clinicId, clinicId), activeBranch(serviceMaterialCostsTable.branchId)), eq(serviceMaterialCostsTable.serviceId, serviceId), eq(serviceMaterialCostsTable.branchId, input.branchId)));
+    await tx.delete(serviceEquipmentCostsTable).where(and(and(eq(serviceEquipmentCostsTable.clinicId, clinicId), activeBranch(serviceEquipmentCostsTable.branchId)), eq(serviceEquipmentCostsTable.serviceId, serviceId), eq(serviceEquipmentCostsTable.branchId, input.branchId)));
     if (input.materials.length) await tx.insert(serviceMaterialCostsTable).values(input.materials.map(line => ({ clinicId, serviceId, branchId: input.branchId, ...line })));
     if (input.equipment.length) await tx.insert(serviceEquipmentCostsTable).values(input.equipment.map(line => ({ clinicId, serviceId, branchId: input.branchId, ...line })));
     await recordAudit({ clinicId, actorUserId: fresh.id, action: 'costing.service_recipe_saved', entityType: 'service', entityId: serviceId, details: { branchId: input.branchId } }, tx);
@@ -106,9 +107,9 @@ async function quoteInTx(tx: OperationsTx, clinicId: number, serviceId: number, 
   if (actual) {
     if(actual.chargePrice===null)warnings.push('actual_price_missing');
     if(actual.chargeCurrency!==null&&actual.chargeCurrency!=='JOD')warnings.push('currency_mismatch');
-    const [record] = await tx.select().from(inventoryConsumptionsTable).where(and(eq(inventoryConsumptionsTable.clinicId, clinicId), eq(inventoryConsumptionsTable.appointmentId, actual.appointmentId)));
+    const [record] = await tx.select().from(inventoryConsumptionsTable).where(and(and(eq(inventoryConsumptionsTable.clinicId, clinicId), activeBranch(inventoryConsumptionsTable.branchId)), eq(inventoryConsumptionsTable.appointmentId, actual.appointmentId)));
     if (!record) warnings.push('actual_consumption_missing');
-    materialLines = record ? await tx.select({ itemId: inventoryMovementsTable.itemId, quantity: sql<string>`(-${inventoryMovementsTable.quantity})::text` }).from(inventoryMovementsTable).where(and(eq(inventoryMovementsTable.clinicId, clinicId), eq(inventoryMovementsTable.consumptionId, record.id))).orderBy(asc(inventoryMovementsTable.itemId)) : [];
+    materialLines = record ? await tx.select({ itemId: inventoryMovementsTable.itemId, quantity: sql<string>`(-${inventoryMovementsTable.quantity})::text` }).from(inventoryMovementsTable).where(and(and(eq(inventoryMovementsTable.clinicId, clinicId), activeBranch(inventoryMovementsTable.branchId)), eq(inventoryMovementsTable.consumptionId, record.id))).orderBy(asc(inventoryMovementsTable.itemId)) : [];
   }
   for (const entry of materialLines) {
     const m = c.materials.find(item => item.id === entry.itemId);
@@ -160,14 +161,14 @@ export async function serviceCostQuote(actor: User, serviceId: number, input: Qu
 export async function completedCostAppointments(actor: User) {
   return withOperations(actor, false, async (tx, fresh) => {
     authorize(fresh); if (!hasPermission(fresh, 'appointments.read')) throw forbidden(); const clinicId = operatingClinic(fresh);
-    const appointments = await tx.select({ id: appointmentsTable.id, serviceId: appointmentsTable.serviceId, branchId: appointmentsTable.branchId, startsAt: appointmentsTable.startsAt, endsAt: appointmentsTable.endsAt, employeeId: appointmentsTable.employeeId, roomId: appointmentsTable.roomId }).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId, clinicId), eq(appointmentsTable.status, 'completed'))).orderBy(desc(appointmentsTable.startsAt)).limit(200);
+    const appointments = await tx.select({ id: appointmentsTable.id, serviceId: appointmentsTable.serviceId, branchId: appointmentsTable.branchId, startsAt: appointmentsTable.startsAt, endsAt: appointmentsTable.endsAt, employeeId: appointmentsTable.employeeId, roomId: appointmentsTable.roomId }).from(appointmentsTable).where(and(and(eq(appointmentsTable.clinicId, clinicId), activeBranch(appointmentsTable.branchId)), eq(appointmentsTable.status, 'completed'))).orderBy(desc(appointmentsTable.startsAt)).limit(200);
     return { appointments };
   });
 }
 export async function appointmentCost(actor: User, id: number, input?: ActualInput, freeze = false) {
   return withOperations(actor, freeze, async (tx, fresh) => {
     authorize(fresh, freeze); if (!hasPermission(fresh, 'appointments.read')) throw forbidden(); const clinicId = operatingClinic(fresh);
-    const [appointment] = await tx.select().from(appointmentsTable).where(and(eq(appointmentsTable.clinicId, clinicId), eq(appointmentsTable.id, id)));
+    const [appointment] = await tx.select().from(appointmentsTable).where(and(and(eq(appointmentsTable.clinicId, clinicId), activeBranch(appointmentsTable.branchId)), eq(appointmentsTable.id, id)));
     if (!appointment) throw notFound('appointment_not_found'); if (appointment.status !== 'completed') throw conflict('consumption_requires_completed');
     const [snapshot] = await tx.select().from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId, clinicId), eq(appointmentCostSnapshotsTable.appointmentId, id)));
     if (snapshot) {

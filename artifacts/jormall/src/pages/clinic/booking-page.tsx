@@ -43,8 +43,7 @@ function InlineCustomer({onSelected,onClose}: {onSelected:(customer:CustomerChoi
   return <form onSubmit={(e)=>{e.preventDefault();if(!phone.trim()&&!email.trim()){setValidation(t('p3.contactRequired'));return;}setValidation('');command.mutate({path:'/clinic/scheduling/customer',body:{name,nameLang,phone:phone||null,email:email||null,branchId:null}});}} className="space-y-4 rounded-lg border p-4" data-testid="inline-customer-form">
     <fieldset disabled={command.isPending} className="space-y-4">
       <h3 className="font-semibold">{t('p3.addCustomer')}</h3>
-      <SelectField label={t('p2.fields.nameLang')} value={nameLang} onChange={(v)=>setNameLang(v as 'en'|'ar')} testId="inline-customer-language"><option value="en">English</option><option value="ar">العربية</option></SelectField>
-      <FormField label={t('p2.fields.name')} value={name} onChange={(e)=>setName(e.target.value)} required maxLength={120} dir={nameLang==='ar'?'rtl':'ltr'} lang={nameLang} testId="inline-customer-name"/>
+      <FormField label={t('p2.fields.name')} value={name} onChange={(e)=>{setName(e.target.value);setNameLang(/[\u0600-\u06ff]/u.test(e.target.value)?'ar':'en');}} required maxLength={120} dir={nameLang==='ar'?'rtl':'ltr'} lang={nameLang} testId="inline-customer-name"/>
       <PhoneField label={t('p2.fields.phone')} value={phone} onChange={setPhone} testId="inline-customer-phone"/>
       <FormField label={t('p2.fields.email')} type="email" value={email} onChange={(e)=>setEmail(e.target.value)} maxLength={200} dir="ltr" testId="inline-customer-email"/>
       <FormError message={validation|| (command.error?errorMessage(command.error):undefined)}/>

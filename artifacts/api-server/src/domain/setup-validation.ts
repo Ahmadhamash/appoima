@@ -19,7 +19,7 @@ export const contactPhone = z.string().trim().max(50).nullable().optional().tran
   ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'invalid_phone' }); return z.NEVER;
 });
 const contactEmail = z.union([z.string().trim().email().max(200), z.literal(""), z.null()]).optional().transform((v) => v ? v.toLowerCase() : null);
-export const branchSchema = z.object({ address: z.string().trim().max(400).nullable().optional(), mapUrl: z.string().max(500).url().refine(value => { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password; }).nullable().optional(), name, nameLang: lang, timeZone: z.string().refine(isTimeZone, "invalid_timezone"), openingHours: weekSchema }).strict();
+export const branchSchema = z.object({ address: z.string().trim().max(400).nullable().optional(), mapUrl: z.string().max(500).url().refine(value => { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password; }).nullable().optional(), name, nameLang: lang, timeZone: z.string().refine(isTimeZone, "invalid_timezone").default('Asia/Amman'), openingHours: weekSchema }).strict();
 export const serviceDefinitionSchema = z.unknown().transform((value, ctx): ServiceDefinition | null => {
   if (value === undefined || value === null) return null;
   try { return parseServiceDefinition(value); }
@@ -54,6 +54,7 @@ export const roomExtraSchema=z.object({
 export const roomSchema = z.object({ name, nameLang: lang, branchId: id, capacity: z.number().int().min(1).max(1000), status: z.enum(["available", "maintenance"]), serviceIds: ids.default([]),extra:roomExtraSchema.optional() }).strict();
 export const customerSchema = z.object({ name, nameLang: lang, branchId: nullableId.default(null), phone: contactPhone, email: contactEmail, notes: z.string().max(5000).default(""), sensitiveNotes: z.string().max(10000).optional() }).strict().refine((v) => Boolean(v.phone || v.email), { path: ["phone"], message: "contact_required" });
 const employeeFields = {
+  branchSchedules: z.array(z.object({branchId:id,workingHours:weekSchema,breaks:weekSchema}).strict().refine(v=>validBreaks(v.workingHours,v.breaks),'break_outside_hours')).min(1).max(50).refine(v=>new Set(v.map(s=>s.branchId)).size===v.length,'duplicate_branch_schedule').optional(),
   name, nameLang: lang, email: z.string().trim().email().max(200).transform((v) => v.toLowerCase()),
   phone: contactPhone, jobTitle: z.string().trim().max(120).nullable().optional().transform((v) => v || null),
   branchId: nullableId.default(null), role: z.enum(["manager", "secretary", "doctor", "service_provider", "other_staff"]),
@@ -68,7 +69,7 @@ export const employeeSchema = z.object(employeeFields).strict().refine(checkBrea
 export const newEmployeeSchema = z.object({ ...employeeFields, workingHours: weekSchema.optional(), initialPassword: z.string().min(10).max(200) }).strict().refine(v => v.workingHours === undefined || checkBreaks({...v,workingHours:v.workingHours}), { path: ["breaks"], message: "break_outside_hours" });
 export const pageSchema = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(20), search: z.string().trim().max(120).default("") });
 export const employeePageSchema = pageSchema.extend({ role: z.enum(["manager", "secretary", "doctor", "service_provider", "other_staff"]).optional(), branchId: z.coerce.number().int().positive().optional(), status: z.enum(["active", "inactive"]).optional() });
-export const branchPageSchema = pageSchema.extend({ openingHours: z.enum(['configured']).optional(), timeZone: z.string().max(100).refine(isTimeZone, 'invalid_timezone').optional() });
+export const branchPageSchema = pageSchema.extend({ status:z.enum(['active','archived']).default('active'),openingHours: z.enum(['configured']).optional(), timeZone: z.string().max(100).refine(isTimeZone, 'invalid_timezone').optional() });
 export type BranchInput = z.infer<typeof branchSchema>;
 export type ServiceInput = z.infer<typeof serviceSchema>;
 export type ServiceBatchInput = z.infer<typeof serviceBatchSchema>;

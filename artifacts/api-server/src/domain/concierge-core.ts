@@ -11,7 +11,8 @@ export const LIMITS = { records: 50, patches: 20, messageChars: 6000, replyChars
 export type BranchDraft = { address?: string | null; mapUrl?: string | null; key: string; existingId: number | null; name: string | null; nameLang: Language | null; timeZone: string | null; openingHours: Week | null };
 export type ServiceDraft = { followUpEnabled?: boolean | null; definition?: ServiceDefinition | null; branchScope?: 'all' | 'branch' | null; employeeIds?: number[] | null; roomIds?: number[] | null; key: string; name: string | null; nameLang: Language | null; branchKey: string | null; durationMinutes: number | null; price: string | null; currency: string | null; category: 'Hair' | 'Nails' | 'Skin' | 'Laser' | 'Massage' | 'Makeup' | 'Other' | null; requiresRoom: boolean | null };
 export type RoomDraft = { key: string; name: string | null; nameLang: Language | null; branchKey: string | null; capacity: number | null; serviceKeys: string[] | null };
-export type StaffDraft = { key: string; name: string | null; nameLang: Language | null; email: string | null; phone: string | null; jobTitle: string | null; branchKey: string | null; role: 'secretary' | 'doctor' | 'service_provider' | 'other_staff' | null; serviceKeys: string[] | null; workingHours: Week | null; breaks: Week | null };
+export type DraftBranchSchedule={branchKey:string;workingHours:Week;breaks:Week};
+export type StaffDraft = { key: string; name: string | null; nameLang: Language | null; email: string | null; phone: string | null; jobTitle: string | null; branchSchedules?:DraftBranchSchedule[]|null; branchKey: string | null; role: 'secretary' | 'doctor' | 'service_provider' | 'other_staff' | null; serviceKeys: string[] | null; workingHours: Week | null; breaks: Week | null };
 export type Draft = { branches: BranchDraft[]; services: ServiceDraft[]; rooms: RoomDraft[]; staff: StaffDraft[] };
 export const emptyDraft = (): Draft => ({ branches: [], services: [], rooms: [], staff: [] });
 export type ConversationMessage = { id: string; role: 'user' | 'assistant'; text: string };
@@ -33,7 +34,7 @@ const base = { key: string, name: nullable(string), nameLang: nullable(enumerati
 const branchShape = object({ ...base, address: nullable(string), mapUrl: nullable(string), existingId: nullable(number), timeZone: nullable(string), openingHours: nullable(week) });
 export const serviceShape = object({ ...base, definition: nullable(SERVICE_DEFINITION_SCHEMA), branchScope: nullable(enumeration(['all','branch'])), employeeIds: nullable(array(number)), roomIds: nullable(array(number)), branchKey: nullable(string), durationMinutes: nullable(number), price: nullable(string), currency: nullable(string), category: nullable(enumeration(['Hair','Nails','Skin','Laser','Massage','Makeup','Other'])), requiresRoom: nullable(boolean), followUpEnabled: nullable(boolean) });
 const roomShape = object({ ...base, branchKey: nullable(string), capacity: nullable(number), serviceKeys: nullable(array(string)) });
-const staffShape = object({ ...base, email: nullable(string), phone: nullable(string), jobTitle: nullable(string), branchKey: nullable(string), role: nullable(enumeration(['secretary','doctor','service_provider','other_staff'])), serviceKeys: nullable(array(string)), workingHours: nullable(week), breaks: nullable(week) });
+const staffShape = object({ ...base, branchSchedules:nullable(array(object({branchKey:string,workingHours:week,breaks:week}))), email: nullable(string), phone: nullable(string), jobTitle: nullable(string), branchKey: nullable(string), role: nullable(enumeration(['secretary','doctor','service_provider','other_staff'])), serviceKeys: nullable(array(string)), workingHours: nullable(week), breaks: nullable(week) });
 export const DRAFT_SCHEMA = object({ branches: array(branchShape), services: array(serviceShape), rooms: array(roomShape), staff: array(staffShape) });
 export const RESPONSE_SCHEMA = object({ workspaceFacts:array(object({field:enumeration([...WORKSPACE_FIELDS]),value:string,evidence:string})), reply: string, ui: enumeration(['none', 'upload', 'review']), navigation: enumeration(['none', ...Object.keys(NAVIGATION)]), patch: DRAFT_SCHEMA, fileRead: nullable(boolean), fileSummary: nullable(string) });
 export type ModelReply = { workspaceFacts?:{field:WorkspaceField;value:string;evidence:string}[]; reply: string; ui: 'none' | 'upload' | 'review'; navigation: Navigation; patch: Draft; fileRead: boolean | null; fileSummary: string | null };
@@ -66,6 +67,7 @@ export function parseDraft(raw: unknown): Draft {
     }))};
   }
   if(raw && typeof raw==='object' && Array.isArray((raw as Draft).branches))raw={...raw,branches:(raw as Draft).branches.map(b=>({...b,address:b.address??null,mapUrl:b.mapUrl??null}))};
+  if(raw&&typeof raw==='object'&&Array.isArray((raw as Draft).staff))raw={...raw,staff:(raw as Draft).staff.map(p=>({...p,branchSchedules:p.branchSchedules??null}))};
   check(raw, DRAFT_SCHEMA);
   const draft = structuredClone(raw) as Draft, keys = new Set<string>();
   if(draft.branches.length===1){
@@ -104,6 +106,7 @@ export function parseDraft(raw: unknown): Draft {
   }
   for (const r of draft.rooms) if (r.capacity !== null && (r.capacity < 1 || r.capacity > 1000)) fail();
   for (const p of draft.staff) {
+    if(p.branchSchedules){if(new Set(p.branchSchedules.map(s=>s.branchKey)).size!==p.branchSchedules.length)fail();for(const s of p.branchSchedules){if(!KEY.test(s.branchKey))fail();for(const w of [s.workingHours,s.breaks])for(const d of DAYS)if(w[d].length>8||!validRanges(w[d]))fail();}if(p.branchSchedules.length){p.branchKey=p.branchSchedules.length===1?p.branchSchedules[0]!.branchKey:null;p.workingHours=p.branchSchedules[0]!.workingHours;p.breaks=p.branchSchedules[0]!.breaks;}}
     if (p.email !== null && (p.email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email))) fail();
     if (p.phone !== null && p.phone.length > 50 || p.jobTitle !== null && p.jobTitle.length > 120) fail();
     for (const w of [p.workingHours, p.breaks]) if (w) for (const d of DAYS) if (w[d].length > 8 || !validRanges(w[d])) fail();
@@ -151,6 +154,7 @@ export function withDefaultStaffHours(draft:Draft, existingBranches:{key:string;
   const result=parseDraft(draft);
   const branches=[...result.branches,...existingBranches.filter(b=>!result.branches.some(d=>d.key===b.key||d.existingId===b.id))];
   for(const person of result.staff){
+    if(person.branchSchedules?.length)continue;
     if(person.branchKey===null&&branches.length===1)person.branchKey=branches[0]!.key;
     if(person.workingHours!==null)continue;
     const hours=branches.find(b=>b.key===person.branchKey)?.openingHours;
@@ -171,7 +175,7 @@ export function draftIssues(draft: Draft, existingBranches: string[] = [], exist
     for(const issue of definitionIssues(s.definition))issues.push({key:s.key,...issue});
   }
   for (const r of draft.rooms) { required(r, ['name','branchKey','capacity','serviceKeys']); reference(r); for (const key of r.serviceKeys ?? []) if (!services.has(key)) issues.push({key:r.key,field:'serviceKeys',code:'invalid_reference'}); }
-  for (const p of draft.staff) { required(p, ['name','email','role','workingHours','breaks','serviceKeys']); reference(p); if(p.phone&&!normalizePhone(p.phone))issues.push({key:p.key,field:'phone',code:'invalid_phone'}); for (const key of p.serviceKeys ?? []) if (!services.has(key)) issues.push({key:p.key,field:'serviceKeys',code:'invalid_reference'}); }
+  for (const p of draft.staff) { required(p, ['name','email','role','workingHours','breaks','serviceKeys']); reference(p); if(p.branchSchedules){if(!p.branchSchedules.length)issues.push({key:p.key,field:'branchSchedules',code:'staff_branch_hours_required'});for(const s of p.branchSchedules){if(!branches.has(s.branchKey))issues.push({key:p.key,field:'branchSchedules',code:'invalid_reference'});if(!DAYS.some(d=>s.workingHours[d].length))issues.push({key:p.key,field:'branchSchedules',code:'staff_branch_hours_required'});}} if(p.phone&&!normalizePhone(p.phone))issues.push({key:p.key,field:'phone',code:'invalid_phone'}); for (const key of p.serviceKeys ?? []) if (!services.has(key)) issues.push({key:p.key,field:'serviceKeys',code:'invalid_reference'}); }
   if (!KINDS.some(k => draft[k].length)) issues.push({key:'draft',field:'draft',code:'empty'});
   return issues;
 }

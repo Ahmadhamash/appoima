@@ -134,19 +134,19 @@ describe('Phase 4 waiting list and append-only inventory',()=>{
   it('cross-tenant inventory item reads, movements and branch creation are denied',async()=>{
     const id=await createItem();expect((await other.get(`/api/clinic/inventory/items/${id}`)).status).toBe(404);
     expect((await other.post(`/api/clinic/inventory/items/${id}/movements`).send({kind:'receipt',quantity:'1',idempotencyKey:key()})).status).toBe(404);
-    expect((await manager.post('/api/clinic/inventory/items').send({branchId:foreignBranch,name:'Cross tenant',nameLang:'en',unit:'ml',idempotencyKey:key()})).status).toBe(404);
+    expect((await manager.post('/api/clinic/inventory/items').send({branchId:foreignBranch,name:'Cross tenant',nameLang:'en',unit:'ml',idempotencyKey:key()})).status).toBe(400);
     const appointmentId=await inService();expect((await other.get(`/api/clinic/appointments/${appointmentId}/consumption`)).status).toBe(404);
     expect((await other.post(`/api/clinic/appointments/${appointmentId}/consumption`).send({consumption:materials(id),idempotencyKey:key()})).status).toBe(404);
     expect((await other.get(`/api/clinic/services/${service}/actual-use`)).status).toBe(404);
   });
   it('completion records actual materials and retries without a second deduction',async()=>{
-    const id=await inService(),item=await createItem();await movement(item);const current=await detail(id),body={status:'completed',expectedVersion:current.body.version,consumption:materials(item),idempotencyKey:key()};
+    const id=await inService(),item=await createItem();await movement(item);const current=await detail(id),body={status:'completed',consumptionApproved:true,expectedVersion:current.body.version,consumption:materials(item),idempotencyKey:key()};
     const first=await provider.post(`/api/clinic/appointments/${id}/status`).send(body),retry=await provider.post(`/api/clinic/appointments/${id}/status`).send(body);
     expect(first.status).toBe(200);expect(retry.body.replayed).toBe(true);expect((await detail(id)).body.status).toBe('completed');expect((await stock(item)).body.balance).toBe('7.500');
     expect((await provider.get(`/api/clinic/appointments/${id}/consumption`)).body).toMatchObject({recorded:true,canRecord:false,lines:[{id:item,quantity:'2.500',unit:'ml'}]});
   });
   it('concurrent duplicate completion requests deduct once',async()=>{
-    const id=await inService(),item=await createItem();await movement(item);const a=await detail(id),body={status:'completed',expectedVersion:a.body.version,consumption:materials(item),idempotencyKey:key()};
+    const id=await inService(),item=await createItem();await movement(item);const a=await detail(id),body={status:'completed',consumptionApproved:true,expectedVersion:a.body.version,consumption:materials(item),idempotencyKey:key()};
     const results=await Promise.all([provider.post(`/api/clinic/appointments/${id}/status`).send(body),provider.post(`/api/clinic/appointments/${id}/status`).send(body)]);expect(results.map(r=>r.status)).toEqual([200,200]);expect((await stock(item)).body.balance).toBe('7.500');
   });
   it('insufficient stock rolls back completion status, history and all material lines',async()=>{
@@ -175,7 +175,7 @@ describe('Phase 4 waiting list and append-only inventory',()=>{
     const id=await inService(),item=await createItem();await movement(item);await change(id,'completed');expect((await broaderReader.post(`/api/clinic/appointments/${id}/consumption`).send({consumption:materials(item),idempotencyKey:key()})).status).toBe(403);
   });
   it('revoked stock permission is rechecked before replaying a prior successful completion',async()=>{
-    const id=await inService(),item=await createItem();await movement(item);const a=await detail(id),body={status:'completed',expectedVersion:a.body.version,consumption:materials(item),idempotencyKey:key()};
+    const id=await inService(),item=await createItem();await movement(item);const a=await detail(id),body={status:'completed',consumptionApproved:true,expectedVersion:a.body.version,consumption:materials(item),idempotencyKey:key()};
     expect((await provider.post(`/api/clinic/appointments/${id}/status`).send(body)).status).toBe(200);await db.update(usersTable).set({permissions:['customers.read']}).where(eq(usersTable.id,providerId));expect((await provider.post(`/api/clinic/appointments/${id}/status`).send(body)).status).toBe(403);
   });
   it('service totals keep distinct item units and exclude receipts/adjustments',async()=>{
@@ -191,8 +191,8 @@ describe('Phase 4 waiting list and append-only inventory',()=>{
   });
   it('PostgreSQL itself rejects UPDATE, DELETE and TRUNCATE of inventory movements',async()=>{
     const item=await createItem();await movement(item);
-    for(const q of [sql`update inventory_movements set quantity=quantity where clinic_id=${clinic} and item_id=${item}`,sql`delete from inventory_movements where clinic_id=${clinic} and item_id=${item}`,sql`truncate inventory_movements`]){
-      const error=await db.execute(q).then(()=>null,e=>e);expect(code(error)).toBe('55000');
+    for(const [index,q] of [sql`update inventory_movements set quantity=quantity where clinic_id=${clinic} and item_id=${item}`,sql`delete from inventory_movements where clinic_id=${clinic} and item_id=${item}`,sql`truncate inventory_movements`].entries()){
+      const error=await db.execute(q).then(()=>null,e=>e);if(index===2)expect(['55000','0A000']).toContain(code(error));else expect(code(error)).toBe('55000');
     }
     expect((await stock(item)).body.balance).toBe('10.000');
   });

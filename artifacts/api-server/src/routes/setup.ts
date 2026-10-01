@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
+import { archiveBranch, archivedBranches, branchArchive, draftBranchArchives } from '../services/branch-archive';
 import { requireAuth, requirePasswordChanged, requirePermission } from "../middlewares/auth";
 import { forbidden } from "../lib/errors";
 import { branchSchema, serviceSchema, serviceBatchSchema, roomSchema, customerSchema, employeeSchema, newEmployeeSchema, pageSchema, employeePageSchema, branchPageSchema } from "../domain/setup-validation";
@@ -18,7 +19,10 @@ router.get("/clinic/options", async (req, res) => {
   res.json(await setup.setupOptions(req.user!, resource));
 });
 
-router.get("/clinic/branches", requirePermission("settings.read"), async (req, res) => res.json(await setup.listBranches(req.user!, branchPageSchema.parse(req.query))));
+router.get("/clinic/branches", requirePermission("settings.read"), async (req, res) => {const p=branchPageSchema.parse(req.query);res.json(await (p.status==='archived'?archivedBranches(req.user!,p):setup.listBranches(req.user!,p)));});
+router.get('/clinic/branches/draft-archives',requirePermission('settings.manage'),async(req,res)=>res.json({items:await draftBranchArchives(req.user!)}));
+router.get('/clinic/branches/:id/archive',requirePermission('settings.manage'),async(req,res)=>res.json(await branchArchive(req.user!,id(req.params['id']),z.coerce.number().int().min(1).max(100000).default(1).parse(req.query['page']))));
+router.delete('/clinic/branches/:id',requirePermission('settings.manage'),async(req,res)=>{z.object({confirmed:z.literal(true)}).strict().parse(req.body);res.json(await archiveBranch(req.user!,id(req.params['id'])));});
 router.get("/clinic/branches/:id", requirePermission("settings.read"), async (req, res) => res.json({ item: await setup.getBranch(req.user!, id(req.params["id"])) }));
 router.post("/clinic/branches", requirePermission("settings.manage"), async (req, res) => res.status(201).json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body)) }));
 router.put("/clinic/branches/:id", requirePermission("settings.manage"), async (req, res) => res.json({ item: await setup.saveBranch(req.user!, branchSchema.parse(req.body), id(req.params["id"])) }));

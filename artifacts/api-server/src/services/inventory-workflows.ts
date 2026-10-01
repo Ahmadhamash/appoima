@@ -1,3 +1,4 @@
+import { activeBranch } from './branch-scope';
 import {and,asc,desc,eq,inArray,sql} from 'drizzle-orm';
 import {branchesTable,roomsTable,inventoryItemsTable,inventoryMovementsTable,inventoryPurchaseOrdersTable,inventoryPurchaseOrderLinesTable,inventoryTransfersTable,type User} from '@workspace/db';
 import {hasPermission} from '../domain/permissions';
@@ -12,24 +13,24 @@ const authorize=(actor:User,manage=false)=>{if(!hasPermission(actor,manage?'inve
 export async function listPurchaseOrders(actor:User,filter:{branchId?:number;status?:string}){return withOperations(actor,false,async(tx,fresh)=>{
  authorize(fresh);const clinicId=operatingClinic(fresh);
  const rows=await tx.select({order:inventoryPurchaseOrdersTable,branch:{id:branchesTable.id,name:branchesTable.name,nameLang:branchesTable.nameLang}})
-  .from(inventoryPurchaseOrdersTable).innerJoin(branchesTable,and(eq(branchesTable.clinicId,clinicId),eq(branchesTable.id,inventoryPurchaseOrdersTable.branchId)))
-  .where(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId),filter.branchId?eq(inventoryPurchaseOrdersTable.branchId,filter.branchId):undefined,filter.status?eq(inventoryPurchaseOrdersTable.status,filter.status):undefined))
+  .from(inventoryPurchaseOrdersTable).innerJoin(branchesTable,and(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id)),eq(branchesTable.id,inventoryPurchaseOrdersTable.branchId)))
+  .where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrdersTable.branchId)),filter.branchId?eq(inventoryPurchaseOrdersTable.branchId,filter.branchId):undefined,filter.status?eq(inventoryPurchaseOrdersTable.status,filter.status):undefined))
   .orderBy(desc(inventoryPurchaseOrdersTable.id)).limit(500);
- const ids=rows.map(row=>row.order.id),lines=ids.length?await tx.select().from(inventoryPurchaseOrderLinesTable).where(and(eq(inventoryPurchaseOrderLinesTable.clinicId,clinicId),inArray(inventoryPurchaseOrderLinesTable.orderId,ids))):[];
+ const ids=rows.map(row=>row.order.id),lines=ids.length?await tx.select().from(inventoryPurchaseOrderLinesTable).where(and(and(eq(inventoryPurchaseOrderLinesTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrderLinesTable.branchId)),inArray(inventoryPurchaseOrderLinesTable.orderId,ids))):[];
  return {orders:rows.map(({order,branch})=>({...order,branch,lines:lines.filter(line=>line.orderId===order.id),total:lines.filter(line=>line.orderId===order.id).reduce((sum,line)=>sum+Number(line.orderedQuantity)*Number(line.unitCost),0).toFixed(3)})),canManage:hasPermission(fresh,'inventory.manage')};
 });}
 export async function purchaseOrderDetail(actor:User,id:number){return withOperations(actor,false,async(tx,fresh)=>{
- authorize(fresh);const clinicId=operatingClinic(fresh),[order]=await tx.select().from(inventoryPurchaseOrdersTable).where(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId),eq(inventoryPurchaseOrdersTable.id,id)));
+ authorize(fresh);const clinicId=operatingClinic(fresh),[order]=await tx.select().from(inventoryPurchaseOrdersTable).where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrdersTable.branchId)),eq(inventoryPurchaseOrdersTable.id,id)));
  if(!order)throw notFound('record_not_found');
  const lines=await tx.select({line:inventoryPurchaseOrderLinesTable,item:{id:inventoryItemsTable.id,name:inventoryItemsTable.name,nameLang:inventoryItemsTable.nameLang,unit:inventoryItemsTable.unit}})
-  .from(inventoryPurchaseOrderLinesTable).innerJoin(inventoryItemsTable,and(eq(inventoryItemsTable.clinicId,clinicId),eq(inventoryItemsTable.id,inventoryPurchaseOrderLinesTable.itemId)))
-  .where(and(eq(inventoryPurchaseOrderLinesTable.clinicId,clinicId),eq(inventoryPurchaseOrderLinesTable.orderId,id))).orderBy(asc(inventoryPurchaseOrderLinesTable.id));
+  .from(inventoryPurchaseOrderLinesTable).innerJoin(inventoryItemsTable,and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),eq(inventoryItemsTable.id,inventoryPurchaseOrderLinesTable.itemId)))
+  .where(and(and(eq(inventoryPurchaseOrderLinesTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrderLinesTable.branchId)),eq(inventoryPurchaseOrderLinesTable.orderId,id))).orderBy(asc(inventoryPurchaseOrderLinesTable.id));
  return {...order,lines:lines.map(({line,item})=>({...line,item})),canManage:hasPermission(fresh,'inventory.manage')};
 });}
 export async function createPurchaseOrder(actor:User,input:PurchaseOrderCreateInput){return operationsCommand(actor,'inventory:purchase:create',input,async(_tx,fresh)=>authorize(fresh,true),async(tx,fresh)=>{
- const clinicId=operatingClinic(fresh),[branch]=await tx.select({id:branchesTable.id}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId),eq(branchesTable.id,input.branchId)));
+ const clinicId=operatingClinic(fresh),[branch]=await tx.select({id:branchesTable.id}).from(branchesTable).where(and(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id)),eq(branchesTable.id,input.branchId)));
  if(!branch)throw notFound('record_not_found');
- const items=await tx.select({id:inventoryItemsTable.id,branchId:inventoryItemsTable.branchId}).from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId,clinicId),eq(inventoryItemsTable.isAvailable,1),inArray(inventoryItemsTable.id,input.lines.map(line=>line.itemId))));
+ const items=await tx.select({id:inventoryItemsTable.id,branchId:inventoryItemsTable.branchId}).from(inventoryItemsTable).where(and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),eq(inventoryItemsTable.isAvailable,1),inArray(inventoryItemsTable.id,input.lines.map(line=>line.itemId))));
  if(items.length!==input.lines.length||items.some(item=>item.branchId!==input.branchId))throw badRequest('branch_mismatch');
  const [order]=await tx.insert(inventoryPurchaseOrdersTable).values({clinicId,branchId:input.branchId,supplier:input.supplier,notes:input.notes,createdBy:fresh.id}).returning({id:inventoryPurchaseOrdersTable.id});
  await tx.insert(inventoryPurchaseOrderLinesTable).values(input.lines.map(line=>({clinicId,branchId:input.branchId,orderId:order!.id,itemId:line.itemId,orderedQuantity:quantityString(quantityMilli(line.quantity)),unitCost:line.unitCost})));
@@ -37,30 +38,30 @@ export async function createPurchaseOrder(actor:User,input:PurchaseOrderCreateIn
  return order!.id;
 });}
 export async function receivePurchaseOrder(actor:User,id:number,input:PurchaseOrderReceiveInput){return operationsCommand(actor,`inventory:purchase:receive:${id}`,input,async(tx,fresh)=>{
- authorize(fresh,true);const [order]=await tx.select({id:inventoryPurchaseOrdersTable.id}).from(inventoryPurchaseOrdersTable).where(and(eq(inventoryPurchaseOrdersTable.clinicId,operatingClinic(fresh)),eq(inventoryPurchaseOrdersTable.id,id)));if(!order)throw notFound('record_not_found');
+ authorize(fresh,true);const [order]=await tx.select({id:inventoryPurchaseOrdersTable.id}).from(inventoryPurchaseOrdersTable).where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,operatingClinic(fresh)), activeBranch(inventoryPurchaseOrdersTable.branchId)),eq(inventoryPurchaseOrdersTable.id,id)));if(!order)throw notFound('record_not_found');
 },async(tx,fresh)=>{
- const clinicId=operatingClinic(fresh),[order]=await tx.select().from(inventoryPurchaseOrdersTable).where(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId),eq(inventoryPurchaseOrdersTable.id,id)));
+ const clinicId=operatingClinic(fresh),[order]=await tx.select().from(inventoryPurchaseOrdersTable).where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrdersTable.branchId)),eq(inventoryPurchaseOrdersTable.id,id)));
  if(!order||order.status==='received'||order.status==='cancelled')throw conflict('operation_changed');
- const lines=await tx.select().from(inventoryPurchaseOrderLinesTable).where(and(eq(inventoryPurchaseOrderLinesTable.clinicId,clinicId),eq(inventoryPurchaseOrderLinesTable.orderId,id)));
+ const lines=await tx.select().from(inventoryPurchaseOrderLinesTable).where(and(and(eq(inventoryPurchaseOrderLinesTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrderLinesTable.branchId)),eq(inventoryPurchaseOrderLinesTable.orderId,id)));
  for(const entry of input.lines){const line=lines.find(item=>item.itemId===entry.itemId);if(!line||quantityMilli(line.receivedQuantity)+quantityMilli(entry.quantity)>quantityMilli(line.orderedQuantity))throw badRequest('invalid_quantity');
-  const [item]=await tx.select({unit:inventoryItemsTable.unit}).from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId,clinicId),eq(inventoryItemsTable.id,entry.itemId)));
+  const [item]=await tx.select({unit:inventoryItemsTable.unit}).from(inventoryItemsTable).where(and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),eq(inventoryItemsTable.id,entry.itemId)));
   await tx.update(inventoryPurchaseOrderLinesTable).set({receivedQuantity:quantityString(quantityMilli(line.receivedQuantity)+quantityMilli(entry.quantity))}).where(eq(inventoryPurchaseOrderLinesTable.id,line.id));
   await tx.insert(inventoryMovementsTable).values({clinicId,branchId:order.branchId,itemId:entry.itemId,unit:item!.unit,kind:'receipt',batchExpiryDate:entry.expiryDate??null,quantity:quantityString(quantityMilli(entry.quantity)),reason:`PO-${id}`,reasonLang:'en',actorId:fresh.id});
   line.receivedQuantity=quantityString(quantityMilli(line.receivedQuantity)+quantityMilli(entry.quantity));
  }
  const complete=lines.every(line=>quantityMilli(line.receivedQuantity)===quantityMilli(line.orderedQuantity));
- await tx.update(inventoryPurchaseOrdersTable).set({status:complete?'received':'partial',receivedAt:complete?new Date():null}).where(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId),eq(inventoryPurchaseOrdersTable.id,id)));
+ await tx.update(inventoryPurchaseOrdersTable).set({status:complete?'received':'partial',receivedAt:complete?new Date():null}).where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrdersTable.branchId)),eq(inventoryPurchaseOrdersTable.id,id)));
  await recordAudit({clinicId,actorUserId:fresh.id,action:'inventory.purchase_order_received',entityType:'inventory_purchase_order',entityId:id,details:{lines:input.lines.length,complete}},tx);
  return id;
 });}
 export async function cancelPurchaseOrder(actor:User,id:number){return withOperations(actor,true,async(tx,fresh)=>{
- authorize(fresh,true);const clinicId=operatingClinic(fresh),[order]=await tx.select().from(inventoryPurchaseOrdersTable).where(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId),eq(inventoryPurchaseOrdersTable.id,id)));
+ authorize(fresh,true);const clinicId=operatingClinic(fresh),[order]=await tx.select().from(inventoryPurchaseOrdersTable).where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrdersTable.branchId)),eq(inventoryPurchaseOrdersTable.id,id)));
  if(!order)throw notFound('record_not_found');if(order.status!=='pending')throw conflict('operation_changed');
- await tx.update(inventoryPurchaseOrdersTable).set({status:'cancelled'}).where(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId),eq(inventoryPurchaseOrdersTable.id,id)));
+ await tx.update(inventoryPurchaseOrdersTable).set({status:'cancelled'}).where(and(and(eq(inventoryPurchaseOrdersTable.clinicId,clinicId), activeBranch(inventoryPurchaseOrdersTable.branchId)),eq(inventoryPurchaseOrdersTable.id,id)));
  await recordAudit({clinicId,actorUserId:fresh.id,action:'inventory.purchase_order_cancelled',entityType:'inventory_purchase_order',entityId:id},tx);return {id};
 });}
 export async function transferStock(actor:User,input:TransferStockInput){return operationsCommand(actor,'inventory:transfer',input,async(_tx,fresh)=>authorize(fresh,true),async(tx,fresh)=>{
- const clinicId=operatingClinic(fresh),items=await tx.select().from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId,clinicId),inArray(inventoryItemsTable.id,[input.fromItemId,input.toItemId])));
+ const clinicId=operatingClinic(fresh),items=await tx.select().from(inventoryItemsTable).where(and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),inArray(inventoryItemsTable.id,[input.fromItemId,input.toItemId])));
  const source=items.find(item=>item.id===input.fromItemId),target=items.find(item=>item.id===input.toItemId);
  if(!source||!target||source.isAvailable!==1||target.isAvailable!==1)throw notFound('inventory_item_not_found');
  // Matching legacy branch records remain transferable; new catalog items use their shared product identity.
@@ -77,9 +78,9 @@ export async function listTransfers(actor:User){return withOperations(actor,fals
  authorize(fresh);const clinicId=operatingClinic(fresh),rows=await tx.select().from(inventoryTransfersTable).where(eq(inventoryTransfersTable.clinicId,clinicId)).orderBy(desc(inventoryTransfersTable.id)).limit(200);
  const ids=[...new Set(rows.flatMap(row=>[row.fromItemId,row.toItemId]))];
  const items=ids.length?await tx.select({id:inventoryItemsTable.id,name:inventoryItemsTable.name,branchId:inventoryItemsTable.branchId,branchName:branchesTable.name}).from(inventoryItemsTable)
-  .innerJoin(branchesTable,and(eq(branchesTable.clinicId,clinicId),eq(branchesTable.id,inventoryItemsTable.branchId))).where(and(eq(inventoryItemsTable.clinicId,clinicId),inArray(inventoryItemsTable.id,ids))):[];
+  .innerJoin(branchesTable,and(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id)),eq(branchesTable.id,inventoryItemsTable.branchId))).where(and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),inArray(inventoryItemsTable.id,ids))):[];
  const roomIds=[...new Set(rows.flatMap(row=>[row.fromRoomId,row.toRoomId]).filter((id):id is number=>id!==null))];
- const rooms=roomIds.length?await tx.select({id:roomsTable.id,name:roomsTable.name}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId),inArray(roomsTable.id,roomIds))):[];
+ const rooms=roomIds.length?await tx.select({id:roomsTable.id,name:roomsTable.name}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)),inArray(roomsTable.id,roomIds))):[];
  const location=(itemId:number,roomId:number|null)=>{const item=items.find(item=>item.id===itemId);return {itemId,itemName:item?.name??'',branchId:item?.branchId??null,branchName:item?.branchName??'',roomId,roomName:rooms.find(room=>room.id===roomId)?.name??null};};
  return {transfers:rows.map(row=>({...row,from:location(row.fromItemId,row.fromRoomId),to:location(row.toItemId,row.toRoomId)}))};
 });}

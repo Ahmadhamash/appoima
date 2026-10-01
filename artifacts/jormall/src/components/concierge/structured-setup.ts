@@ -1,11 +1,12 @@
 import { DAYS, type Draft, type Language, type Week, type StaffDraft } from './contract';
 import { el, button } from './dom';
 import { setupPager } from './paging';
+import { createStaffBranchSchedules } from '../staff-branch-schedules';
 import { createPhoneInput } from '../phone-input';
 
 const emptyWeek = (): Week => Object.fromEntries(DAYS.map(day => [day, []])) as unknown as Week;
 /** Explicit fields keep setup independent of AI interpretation. */
-export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', language: Language, save: (draft: Draft, advance: boolean) => Promise<void>, changed: (draft: Draft) => void) {
+export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', language: Language, save: (draft: Draft, advance: boolean) => Promise<void>, changed: (draft: Draft) => void, archiveBranch?: (key:string,draft:Draft)=>Promise<void>) {
  const draft = structuredClone(source), ar = language === 'ar', w = (a: string, e: string) => ar ? a : e;
  const form = el('form', 'jc-structured-setup'), list = el('div', 'jc-structured-list'); form.noValidate = true;
  form.dataset.testid = `concierge-${kind}-form`;
@@ -50,18 +51,21 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
     textField(fields, person, 'email', w('البريد الإلكتروني للدخول', 'Sign-in email'), true, 'email', 200);
     fields.append(createPhoneInput({value:person.phone??'',label:w('الهاتف (اختياري)', 'Phone (optional)'),language,testId:`setup-${row.key}-phone`,onChange:value=>{person.phone=value||null;changed(draft);}}).node);
     textField(fields, person, 'jobTitle', w('المسمى الوظيفي (اختياري)', 'Job title (optional)'));
-    const select = (title: string, key: 'role' | 'branchKey', options: [string, string][]) => { const input = el('select'); input.required = true; input.dataset.testid = `setup-${row.key}-${key}`; for (const [value, label] of [['', w('اختر', 'Choose')], ...options]) { const option = el('option', '', label); option.value = value!; input.append(option); } input.value = person[key] ?? ''; input.onchange = () => { const value = input.value || null; if (person[key] === value) return; (person as any)[key] = value; if (key === 'branchKey') { person.serviceKeys = (person.serviceKeys ?? []).filter(k => draft.services.some(s => s.key === k && (s.branchScope === 'all' || s.branchKey === person.branchKey))); render(index); } else changed(draft); }; field(fields, title, input); };
+    const select = (title: string, key: 'role' | 'branchKey', options: [string, string][]) => { const input = el('select'); input.required = true; input.dataset.testid = `setup-${row.key}-${key}`; for (const [value, label] of [['', w('اختر', 'Choose')], ...options]) { const option = el('option', '', label); option.value = value!; input.append(option); } input.value = person[key] ?? ''; input.onchange = () => { const value = input.value || null; if (person[key] === value) return; (person as any)[key] = value; if (key === 'branchKey') { person.serviceKeys = (person.serviceKeys ?? []).filter(k => draft.services.some(s => s.key === k && (s.branchScope === 'all' || person.branchSchedules?.some(shift=>shift.branchKey===s.branchKey)))); render(index); } else changed(draft); }; field(fields, title, input); };
     select(w('الدور', 'Role'), 'role', [['secretary', w('سكرتير / سكرتيرة', 'Secretary')], ['doctor', w('طبيب', 'Doctor')], ['service_provider', w('مقدم خدمة', 'Service provider')], ['other_staff', w('موظف آخر', 'Other staff')]]);
-    select(w('الفرع', 'Branch'), 'branchKey', draft.branches.map(b => [b.key, b.name ?? w('فرع', 'Branch')])); card.append(fields);
+    card.append(fields);
+    const first=draft.branches.find(b=>b.key===person.branchKey)??draft.branches[0];
+    person.branchSchedules??=first?[{branchKey:first.key,workingHours:person.workingHours??first.openingHours??emptyWeek(),breaks:person.breaks??emptyWeek()}]:[];
     const assignments = el('div', 'jc-staff-assignments');
     const services = el('fieldset'); services.append(el('legend', '', w('الخدمات التي يقدمها', 'Services provided')));
-    for (const service of draft.services.filter(s => s.branchScope === 'all' || s.branchKey === person.branchKey)) { const label = el('label', 'jc-check'), check = el('input'); check.type = 'checkbox'; check.checked = !!person.serviceKeys?.includes(service.key); check.onchange = () => { person.serviceKeys = check.checked ? [...person.serviceKeys ?? [], service.key] : (person.serviceKeys ?? []).filter(k => k !== service.key); changed(draft); }; label.append(check, document.createTextNode(service.name ?? '')); services.append(label); } assignments.append(services);
-    schedule(assignments, person, 'workingHours', w('أيام وساعات عمل الموظف', 'Staff working hours')); schedule(assignments, person, 'breaks', w('أوقات الاستراحة (اختياري)', 'Break times (optional)'));
+    for (const service of draft.services.filter(s => s.branchScope === 'all' || person.branchSchedules?.some(shift=>shift.branchKey===s.branchKey))) { const label = el('label', 'jc-check'), check = el('input'); check.type = 'checkbox'; check.checked = !!person.serviceKeys?.includes(service.key); check.onchange = () => { person.serviceKeys = check.checked ? [...person.serviceKeys ?? [], service.key] : (person.serviceKeys ?? []).filter(k => k !== service.key); changed(draft); }; label.append(check, document.createTextNode(service.name ?? '')); services.append(label); } assignments.append(services);
+    const shiftBranches=draft.branches.map(b=>({key:b.key,name:b.name??w('فرع','Branch'),timeZone:b.timeZone??'Asia/Amman',openingHours:b.openingHours}));
+    assignments.prepend(createStaffBranchSchedules(shiftBranches,person.branchSchedules,language,`setup-${person.key}-branches`,next=>{const keysChanged=JSON.stringify(next.map(s=>s.branchKey))!==JSON.stringify(person.branchSchedules?.map(s=>s.branchKey));person.branchSchedules=next;person.branchKey=next.length===1?next[0]!.branchKey:null;person.workingHours=next[0]?.workingHours??null;person.breaks=next[0]?.breaks??emptyWeek();person.serviceKeys=(person.serviceKeys??[]).filter(k=>draft.services.some(s=>s.key===k&&(s.branchScope==='all'||next.some(n=>n.branchKey===s.branchKey))));changed(draft);if(keysChanged)render(index);}).node);
     card.append(assignments);
     const detailPager = setupPager(card, [fields, assignments], language, `staff-detail-pages-${row.key}`);
     if (detailPager) card.insertBefore(detailPager, fields);
     card.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: staffPages.get(index) ?? 0 }));
-   } cards.push(card);
+   } if(kind==='branches'&&archiveBranch)card.append(button(w('حذف الفرع','Delete branch'),()=>{if(!window.confirm(w('حذف هذا الفرع؟ سيتم نقل بياناته وكل السجلات المرتبطة به إلى الأرشيف.','Delete this branch? Its data and related records will move to the archive.')))return;void archiveBranch(row.key,draft);},'jc-button jc-remove',`setup-delete-${row.key}`));cards.push(card);
   }); changed(draft);
   list.append(...cards);
   if (kind === 'staff') {
@@ -73,7 +77,7 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
  const parked = [...draft[kind]];
  count.oninput = () => {
   if (!count.checkValidity() || count.value === '') return;
-  const size = Number(count.value); draft[kind].forEach((row, i) => { parked[i] = row; });
+  const size = Number(count.value);if(kind==='branches'&&size<draft.branches.length){count.value=String(draft.branches.length);count.setCustomValidity(w('استخدم زر حذف الفرع لنقل بياناته إلى الأرشيف.','Use Delete branch to archive its data.'));count.reportValidity();count.setCustomValidity('');return;} draft[kind].forEach((row, i) => { parked[i] = row; });
   const rows = Array.from({ length: size }, (_, i) => parked[i] ?? (kind === 'branches' ? { key: `branch_${crypto.randomUUID().slice(0, 8)}`, existingId: null, name: null, nameLang: language, address: null, mapUrl: null, timeZone: 'Asia/Amman', openingHours: emptyWeek() } : { key: `staff_${crypto.randomUUID().slice(0, 8)}`, name: null, nameLang: language, email: null, phone: null, jobTitle: null, role: null, branchKey: draft.branches.length === 1 ? draft.branches[0]!.key : null, serviceKeys: [], workingHours: null, breaks: emptyWeek() }));
   (draft[kind] as any[]) = rows; render(Math.max(0, Math.min(size - 1, Number(list.dataset.setupPage) || 0)));
  };
@@ -89,7 +93,7 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
    const hours = invalidField.closest('details'); if (hours) hours.open = true;
    invalidField.reportValidity(); return;
   }
-  const invalidIndex = draft[kind].findIndex(row => { const hours = 'openingHours' in row ? row.openingHours : row.workingHours; return !hours || !DAYS.some(day => hours[day].length) || DAYS.some(day => hours[day].some(r => !r.open || !r.close || r.open >= r.close)); });
+  const invalidIndex = draft[kind].findIndex(row => { if('branchSchedules' in row){return !row.branchSchedules?.length||row.branchSchedules.some(s=>!DAYS.some(d=>s.workingHours[d].length)||DAYS.some(d=>s.workingHours[d].some(r=>!r.open||!r.close||r.open>=r.close)));}const hours = 'openingHours' in row ? row.openingHours : row.workingHours; return !hours || !DAYS.some(day => hours[day].length) || DAYS.some(day => hours[day].some(r => !r.open || !r.close || r.open >= r.close)); });
   if (invalidIndex >= 0) {
    if (kind === 'staff') list.dispatchEvent(new CustomEvent('jormall:setup-page', { detail: invalidIndex }));
    error.textContent = w('حدّد يوم عمل واحدًا على الأقل لكل سجل، ووقت انتهاء بعد البداية.', 'Choose at least one working day per record, with the end after the start.'); error.hidden = false;

@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee } from './branch-scope';
 import { appointmentsTable } from "@workspace/db";
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { db, clinicsTable, branchesTable, usersTable, servicesTable, roomsTable, roomServicesTable, type Clinic } from "@workspace/db";
@@ -27,21 +28,21 @@ async function buildOverview(clinic: Clinic): Promise<ClinicOverview> {
   const [manager] = await db
     .select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
     .from(usersTable)
-    .where(and(eq(usersTable.clinicId, clinic.id), eq(usersTable.role, "manager"), eq(usersTable.isActive, true)))
+    .where(and(and(eq(usersTable.clinicId, clinic.id), activeEmployee()), eq(usersTable.role, "manager"), eq(usersTable.isActive, true)))
     .orderBy(usersTable.id)
     .limit(1);
   const [staff] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(usersTable)
-    .where(eq(usersTable.clinicId, clinic.id));
+    .where(and(eq(usersTable.clinicId, clinic.id), activeEmployee()));
   const [branches] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(branchesTable)
-    .where(eq(branchesTable.clinicId, clinic.id));
-  const branchRows = await db.select({ openingHours: branchesTable.openingHours }).from(branchesTable).where(eq(branchesTable.clinicId, clinic.id));
-  const services = await db.select({ id: servicesTable.id, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(eq(servicesTable.clinicId, clinic.id), eq(servicesTable.isActive, true)));
-  const compatible = await db.select({ serviceId: roomServicesTable.serviceId, equipment: roomsTable.extra }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), eq(roomsTable.clinicId, clinic.id))).where(and(eq(roomServicesTable.clinicId, clinic.id), eq(roomsTable.status, "available")));
-  const [activeStaff] = await db.select({ count: sql<number>`count(*)::int` }).from(usersTable).where(and(eq(usersTable.clinicId, clinic.id), eq(usersTable.isActive, true), sql`${usersTable.role} <> 'manager'`));
+    .where(and(eq(branchesTable.clinicId, clinic.id), activeBranch(branchesTable.id)));
+  const branchRows = await db.select({ openingHours: branchesTable.openingHours }).from(branchesTable).where(and(eq(branchesTable.clinicId, clinic.id), activeBranch(branchesTable.id)));
+  const services = await db.select({ id: servicesTable.id, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinic.id), activeBranch(servicesTable.branchId)), eq(servicesTable.isActive, true)));
+  const compatible = await db.select({ serviceId: roomServicesTable.serviceId, equipment: roomsTable.extra }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), and(eq(roomsTable.clinicId, clinic.id), activeBranch(roomsTable.branchId)))).where(and(eq(roomServicesTable.clinicId, clinic.id), eq(roomsTable.status, "available")));
+  const [activeStaff] = await db.select({ count: sql<number>`count(*)::int` }).from(usersTable).where(and(and(eq(usersTable.clinicId, clinic.id), activeEmployee()), eq(usersTable.isActive, true), sql`${usersTable.role} <> 'manager'`));
   const branchCount = branches?.count ?? 0;
   return {
     ...clinic,
@@ -55,7 +56,7 @@ async function buildOverview(clinic: Clinic): Promise<ClinicOverview> {
       hasCatalog: services.length > 0 && services.every((s) => !(s.requiresRoom || s.requiredEquipment.length) || compatible.some((r) => r.serviceId === s.id && roomHasEquipment(s.requiredEquipment, r.equipment['equipment']))),
       hasStaff: (activeStaff?.count ?? 0) > 0,
       // Booking progress reflects committed appointment records.
-      hasFirstAppointment: (await db.select({id: appointmentsTable.id}).from(appointmentsTable).where(eq(appointmentsTable.clinicId, clinic.id)).limit(1)).length > 0,
+      hasFirstAppointment: (await db.select({id: appointmentsTable.id}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId, clinic.id), activeBranch(appointmentsTable.branchId))).limit(1)).length > 0,
     },
   };
 }

@@ -22,8 +22,10 @@ export type WeeklyHours = Record<WeekDay, TimeRange[]>;
 export type OpeningHours = Record<WeekDay, TimeRange[] | TimeRange | null>;
 export const EMPTY_WEEK: WeeklyHours = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] };
 export type StaffTimeOff = { startsAt: string; endsAt: string; note: string };
+export type StaffBranchSchedule = { branchId: number; workingHours: WeeklyHours; breaks: WeeklyHours };
 
 export const branchesTable = pgTable("branches", {
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   address: text("address"),
   mapUrl: text("map_url"),
   id: serial("id").primaryKey(),
@@ -36,5 +38,7 @@ export const branchesTable = pgTable("branches", {
   openingHours: jsonb("opening_hours").$type<OpeningHours>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [unique("branches_clinic_id_unique").on(t.clinicId, t.id)]);
+
+export const branchDraftArchivesTable=pgTable('branch_draft_archives',{id:serial('id').primaryKey(),clinicId:integer('clinic_id').notNull().references(()=>clinicsTable.id,{onDelete:'cascade'}),snapshot:jsonb('snapshot').$type<Record<string,unknown>>().notNull(),archivedAt:timestamp('archived_at',{withTimezone:true}).notNull().defaultNow()});
 
 export type Branch = typeof branchesTable.$inferSelect;

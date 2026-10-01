@@ -11,7 +11,7 @@ import {
   unique,
   foreignKey,
 } from "drizzle-orm/pg-core";
-import { clinicsTable, branchesTable, languageEnum, EMPTY_WEEK, type WeeklyHours, type StaffTimeOff } from "./clinics";
+import { clinicsTable, branchesTable, languageEnum, EMPTY_WEEK, type WeeklyHours, type StaffTimeOff, type StaffBranchSchedule } from "./clinics";
 
 export const USER_ROLES = [
   "platform_owner",
@@ -44,6 +44,7 @@ export const usersTable = pgTable(
     mustChangePassword: boolean("must_change_password").notNull().default(true),
     isActive: boolean("is_active").notNull().default(true),
     workingHours: jsonb("working_hours").$type<WeeklyHours>().notNull().default(EMPTY_WEEK),
+    branchSchedules: jsonb("branch_schedules").$type<StaffBranchSchedule[]>().notNull().default([]),
     breaks: jsonb("breaks").$type<WeeklyHours>().notNull().default(EMPTY_WEEK),
     timeOff: jsonb("time_off").$type<StaffTimeOff[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee } from './branch-scope';
 import bcrypt from "bcryptjs";
 import { and, eq, sql } from "drizzle-orm";
 import { db, usersTable, clinicsTable, type User, type UserRole } from "@workspace/db";
@@ -180,5 +181,5 @@ export async function findClinicManagers(clinicId: number) {
   return db
     .select()
     .from(usersTable)
-    .where(and(eq(usersTable.clinicId, clinicId), eq(usersTable.role, "manager")));
+    .where(and(and(eq(usersTable.clinicId, clinicId), activeEmployee()), eq(usersTable.role, "manager")));
 }

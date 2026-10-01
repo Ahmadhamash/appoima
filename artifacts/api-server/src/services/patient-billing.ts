@@ -1,3 +1,4 @@
+import { activeBranch } from './branch-scope';
 import {and,asc,eq,inArray} from 'drizzle-orm';
 import {db,inventoryItemsTable,serviceMaterialCostsTable,type AppointmentProductCharge} from '@workspace/db';
 import {badRequest,conflict} from '../lib/errors';
@@ -6,21 +7,21 @@ import {productCharge,type ProductSelection} from '../domain/patient-billing';
 type Executor=Pick<Parameters<Parameters<typeof db.transaction>[0]>[0],'select'>;
 
 export async function patientProductOptions(tx:Executor,clinicId:number,branchId:number){
-  const items=await tx.select().from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId,clinicId),eq(inventoryItemsTable.branchId,branchId),eq(inventoryItemsTable.isAvailable,1))).orderBy(asc(inventoryItemsTable.name));
+  const items=await tx.select().from(inventoryItemsTable).where(and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),eq(inventoryItemsTable.branchId,branchId),eq(inventoryItemsTable.isAvailable,1))).orderBy(asc(inventoryItemsTable.name));
   return items.filter(item=>item.extra['billingType']==='patient_charge'&&item.extra['isActive']!==false).map(item=>({
     id:item.id,name:item.name,nameLang:item.nameLang,unit:item.unit,unitPrice:money.safeParse(item.extra['sellingPrice']).success?String(item.extra['sellingPrice']):null,
   }));
 }
 export async function plannedProductSelections(tx:Executor,clinicId:number,branchId:number,serviceId:number):Promise<ProductSelection[]>{
   const lines=await tx.select({itemId:serviceMaterialCostsTable.itemId,quantity:serviceMaterialCostsTable.quantity,extra:inventoryItemsTable.extra}).from(serviceMaterialCostsTable)
-    .innerJoin(inventoryItemsTable,and(eq(inventoryItemsTable.clinicId,clinicId),eq(inventoryItemsTable.branchId,branchId),eq(inventoryItemsTable.id,serviceMaterialCostsTable.itemId)))
-    .where(and(eq(serviceMaterialCostsTable.clinicId,clinicId),eq(serviceMaterialCostsTable.branchId,branchId),eq(serviceMaterialCostsTable.serviceId,serviceId)));
+    .innerJoin(inventoryItemsTable,and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),eq(inventoryItemsTable.branchId,branchId),eq(inventoryItemsTable.id,serviceMaterialCostsTable.itemId)))
+    .where(and(and(eq(serviceMaterialCostsTable.clinicId,clinicId), activeBranch(serviceMaterialCostsTable.branchId)),eq(serviceMaterialCostsTable.branchId,branchId),eq(serviceMaterialCostsTable.serviceId,serviceId)));
   return lines.filter(line=>line.extra['billingType']==='patient_charge').map(({itemId,quantity})=>({itemId,quantity}));
 }
 /** Preserve already agreed unit prices. Client-supplied prices are expectations, never authoritative prices. */
 export async function resolveProductCharges(tx:Executor,clinicId:number,branchId:number,selections:ProductSelection[],previous:AppointmentProductCharge[]=[],actual=false){
   if(!selections.length)return [];
-  const items=await tx.select().from(inventoryItemsTable).where(and(eq(inventoryItemsTable.clinicId,clinicId),eq(inventoryItemsTable.branchId,branchId),inArray(inventoryItemsTable.id,selections.map(line=>line.itemId))));
+  const items=await tx.select().from(inventoryItemsTable).where(and(and(eq(inventoryItemsTable.clinicId,clinicId), activeBranch(inventoryItemsTable.branchId)),eq(inventoryItemsTable.branchId,branchId),inArray(inventoryItemsTable.id,selections.map(line=>line.itemId))));
   if(items.length!==selections.length)throw badRequest('billing_invalid_product');
   const result:AppointmentProductCharge[]=[];
   for(const selection of selections){

@@ -15,9 +15,11 @@ export const PERMISSION_AREAS = ['appointments', 'customers', 'employees', 'serv
 export function can(user: SessionUser | null, permission: string): boolean {
   return Boolean(user && user.role !== 'platform_owner' && (user.permissions.includes(permission) || (permission.endsWith('.read') && user.permissions.includes(permission.replace(/\.read$/, '.manage')))));
 }
-export type Option = { id: number; name: string; nameLang: 'en' | 'ar'; branchId?: number | null; timeZone?: string; openingHours?: Week; isActive?: boolean; definition?: ServiceDefinition | null; requiredEquipment?: string[] };
+export type Option = { id: number; name: string; nameLang: 'en' | 'ar'; branchSchedules?:StaffBranchSchedule[];branchId?: number | null; timeZone?: string; openingHours?: Week; isActive?: boolean; definition?: ServiceDefinition | null; requiredEquipment?: string[] };
+export type StaffBranchSchedule={branchId:number;workingHours:Week;breaks:Week};
 export type Options = { branches: Option[]; services: Option[]; employees: Option[]; timeZones: string[]; currencies: string[]; grantablePermissions: string[]; rolePresets: Partial<Record<StaffRole, string[]>> };
 export type RecordItem = Option & {
+  branchSchedules?:StaffBranchSchedule[];archivedAt?:string|null;
   address?: string | null; mapUrl?: string | null;
   definition?: ServiceDefinition | null;
   phone?: string | null; email?: string | null; notes?: string; sensitiveNotes?: string; historyAvailable?: boolean;

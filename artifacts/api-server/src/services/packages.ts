@@ -1,3 +1,4 @@
+import { activeBranch, activeEmployee } from './branch-scope';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -55,7 +56,7 @@ async function patient(tx: Tx, actor: User, id: number) {
     .from(customersTable)
     .where(
       and(
-        eq(customersTable.clinicId, operatingClinic(actor)),
+        and(eq(customersTable.clinicId, operatingClinic(actor)), activeBranch(customersTable.branchId)),
         eq(customersTable.id, id),
       ),
     );
@@ -98,7 +99,7 @@ async function items(
     .from(servicesTable)
     .where(
       and(
-        eq(servicesTable.clinicId, operatingClinic(actor)),
+        and(eq(servicesTable.clinicId, operatingClinic(actor)), activeBranch(servicesTable.branchId)),
         inArray(
           servicesTable.id,
           input.map((i) => i.serviceId),
@@ -202,7 +203,7 @@ export async function packageCatalog(actor: User) {
         .from(servicesTable)
         .where(
           and(
-            eq(servicesTable.clinicId, operatingClinic(fresh)),
+            and(eq(servicesTable.clinicId, operatingClinic(fresh)), activeBranch(servicesTable.branchId)),
             eq(servicesTable.isActive, true),
           ),
         ),
@@ -372,7 +373,7 @@ export async function customerBilling(actor: User, customerId: number) {
     const staff = await tx
       .select({ id: usersTable.id, name: usersTable.name })
       .from(usersTable)
-      .where(eq(usersTable.clinicId, clinicId));
+      .where(and(eq(usersTable.clinicId, clinicId), activeEmployee()));
     const invoicesWithBalance = invoices.map((inv) => ({
       ...inv,
       financial: finance(
@@ -667,7 +668,7 @@ export async function ensurePackageReservation(
     .innerJoin(
       appointmentsTable,
       and(
-        eq(appointmentsTable.clinicId, packageBookingsTable.clinicId),
+        and(eq(appointmentsTable.clinicId, packageBookingsTable.clinicId), activeBranch(appointmentsTable.branchId)),
         eq(appointmentsTable.id, packageBookingsTable.appointmentId),
       ),
     )
@@ -792,7 +793,7 @@ export async function setPackageStatus(
           .innerJoin(
             appointmentsTable,
             and(
-              eq(appointmentsTable.clinicId, packageBookingsTable.clinicId),
+              and(eq(appointmentsTable.clinicId, packageBookingsTable.clinicId), activeBranch(appointmentsTable.branchId)),
               eq(appointmentsTable.id, packageBookingsTable.appointmentId),
             ),
           )
@@ -820,7 +821,7 @@ export async function setPackageStatus(
             })
             .where(
               and(
-                eq(appointmentsTable.clinicId, p.clinicId),
+                and(eq(appointmentsTable.clinicId, p.clinicId), activeBranch(appointmentsTable.branchId)),
                 eq(appointmentsTable.id, a.id),
               ),
             )
@@ -1010,7 +1011,7 @@ export async function createAppointmentInvoice(
         .from(appointmentsTable)
         .where(
           and(
-            eq(appointmentsTable.clinicId, operatingClinic(fresh)),
+            and(eq(appointmentsTable.clinicId, operatingClinic(fresh)), activeBranch(appointmentsTable.branchId)),
             eq(appointmentsTable.id, id),
           ),
         );
@@ -1030,7 +1031,7 @@ export async function createAppointmentInvoice(
         .from(servicesTable)
         .where(
           and(
-            eq(servicesTable.clinicId, a.clinicId),
+            and(eq(servicesTable.clinicId, a.clinicId), activeBranch(servicesTable.branchId)),
             eq(servicesTable.id, a.serviceId),
           ),
         );
