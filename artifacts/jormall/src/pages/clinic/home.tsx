@@ -109,7 +109,7 @@ function ManagerHome({ user }: { user: SessionUser }) {
                         <span className={cn('mb-1 text-xs font-semibold',isCurrent?'text-primary':'text-muted-foreground')}>{t(s.done?'manager.completedStep':isCurrent?'manager.currentStep':'manager.upcomingStep')}</span>
                         <p className="font-semibold leading-snug">{t(`manager.steps.${s.key}.title`)}</p>
                         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{t(`manager.steps.${s.key}.hint`)}</p>
-                        {s.href && can(user, s.permission) && <Link href={s.href} className={cn('focus-ring mt-3 inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-semibold',isCurrent?'bg-primary text-primary-foreground hover:bg-primary/90':'border border-primary/20 text-primary hover:bg-primary/5')} data-testid={isCurrent?'continue-setup':`open-setup-${s.key}`}>{t(isCurrent?`manager.steps.${s.key}.action`:'manager.openStep')}</Link>}
+                        {s.href && can(user, s.permission) && (s.done || isCurrent) && <Link href={s.href} data-setup-step="true" className={cn('focus-ring mt-3 inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-semibold',isCurrent?'bg-primary text-primary-foreground hover:bg-primary/90':'border border-primary/20 text-primary hover:bg-primary/5')} data-testid={isCurrent?'continue-setup':`open-setup-${s.key}`}>{t(isCurrent?`manager.steps.${s.key}.action`:'manager.openStep')}</Link>}
                       </div>
                       <span className="sr-only">{s.done ? t('common.done') : t('common.notYet')}</span>
                     </li>

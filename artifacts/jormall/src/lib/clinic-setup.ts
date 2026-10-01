@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { api, type MyClinic } from './api';
+import { api, type ClinicProgress, type MyClinic } from './api';
 import { useAuth } from './auth';
 import { useManagerBranch } from './manager-branch';
 import type { Bootstrap } from '@/components/concierge/contract';
@@ -9,6 +9,16 @@ export const clinicSetupKey = (userId?: number) => ['clinic-setup', userId] as c
 export const setupPauseKey = (userId: number) => `jormall:concierge-later:${userId}`;
 export const SETUP_PATH = '/clinic-setup';
 export const isClinicSetupPath = (path: string) => path === SETUP_PATH;
+
+/** The four manager checklist steps can be used before conversational setup is complete. */
+export function canOpenSetupStep(path: string, progress?: ClinicProgress): boolean {
+  if (!progress) return false;
+  if (path === '/business/settings') return true;
+  if (path === '/business/services' || path === '/business/rooms') return progress.hasBranchHours;
+  if (path === '/people/employees') return progress.hasBranchHours && progress.hasCatalog;
+  if (path === '/appointments/new') return progress.hasBranchHours && progress.hasCatalog && progress.hasStaff;
+  return false;
+}
 
 function hasPendingSetup(userId?: number) {
   if (!userId) return false;
@@ -52,5 +62,5 @@ export function useClinicSetup() {
   const progress = clinic.data?.clinic?.progress;
   const configured = !!progress?.hasBranchHours && !!progress.hasCatalog;
   const required = !!enabled && (query.isError || clinic.isError || (session ? session.stage !== 'complete' || !configured : !configured || branch.branches.length === 0 || hasPendingSetup(user?.id)));
-  return { ...query, enabled, required, paused, loading: !!enabled && (query.isPending || clinic.isPending || branch.loading) };
+  return { ...query, enabled, required, paused, progress, loading: !!enabled && (query.isPending || clinic.isPending || branch.loading) };
 }

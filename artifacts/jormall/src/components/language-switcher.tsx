@@ -20,6 +20,7 @@ export function LanguageSwitcher({ className, tone = 'default' }: { className?: 
         <button
           key={l}
           type="button"
+          data-setup-language="true"
           lang={l}
           aria-pressed={lang === l}
           onClick={() => setLang(l)}

@@ -35,8 +35,9 @@ export function siteIdentity(html:string,base:string){
   try{const visit=(value:unknown,depth=0)=>{if(!value||depth>6)return;if(Array.isArray(value)){value.forEach(item=>visit(item,depth+1));return;}if(typeof value!=='object')return;const row=value as Record<string,unknown>;const found=row.logo;if(typeof found==='string')logo=found;else if(found&&typeof found==='object'&&typeof (found as {url?:unknown}).url==='string')logo=(found as {url:string}).url;if(row['@graph'])visit(row['@graph'],depth+1);};visit(JSON.parse(script[1]!));}catch{/* Ignore malformed page metadata. */}
  }
  const safe=(raw:string)=>{try{const url=new URL(raw,base);return url.protocol==='https:'&&!url.username&&!url.password?url.href:null;}catch{return null;}};
- const colors:string[]=[];for(const tag of html.match(/<meta\b[^>]*>/gi)??[]){if(attr(tag,'name')==='theme-color'&&/^#[\da-f]{6}$/i.test(attr(tag,'content')))colors.push(attr(tag,'content'));}
- for(const match of html.matchAll(/--(?:[\w-]*(?:primary|accent|brand)[\w-]*)\s*:\s*(#[\da-f]{6})\b/gi)){if(!colors.includes(match[1]!))colors.push(match[1]!);if(colors.length>=3)break;}
+ // Website theme colors, including Elementor defaults, are not evidence of the
+ // clinic's chosen brand color. The manager chooses a color in the editor.
+ const colors:string[]=[];
  const pages:string[]=[];for(const tag of html.match(/<a\b[^>]*>/gi)??[]){const href=attr(tag,'href');if(!/service|treatment|branch|contact|about|خدم|فروع|اتصل|عنا|%d8/i.test(href))continue;const url=safe(href);if(url&&new URL(url).origin===new URL(base).origin&&!pages.includes(url)){pages.push(url);if(pages.length>=3)break;}}
  return {text,logo:logo?safe(logo):null,colors:colors.slice(0,3),pages};
 }

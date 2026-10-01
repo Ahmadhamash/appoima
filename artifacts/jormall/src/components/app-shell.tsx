@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useManagerBranch } from '@/lib/manager-branch';
 import { useI18n } from '@/lib/i18n';
 import { LanguageSwitcher } from './language-switcher';
-import { SETUP_PATH, useClinicSetup } from '@/lib/clinic-setup';
+import { canOpenSetupStep, SETUP_PATH, useClinicSetup } from '@/lib/clinic-setup';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 
 const AssistantPanel = lazy(() => import('./assistant/assistant-panel'));
@@ -57,10 +57,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       {branches.map(branch=><option key={branch.id} value={branch.id}>{branch.name}</option>)}
     </select>
   </label>;
-  const locked = setup.required && setup.paused && location !== SETUP_PATH;
+  const locked = setup.required && setup.paused && location !== SETUP_PATH && !canOpenSetupStep(location, setup.progress);
   const showSetupChoice = setup.required && setup.data?.session?.stage !== 'complete';
   const blockAction = (event: React.SyntheticEvent) => {
-    if (event.target instanceof Element && event.target.closest('[data-setup-resume="true"],[data-setup-logout="true"]')) return;
+    if (event.target instanceof Element && event.target.closest('[data-setup-resume="true"],[data-setup-logout="true"],[data-setup-language="true"],[data-setup-step="true"]')) return;
     if (!locked || !(event.target instanceof Element) || !event.target.closest('button,a,input,select,textarea,[role="button"],form')) return;
     event.preventDefault(); event.stopPropagation(); setSetupWarning(true);
   };

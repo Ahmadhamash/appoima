@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { I18nProvider } from '@/lib/i18n';
 import { AuthProvider, homePath, useAuth } from '@/lib/auth';
 import {ManagerBranchProvider,useManagerBranch} from '@/lib/manager-branch';
-import { isClinicSetupPath, SETUP_PATH, useClinicSetup } from '@/lib/clinic-setup';
+import { canOpenSetupStep, isClinicSetupPath, SETUP_PATH, useClinicSetup } from '@/lib/clinic-setup';
 import ClinicSetupPage from '@/pages/clinic/clinic-setup';
 import PackagesPage from '@/pages/clinic/packages-page';
 import NotFound from '@/pages/not-found';
@@ -71,7 +71,7 @@ function PrivateRoutes() {
   const isOwner = user.role === 'platform_owner';
   const has = (key: 'appointments' | 'people' | 'business') => user.nav.includes(key);
   if(user.role==='manager'&&!user.mustChangePassword&&(branch.loading||setup.loading))return <FullscreenLoader/>;
-  if (!user.mustChangePassword && setup.required && !isClinicSetupPath(location) && !(setup.paused && location === '/home')) return <Redirect to={setup.paused ? '/home' : SETUP_PATH} />;
+  if (!user.mustChangePassword && setup.required && !isClinicSetupPath(location) && !(setup.paused && location === '/home') && !canOpenSetupStep(location, setup.progress)) return <Redirect to={setup.paused ? '/home' : SETUP_PATH} />;
   if(user.role==='manager'&&!setup.required&&branch.needsEntryChoice&&location!=='/choose-branch')return <Redirect to="/choose-branch"/>;
 
   // `/change-password` is always first and stays mounted while the user record updates, so the

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { crawlPublicBusiness, extractPublicPosts, canonicalPublicUrl, publicLinks, publicProfileText, publicProfileUrl, socialKind } from '../concierge/public-business-crawl';
 import { lookupLinkedClinic } from '../concierge/linked-clinic';
 import { enrichCompany, verifiedPublicDetails } from '../concierge/company-details';
+import { siteIdentity } from '../concierge/public-business-site';
 const site='https://clinic.example/',profile='https://www.instagram.com/clinic_example/',post='https://www.instagram.com/p/facial1/';
 const business=(name='Clinic Example')=>`<script type="application/ld+json">${JSON.stringify({'@type':'MedicalClinic',name,telephone:'+962790000001'})}</script>`;
 const instagram=(nodes:unknown[])=>`<meta property="og:title" content="Clinic Example (@clinic_example) • Instagram photos and videos"><script type="application/json">${JSON.stringify({data:{user:{edge_owner_to_timeline_media:{edges:nodes.map(node=>({node}))}}}})}</script>`;
@@ -9,6 +10,10 @@ const node=(shortcode:string,text:string,username='clinic_example')=>({shortcode
 const readerFor=(pages:Record<string,string>)=>vi.fn(async(url:string)=>{if(!pages[url])throw new Error('unavailable');return {url,bytes:Buffer.from(pages[url]),mime:'text/html'};});
 afterEach(()=>vi.unstubAllEnvs());
 describe('public clinic sites, social profiles and posts',()=>{
+ it('does not treat a website template theme as the clinic brand color',()=>{
+  const html='<meta name="theme-color" content="#6EC1E4"><style>:root{--e-global-color-primary:#6EC1E4}</style><h1>Clinic Example</h1>';
+  expect(siteIdentity(html,site).colors).toEqual([]);
+ });
  it('finds escaped site-builder social links and unwraps published social bio redirects',()=>{
   const facebook='https://www.facebook.com/clinic/';
   const html=`<script>window.settings={social:"https:\\/\\/instagram.com\\/clinic_example\\/"}</script><script type="application/json">${JSON.stringify({socialLinks:[facebook]})}</script>`;

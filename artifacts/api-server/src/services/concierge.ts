@@ -37,7 +37,6 @@ function brandingFacts(state:State):WorkspaceFact[]{
  if(!details||!source)return facts;
  const add=(field:WorkspaceFact['field'],value:string,evidence:string)=>{if(facts.some(fact=>fact.field===field)||state.workspace?.profile[field]===value)return;facts.push({id:createHash('sha256').update(source.url+'|'+field+'|'+value).digest('hex').slice(0,24),field,value,sourceUrl:source.url,evidence,confidence:'extracted'});};
  if(validWorkspaceLogo(details.logoDataUrl))add('logoDataUrl',details.logoDataUrl,'Logo from the confirmed clinic source; owner approval required.');
- const color=details.colors.find(value=>/^#[0-9a-fA-F]{6}$/.test(value));if(color)add('primaryColor',color,'Brand color from the confirmed clinic source; owner approval required.');
  if(state.branding?.name)add(/[\u0600-\u06ff]/u.test(state.branding.name)?'nameAr':'nameEn',state.branding.name,'Name from the confirmed clinic source; owner approval required.');
  return facts;
 }
@@ -183,7 +182,7 @@ export async function findConciergeCompany(actor:User,revision:number,query:stri
       const unique=<T extends {name:string}>(rows:T[])=>rows.filter((row,index)=>rows.findIndex(other=>normalizeServiceName(other.name)===normalizeServiceName(row.name))===index);
       candidate.details={
         logoDataUrl:base.logoDataUrl??enriched.logoDataUrl,
-        colors:[...new Set([...base.colors,...enriched.colors])].slice(0,3),
+        colors:[],
         website:base.website??enriched.website,
         branches:unique([...enriched.branches,...base.branches]).slice(0,50),
         services:unique([...enriched.services,...base.services]).slice(0,50),
@@ -193,10 +192,6 @@ export async function findConciergeCompany(actor:User,revision:number,query:stri
       const facts=candidate.workspaceFacts??[];
       if(brandSource&&candidate.details.logoDataUrl&&candidate.details.logoDataUrl.length<=125000&&!facts.some(f=>f.field==='logoDataUrl')){
         facts.push({id:createHash('sha256').update(brandSource.url+'|logo').digest('hex').slice(0,24),field:'logoDataUrl',value:candidate.details.logoDataUrl,sourceUrl:brandSource.url,evidence:'Logo found on the supplied clinic page; owner confirmation required.',confidence:'extracted'} satisfies WorkspaceFact);
-      }
-      const color=candidate.details.colors[0];
-      if(brandSource&&color&&/^#[0-9a-fA-F]{6}$/.test(color)&&!facts.some(f=>f.field==='primaryColor')){
-        facts.push({id:createHash('sha256').update(brandSource.url+'|primaryColor|'+color).digest('hex').slice(0,24),field:'primaryColor',value:color,sourceUrl:brandSource.url,evidence:`Brand color on the supplied clinic page: ${color}`,confidence:'extracted'} satisfies WorkspaceFact);
       }
       candidate.workspaceFacts=facts;
     }
@@ -215,7 +210,7 @@ export async function findConciergeCompany(actor:User,revision:number,query:stri
     throw err;
   }
 }
-export async function confirmConciergeCompany(actor:User,revision:number,answer:'yes'|'retry'|'skip',colors?:string[],selectedIndex=0,progress?:ProgressSink){
+export async function confirmConciergeCompany(actor:User,revision:number,answer:'yes'|'retry'|'skip',_legacyColors?:string[],selectedIndex=0,progress?:ProgressSink){
   const report=gatheringReporter(progress),onPage=(page:{url:string;completed:number;total:number})=>report({phase:'reading',percent:10+45*page.completed/Math.max(1,page.total),...page});
   report({phase:'collecting',percent:5});
   if(!Number.isInteger(selectedIndex)||selectedIndex<0||selectedIndex>2)throw badRequest('concierge_invalid_data');
@@ -236,7 +231,7 @@ export async function confirmConciergeCompany(actor:User,revision:number,answer:
       enrichment={sources:selected.sources,publicScan:selected.publicScan,linkWarnings:selected.linkWarnings};
       linkedFacts=linked?.found?linked.workspaceFacts:[];
       const base=selected.details??null;
-      details={...enriched,logoDataUrl:base?.logoDataUrl??enriched.logoDataUrl,colors:[...new Set([...(base?.colors??[]),...enriched.colors])].slice(0,3),services:[...new Map([...(base?.services??[]),...enriched.services].map(service=>[normalizeServiceName(service.name),service])).values()].slice(0,50),branches:[...new Map([...(base?.branches??[]),...enriched.branches].map(branch=>[normalizeServiceName(branch.name),branch])).values()].slice(0,50),status:base?.logoDataUrl||base?.services.length||enriched.status!=='unavailable'?'partial':'unavailable'};
+      details={...enriched,logoDataUrl:base?.logoDataUrl??enriched.logoDataUrl,colors:[],services:[...new Map([...(base?.services??[]),...enriched.services].map(service=>[normalizeServiceName(service.name),service])).values()].slice(0,50),branches:[...new Map([...(base?.branches??[]),...enriched.branches].map(branch=>[normalizeServiceName(branch.name),branch])).values()].slice(0,50),status:base?.logoDataUrl||base?.services.length||enriched.status!=='unavailable'?'partial':'unavailable'};
     }
   }
   report({phase:'saving',percent:98});
@@ -248,12 +243,9 @@ export async function confirmConciergeCompany(actor:User,revision:number,answer:
       candidate.details=details;
       if(enrichment)Object.assign(candidate,enrichment);
       if(linkedFacts.length)candidate.workspaceFacts=[...(candidate.workspaceFacts??[]),...linkedFacts];
-      if(candidate.details&&colors?.length){
-        candidate.details.colors=colors;
-        const color=colors.find(value=>/^#[0-9a-fA-F]{6}$/.test(value));
-        const source=candidate.sources.find(item=>candidate.workspaceFacts?.some(fact=>fact.field==='logoDataUrl'&&fact.sourceUrl===item.url));
-        if(color&&source&&!candidate.workspaceFacts?.some(fact=>fact.field==='primaryColor'))candidate.workspaceFacts=[...(candidate.workspaceFacts??[]),{id:createHash('sha256').update(source.url+'|logo-color|'+color).digest('hex').slice(0,24),field:'primaryColor',value:color,sourceUrl:source.url,evidence:'Color sampled from a publicly linked profile image; owner confirmation required.',confidence:'extracted'}];
-      }
+      // Ignore the legacy client color parameter and stale colors in saved search results.
+      // A color can only enter the workspace through an explicit manager selection.
+      if(candidate.details&&!candidate.uploaded){candidate.details.colors=[];candidate.workspaceFacts=candidate.workspaceFacts?.filter(fact=>fact.field!=='primaryColor'&&fact.field!=='accentColor');}
     }
     const next:State={...state,companyCandidate:null,companyCandidates:[]};
     if(answer==='yes'&&candidate){
@@ -263,8 +255,6 @@ export async function confirmConciergeCompany(actor:User,revision:number,answer:
         const source=candidate.sources.find(item=>publicHttpsUrl(item.url)&&!/(^|\.)(instagram|facebook|tiktok|youtube)\.com$/i.test(new URL(item.url).hostname))??candidate.sources.find(item=>publicHttpsUrl(item.url));
         const add=(field:WorkspaceFact['field'],value:string,evidence:string)=>{if(!source||facts.some(fact=>fact.field===field))return;facts.push({id:createHash('sha256').update(source.url+'|'+field+'|'+value).digest('hex').slice(0,24),field,value,sourceUrl:source.url,evidence,confidence:'extracted'});};
         if(validWorkspaceLogo(candidate.details.logoDataUrl))add('logoDataUrl',candidate.details.logoDataUrl,'Logo from the confirmed clinic source; owner approval required.');
-        const primary=candidate.details.colors.find(color=>/^#[0-9a-fA-F]{6}$/.test(color));
-        if(primary)add('primaryColor',primary,'Brand color from the confirmed clinic source; owner approval required.');
         if(candidate.name)add(/[\u0600-\u06ff]/u.test(candidate.name)?'nameAr':'nameEn',candidate.name,'Name from the confirmed clinic source; owner approval required.');
         candidate.workspaceFacts=facts;
         if(state.workspace)next.workspace={...state.workspace,proposals:facts};
