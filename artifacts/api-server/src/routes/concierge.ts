@@ -5,7 +5,7 @@ import express, { Router, type IRouter, type RequestHandler, type ErrorRequestHa
 import type { ProgressSink } from '../concierge/progress';
 import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
-import { conciergeServiceOptions, acceptServiceSuggestion, sonioxAssistKey, finishConciergeStep, backConciergeStep } from '../services/concierge';
+import { conciergeServiceOptions, acceptServiceSuggestion, sonioxAssistKey, finishConciergeStep, backConciergeStep, selectConciergeStep } from '../services/concierge';
 import { requireAuth, requirePasswordChanged } from '../middlewares/auth';
 import { badRequest, forbidden, HttpError } from '../lib/errors';
 import { ConciergeInputError, LIMITS } from '../domain/concierge-core';
@@ -44,6 +44,7 @@ router.use('/concierge',requireAuth,requirePasswordChanged,wrap((req,res,next)=>
 const revision=z.number().int().nonnegative(),language=z.enum(['ar','en']),requestId=z.string().uuid();
 router.post('/concierge/step-confirm',wrap(async(req,res)=>{const b=z.object({revision}).strict().parse(req.body);res.json(await finishConciergeStep(req.user!,b.revision));}));
 router.post('/concierge/step-back',wrap(async(req,res)=>{const b=z.object({revision}).strict().parse(req.body);res.json(await backConciergeStep(req.user!,b.revision));}));
+router.post('/concierge/step-select',wrap(async(req,res)=>{const b=z.object({revision,step:z.enum(['company','branches','services','rooms','staff','review'])}).strict().parse(req.body);res.json(await selectConciergeStep(req.user!,b.revision,b.step));}));
 router.post('/concierge/stt-assist-key',rateLimit({windowMs:60000,limit:3,keyGenerator:req=>String(req.user!.id),standardHeaders:true,legacyHeaders:false,message:{error:'concierge_provider_limit'}}),wrap(async(req,res)=>{res.json(await sonioxAssistKey(req.user!));}));
 router.get('/concierge/bootstrap',wrap(async(req,res)=>{res.json(await bootstrapConcierge(req.user!));}));
 router.post('/concierge/start',wrap(async(req,res)=>{const body=z.object({language,reopen:z.boolean().default(false)}).strict().parse(req.body);res.json(await startConcierge(req.user!,body.language,body.reopen));}));

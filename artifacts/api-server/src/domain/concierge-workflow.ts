@@ -2,12 +2,22 @@ import { draftIssues, type Draft, type Language } from './concierge-core';
 
 export const SETUP_STEPS=['branches','services','rooms','staff'] as const;
 export type SetupStep=typeof SETUP_STEPS[number];
+export const SETUP_JOURNEY=['company',...SETUP_STEPS,'review'] as const;
+export type JourneyStep=typeof SETUP_JOURNEY[number];
+/** Returning to a completed section changes the cursor, never its saved data or confirmations. */
+export function canNavigateSetup(current:JourneyStep,target:JourneyStep,completed:readonly string[],identityConfirmed:boolean,visited:readonly string[]=[]){
+ if(!identityConfirmed)return target==='company';
+ return SETUP_JOURNEY.indexOf(target)<=SETUP_JOURNEY.indexOf(current)||completed.includes(target)||visited.includes(target)||(target==='review'&&SETUP_STEPS.every(step=>completed.includes(step)));
+}
+export function nextSetupStep(step:SetupStep,skipRooms=false):JourneyStep{
+ return step==='services'&&skipRooms?'staff':SETUP_JOURNEY[SETUP_JOURNEY.indexOf(step)+1]!;
+}
 export function previousSetupStep(step:SetupStep|'company'|'review',completed:SetupStep[]):{previous:SetupStep|'company';completed:SetupStep[]}{
  const previous=step==='review'?'staff':SETUP_STEPS[Math.max(0,SETUP_STEPS.indexOf(step as SetupStep))-1]??'company';
  const index=SETUP_STEPS.indexOf(previous as SetupStep);
  return {previous,completed:index<0?[]:completed.filter(item=>SETUP_STEPS.indexOf(item)<index)};
 }
-type State={serviceWizard?:boolean;draft:Draft;completedSteps?:SetupStep[];companyProfile?:unknown};
+type State={serviceWizard?:boolean;draft:Draft;completedSteps?:SetupStep[];activeSetupStep?:JourneyStep;visitedSetupSteps?:JourneyStep[];companyProfile?:unknown};
 const labels={ar:{company:'معلومات المركز',branches:'الفروع ومواعيدها',services:'الخدمات',rooms:'الغرف',staff:'الموظفين',review:'المراجعة'},en:{company:'Center identity',branches:'Branches and hours',services:'Services',rooms:'Rooms',staff:'Staff',review:'Review'}};
 const fields:Record<string,[string,string]>={name:['الاسم','name'],timeZone:['المنطقة الزمنية','time zone'],openingHours:['أيام وساعات الدوام','opening days and hours'],durationMinutes:['مدة الخدمة بالدقائق','duration in minutes'],price:['السعر بالدينار الأردني','price in Jordanian dinars'],category:['نوع الخدمة','service category'],customCategory:['اسم التصنيف الآخر','other category name'],requiresRoom:['هل الخدمة بدها غرفة؟','Does this service need a room?'],branchScope:['الفروع اللي بتقدم الخدمة','branches offering this service'],branchKey:['الفرع','branch'],capacity:['عدد الزبائن اللي بتستوعبهم الغرفة','room capacity'],serviceKeys:['الخدمات المرتبطة','assigned services'],email:['الإيميل','email'],role:['الدور الوظيفي','staff role'],workingHours:['أيام وساعات العمل','working hours'],breaks:['أوقات الاستراحة، أو تأكيد إنه ما في استراحة','break times, or confirmation of no breaks']};
 export function setupWorkflow(state:State,language:Language){
@@ -22,7 +32,7 @@ export function setupWorkflow(state:State,language:Language){
  }
  // Only missing fields are checked here; reference validation needs authorized DB context.
  const required=draftIssues(state.draft).filter(i=>i.code==='required'&&i.field!=='currency');
- const step:SetupStep|'company'|'review'=!state.companyProfile?'company':SETUP_STEPS.find(kind=>!completed.includes(kind)||required.some(i=>state.draft[kind].some(row=>row.key===i.key)))??'review';
+ const step:JourneyStep=!state.companyProfile?'company':state.activeSetupStep??SETUP_STEPS.find(kind=>!completed.includes(kind)||required.some(i=>state.draft[kind].some(row=>row.key===i.key)))??'review';
  let prompt=ar?'شو اسم البيوتي سنتر وبأي مدينة؟':'What is the beauty center name and city?';
  if(step==='review')prompt=ar?'خلصنا التفاصيل، خلّينا نراجعها سوا قبل الحفظ.':'The details are ready. Let’s review them before saving.';
  else if(step!=='company'){
@@ -41,7 +51,8 @@ export function setupWorkflow(state:State,language:Language){
  }
  const active=step==='company'||step==='review'?null:state.draft[step].find(row=>required.some(i=>i.key===row.key))??state.draft[step].at(-1);
  const focus=step==='company'||step==='review'?null:{resource:step==='staff'?'employees':step,key:active?.key??`pending_${step}`,field:required.find(i=>i.key===active?.key)?.field??(step==='branches'?'openingHours':'name')};
- return {step,label:labels[language][step],index:step==='company'?0:step==='review'?5:SETUP_STEPS.indexOf(step)+1,total:6,prompt,completed,focus};
+ const availableSteps=SETUP_JOURNEY.filter(target=>canNavigateSetup(step,target,completed,!!state.companyProfile,state.visitedSetupSteps));
+ return {step,label:labels[language][step],index:step==='company'?0:step==='review'?5:SETUP_STEPS.indexOf(step)+1,total:6,prompt,completed,availableSteps,focus};
 }
 export function canFinishStep(step:SetupStep,draft:Draft,existing:{branches:{key:string}[];services:{key:string;requiresRoom?:boolean}[];rooms:unknown[]}){
  const issues=draftIssues(draft,existing.branches.map(b=>b.key),existing.services.map(s=>s.key));

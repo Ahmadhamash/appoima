@@ -25,6 +25,35 @@ async function conversation(){enable();const s=await start();const r=await post(
 async function save(draft:Draft){const s=await conversation();const r=await put('/draft',{revision:s.revision,draft});expect(r.status).toBe(200);return r.body;}
 async function branchCount(){const rows=await db.select({id:branchesTable.id}).from(branchesTable).where(eq(branchesTable.clinicId,clinic));return rows.length;}
 describe('Manager voice concierge: tenant safety, drafts and explicit atomic apply',()=>{
+ it('reopens completed setup sections, saves edits and resumes the selected section',async()=>{
+  const s=await conversation();
+  const blocked=await post('/step-select',{revision:s.revision,step:'review'});expect(blocked.status).toBe(409);
+  let r=await put('/draft',{revision:s.revision,draft:makeDraft()});
+  for(const expected of ['services','staff','review']){r=await post('/step-confirm',{revision:r.body.revision});expect(r.body.workflow.step).toBe(expected);}
+  const completed=r.body.workflow.completed,draft=r.body.draft;
+  r=await post('/step-select',{revision:r.body.revision,step:'branches'});expect(r.status).toBe(200);
+  expect(r.body.workflow.completed).toEqual(completed);expect(r.body.draft).toEqual(draft);
+  const revision=r.body.revision;
+  r=await put('/draft',{revision,draft:{...draft,branches:draft.branches.map((branch:object)=>({...branch,name:'Edited branch'}))}});expect(r.status).toBe(200);
+  expect((await post('/step-select',{revision,step:'staff'})).status).toBe(409);
+  r=await post('/step-select',{revision:r.body.revision,step:'staff'});expect(r.status).toBe(200);
+  const resumed=(await get()).body.session;expect(resumed.workflow.step).toBe('staff');expect(resumed.draft.branches[0].name).toBe('Edited branch');
+  r=await post('/step-select',{revision:r.body.revision,step:'review'});expect(r.status).toBe(200);
+  r=await post('/step-back',{revision:r.body.revision});expect(r.body.workflow.step).toBe('staff');expect(r.body.workflow.completed).toEqual(completed);
+  expect(await branchCount()).toBe(0);expect(fetch).not.toHaveBeenCalled();
+ });
+ it('clears rejected search identity and pending import proposals while preserving entered data',async()=>{
+  const s=await conversation(),draft=makeDraft();let r=await put('/draft',{revision:s.revision,draft});
+  const [row]=await db.select().from(managerOnboardingTable).where(eq(managerOnboardingTable.userId,userId));
+  const details={logoDataUrl:null,colors:[],website:null,branches:[],services:[],status:'unavailable'};
+  await db.update(managerOnboardingTable).set({state:{...row!.state,companyCandidate:{name:'Wrong clinic',summary:'',found:true,sources:[],details},companyProfile:null,branding:{name:'Wrong clinic',details},importReviewPending:true,importApproved:false,workspace:{...(row!.state.workspace as object),proposals:[{id:'old',field:'nameEn',value:'Wrong clinic'}]}}}).where(eq(managerOnboardingTable.userId,userId));
+  r=await post('/company-confirm',{revision:r.body.revision,answer:'retry'});expect(r.status).toBe(200);
+  expect(r.body.companyCandidate).toBeNull();expect(r.body.companyProfile).toBeNull();expect(r.body.companyCandidates).toEqual([]);
+  expect(r.body.importReviewPending).toBe(false);expect(r.body.branding).toBeNull();expect(r.body.workspace.proposals).toEqual([]);
+  expect(r.body.workflow.step).toBe('company');expect(r.body.draft.branches[0].name).toBe(draft.branches[0]!.name);
+  expect((await post('/step-select',{revision:r.body.revision,step:'services'})).status).toBe(409);
+  expect(fetch).not.toHaveBeenCalled();
+ });
  beforeEach(async()=>{
   if(process.env.TEST_DATABASE_DISPOSABLE!=='1')throw new Error('A migrated DISPOSABLE database and TEST_DATABASE_DISPOSABLE=1 are mandatory.');
   vi.stubEnv('CONCIERGE_ENABLED','true');vi.stubEnv('OPENAI_API_KEY','');vi.stubEnv('JORMALL_OPENAI_API_KEY','');vi.stubEnv('ELEVENLABS_API_KEY','');

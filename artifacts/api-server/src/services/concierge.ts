@@ -1,5 +1,5 @@
 import { gatheringReporter, type ProgressSink } from '../concierge/progress';
-import { previousSetupStep } from '../domain/concierge-workflow';
+import { previousSetupStep, canNavigateSetup, nextSetupStep, type JourneyStep } from '../domain/concierge-workflow';
 import { uploadedIdentity } from '../domain/concierge-file-identity';
 import { enrichBlockedSocial, indexedProfilesFor } from '../concierge/indexed-social';
 import { socialPlatform, socialKind } from '../concierge/public-business-crawl';
@@ -27,7 +27,7 @@ import { createSonioxAssistKey } from '../concierge/providers';
 import { importPublicDetails } from '../domain/concierge-public-import';
 import { setupWorkflow, canFinishStep, roomsForConfirmation, type SetupStep } from '../domain/concierge-workflow';
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type State = { excludedServices?:string[]; workspace?:WorkspaceDraft; serviceWizard?:boolean; entryMode?:'manual'|'voice'|'text'; serviceSources?:Record<string,ServiceSource>; serviceSuggestions?:ServiceSuggestion[]; sourceImport?:boolean; importReviewPending?:boolean; importApproved?:boolean; branding?:{name:string;details:BusinessDetails}; companySearchQuery?:string; companyCandidates?:CompanyCandidate[]; completedSteps?:SetupStep[]; accessFingerprint?:string; draft:Draft; messages:ConversationMessage[]; uploads:UploadedDocument[]; branchBasis:Record<string,string>; lastTurnId?:string; lastTurnHash?:string; ui?:'none'|'upload'|'review'; navigation?:string; applied?:Record<string,number[]>; companyCandidate?:CompanyCandidate|null; companyProfile?:CompanyCandidate|null; companySkipped?:boolean };
+type State = { excludedServices?:string[]; workspace?:WorkspaceDraft; serviceWizard?:boolean; entryMode?:'manual'|'voice'|'text'; serviceSources?:Record<string,ServiceSource>; serviceSuggestions?:ServiceSuggestion[]; sourceImport?:boolean; importReviewPending?:boolean; importApproved?:boolean; branding?:{name:string;details:BusinessDetails}; companySearchQuery?:string; companyCandidates?:CompanyCandidate[]; completedSteps?:SetupStep[]; activeSetupStep?:JourneyStep; visitedSetupSteps?:JourneyStep[]; accessFingerprint?:string; draft:Draft; messages:ConversationMessage[]; uploads:UploadedDocument[]; branchBasis:Record<string,string>; lastTurnId?:string; lastTurnHash?:string; ui?:'none'|'upload'|'review'; navigation?:string; applied?:Record<string,number[]>; companyCandidate?:CompanyCandidate|null; companyProfile?:CompanyCandidate|null; companySkipped?:boolean };
 const initialState = ():State=>({draft:emptyDraft(),messages:[],uploads:[],branchBasis:{},ui:'none'});
 function stateOf(row:ManagerOnboarding):State { return {...initialState(),...row.state,draft:parseDraft(row.state.draft??emptyDraft())} as State; }
 function brandingFacts(state:State):WorkspaceFact[]{
@@ -266,7 +266,12 @@ export async function confirmConciergeCompany(actor:User,revision:number,answer:
       const [clinic]=await tx.select({name:clinicsTable.name}).from(clinicsTable).where(eq(clinicsTable.id,fresh.clinicId!));
       next.companyProfile={name:clinic!.name,summary:'',industry:null,location:null,website:null,sources:[],found:false};
       next.companySkipped=true;
-    }else if(!state.serviceWizard){next.companyProfile=null;}
+    }else if(!state.serviceWizard){
+      next.companyProfile=null;next.companySkipped=false;next.companySearchQuery='';
+      next.importReviewPending=false;next.importApproved=false;delete next.branding;
+      if(next.workspace)next.workspace={...next.workspace,proposals:[]};
+    }
+    if(!state.serviceWizard)next.activeSetupStep=answer==='retry'?'company':'branches';
     await audit(tx,fresh,'company_confirmed',{answer});
     return change(tx,row,{state:next as unknown as Record<string,unknown>});
   });return publicSession(row);
@@ -334,18 +339,23 @@ function reserveBudget(row:ManagerOnboarding,type:'turns'|'uploads'|'speechChars
   const maxima={turns:LIMITS.dailyTurns,uploads:LIMITS.dailyUploads,speechChars:LIMITS.dailySpeechChars,voiceSessions:LIMITS.dailyVoiceSessions};
   budget[type]+=amount;if(conciergeConfig().dailyLimitsEnabled&&budget[type]>maxima[type])throw new HttpError(429,'concierge_daily_limit');return budget;
 }
-export async function backConciergeStep(actor:User,revision:number){
+export async function selectConciergeStep(actor:User,revision:number,target?:JourneyStep){
  const result=await withSession(actor,async(tx,row,fresh)=>{
   noBusy(row);checkRevision(row,revision);if(row.stage!=='conversation')throw conflict('concierge_stale');
   const state=stateOf(row);if(state.serviceWizard)return row;
-  const flow=setupWorkflow(state,row.language as Language),back=previousSetupStep(flow.step,state.completedSteps??[]);
-  if(flow.step==='company')return row;
-  const next:State={...state,completedSteps:back.completed,ui:'none'};
-  if(back.previous==='company'){next.companyCandidate=state.companyProfile??null;next.companyCandidates=next.companyCandidate?[next.companyCandidate]:[];next.companyProfile=null;}
-  await audit(tx,fresh,'step_back',{from:flow.step,to:back.previous});
+  const flow=setupWorkflow(state,row.language as Language),to=target??previousSetupStep(flow.step,[]).previous;
+  if(!canNavigateSetup(flow.step,to,state.completedSteps??[],!!state.companyProfile,state.visitedSetupSteps))throw conflict('concierge_step_incomplete');
+  if(to===flow.step)return row;
+  const next:State={...state,activeSetupStep:to,visitedSetupSteps:[...new Set([...(state.visitedSetupSteps??[]),flow.step,to])],ui:'none'};
+  if(to==='company'){
+   next.companyCandidate=state.companyProfile??null;next.companyCandidates=next.companyCandidate?[next.companyCandidate]:[];next.companyProfile=null;
+   next.importReviewPending=false;next.importApproved=false;
+  }
+  await audit(tx,fresh,target?'step_selected':'step_back',{from:flow.step,to});
   return change(tx,row,{state:next as unknown as Record<string,unknown>});
  });return publicSession(result);
 }
+export const backConciergeStep=(actor:User,revision:number)=>selectConciergeStep(actor,revision);
 export async function finishConciergeStep(actor:User,revision:number){
  const context=await businessContext(actor);
  const result=await withSession(actor,async(tx,row,fresh)=>{
@@ -355,9 +365,10 @@ export async function finishConciergeStep(actor:User,revision:number){
   const draft=flow.step==='rooms'?roomsForConfirmation(state.draft,context.services):state.draft;
   if(!canFinishStep(flow.step,draft,context))throw conflict('concierge_step_incomplete');
   const completedSteps=Array.from(new Set([...(state.completedSteps??[]),flow.step]));
-  if(flow.step==='services'&&draft.rooms.length===0&&context.rooms.length===0&&canFinishStep('rooms',draft,context))completedSteps.push('rooms');
+  const skipRooms=flow.step==='services'&&draft.rooms.length===0&&context.rooms.length===0&&canFinishStep('rooms',draft,context);
+  if(skipRooms&&!completedSteps.includes('rooms'))completedSteps.push('rooms');
   await audit(tx,fresh,'step_confirmed',{step:flow.step});
-  return change(tx,row,{state:{...state,draft,completedSteps} as unknown as Record<string,unknown>});
+  return change(tx,row,{state:{...state,draft,completedSteps,...(state.activeSetupStep?{activeSetupStep:nextSetupStep(flow.step,skipRooms)}:{})} as unknown as Record<string,unknown>});
  });return publicSession(result);
 }
 export async function turnConcierge(actor:User,input:{revision:number;requestId:string;text:string},file?:ModelFile,stream?:{onService:(service:ServiceDraft)=>void;signal?:AbortSignal}) {
