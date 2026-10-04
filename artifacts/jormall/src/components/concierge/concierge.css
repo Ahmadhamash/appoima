@@ -461,3 +461,20 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 @media(max-width:1000px){.jc-service-table-fields,.jc-service-table-fields[data-has-branch=true]{grid-template-columns:repeat(4,minmax(0,1fr))}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-name-field{grid-column:span 2}.jc-service-tree .jc-service-child-count{display:none}}
 @media(max-width:640px){.jc-service-tools{flex-direction:column;gap:6px}.jc-service-tools>.jc-room-toolbar{width:100%}.jc-service-tools>.jc-service-bulk:not([open]){width:100%;max-width:none}.jc-service-main-field{display:grid;gap:2px}}
 @media(max-width:640px){.jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-stage{padding-inline:4px}.jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-caption{font-size:18px}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-batch-rows{padding:3px 4px 6px;gap:6px}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-group-heading{padding:6px;gap:6px;flex-wrap:wrap}.jc-service-main-field{flex-basis:calc(100% - 72px)}.jc-dialog .jc-service-tree .jc-service-group-heading>.jc-button{margin-inline-start:auto}.jc-service-tree-children{margin-inline-start:10px;padding-inline-start:10px}.jc-service-tree .jc-service-batch-row::before{inset-inline-start:-10px;width:10px}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-batch-row{grid-template-columns:1fr auto;padding:8px;gap:4px}.jc-service-tree .jc-service-index{grid-column:1;grid-row:1;justify-self:start}.jc-service-tree .jc-service-state{grid-column:2;grid-row:1;align-self:center}.jc-service-tree .jc-service-batch-title>.jc-link{grid-column:2;grid-row:3;align-self:end}.jc-service-table-fields,.jc-service-table-fields[data-has-branch=true]{grid-column:1/-1;grid-row:2;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.jc-dialog.jc-setup-mode .jc-service-tree .jc-service-name-field{grid-column:1/-1}.jc-service-tree .jc-service-main-index{width:26px;height:26px}}
+
+/* Review all records in tables. Only the tables scroll, never field-by-field pages. */
+.jc-dialog.jc-setup-mode:has(.jc-review) .jc-stage{overflow-y:auto;justify-content:flex-start;padding-inline:16px}
+.jc-dialog.jc-setup-mode:has(.jc-review) .jc-controls{width:100%;max-width:none!important;min-height:0;overflow:visible}
+.jc-dialog.jc-setup-mode .jc-review{display:block;width:100%;max-width:none;max-height:none;overflow:visible;padding:14px}
+.jc-review>div:first-child{display:none}
+.jc-review-table-scroll{width:100%;overflow-x:auto;border:1px solid #91addc45;border-radius:12px;margin-block:8px 18px}
+.jc-review-table{width:100%;border-collapse:collapse;text-align:start;font-size:13px}
+.jc-review-table th{padding:10px 12px;text-align:start;font-weight:700;background:#304666;white-space:normal;min-width:120px}
+.jc-review-table td{padding:10px;vertical-align:top;border-top:1px solid #91addc30;min-width:180px;max-width:420px;background:#1c2b43}
+.jc-review-table .jc-review-number,.jc-review-table th:first-child{min-width:40px;width:40px;text-align:center}
+.jc-review-table .jc-field{min-width:180px}.jc-review-table .jc-field .jc-label{display:none}
+.jc-review-table .jc-field input,.jc-review-table .jc-field select{min-height:36px;padding:7px 9px;font-size:13px}
+.jc-review-table .jc-week,.jc-review-table .jc-selection{margin:0;min-width:240px}
+.jc-review-table .staff-branch-schedules{min-width:360px}
+.jc-dialog.jc-setup-mode .jc-review .jc-review-actions{position:sticky;bottom:0;margin-top:12px;padding:10px;border-radius:12px;z-index:2}
+@media(max-width:640px){.jc-dialog.jc-setup-mode:has(.jc-review) .jc-stage{padding-inline:6px}.jc-dialog.jc-setup-mode .jc-review{padding:8px}.jc-review-table td{padding:8px}}

@@ -1,13 +1,13 @@
 import { createCategoryInput, categoryNames } from '../category-input';
 import { createStaffBranchSchedules } from '../staff-branch-schedules';
-import { reviewRecordPages, revealReviewField } from './review-pages';
+
 import { createDefinition, normalizePhone } from '@workspace/service-definition';
 import { createPhoneInput, phoneValidationMessage } from '../phone-input';
 import { DAYS,KINDS,type Draft,type Kind,type Language,type Review,type Week,type Provision } from './contract';
 import { el,button } from './dom';
 import { text } from './copy';
 import { createBranchHoursEditor } from '../weekly-schedule';
-import { setupPager } from './paging';
+
 type Row=Draft[Kind][number];
 const emptyWeek=()=>Object.fromEntries(DAYS.map(day=>[day,[]])) as unknown as Week;
 export function buildReview(data:Review,language:Language,callbacks:{save:(draft:Draft)=>Promise<Review|void>;apply:(staff:Provision[])=>Promise<void>;back:()=>void;archiveBranch?:(key:string,draft:Draft)=>Promise<void>;error:(message:string)=>void}):HTMLElement{
@@ -46,7 +46,7 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
  }
  function schedule(row:Row,key:'openingHours'){
   const branch=row as Draft['branches'][number];
-  return createBranchHoursEditor(branch.openingHours??emptyWeek(),{id:`draft-${row.key}`,language,label:tr(key),pagedDays:true},next=>{branch.openingHours=next;markDirty();}).node;
+  return createBranchHoursEditor(branch.openingHours??emptyWeek(),{id:`draft-${row.key}`,language,label:tr(key),pagedDays:false},next=>{branch.openingHours=next;markDirty();}).node;
  }
  const branchOptions=[...data.options.branches.map(b=>({value:b.key,label:b.name})),...draft.branches.filter(b=>!data.options.branches.some(e=>e.key===b.key)).map(b=>({value:b.key,label:b.name??tr('newRecord')}))];
  const serviceOptions=[...data.options.services.map(s=>({value:s.key,label:s.name})),...draft.services.map(s=>({value:s.key,label:s.name??tr('newRecord')}))];
@@ -54,7 +54,8 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
   for(const opt of choices){const label=el('label','jc-check'),check=el('input');check.type='checkbox';check.value=opt.value;const selected=record.serviceKeys as string[]|null;check.checked=opt.value?!!selected?.includes(opt.value):selected?.length===0;inputs.push(check);label.append(check,el('span','',opt.label));check.onchange=()=>{if(opt.value===''){if(check.checked)for(const c of inputs)if(c!==check)c.checked=false;}else if(check.checked)inputs[0]!.checked=false;const v=inputs.filter(c=>c.value&&c.checked).map(c=>c.value);record.serviceKeys=v.length?v:inputs[0]!.checked?[]:null;markDirty();};set.append(label);}if(!serviceOptions.length)set.append(el('p','jc-muted',tr('noCompatible')));return set;
  }
  for(const kind of KINDS){if(!draft[kind].length)continue;root.append(el('h3','',tr(kind)));
-  for(const row of draft[kind]){const card=el('details','jc-record');card.open=!!data.issues.find(i=>i.key===row.key)||kind==='staff';card.dataset.testid=`draft-${row.key}`;const summary=el('summary','',row.name??tr('newRecord'));summary.lang=row.nameLang??language;card.append(summary);
+  const table=el('table','jc-review-table'),head=el('thead'),body=el('tbody');table.append(head,body);const scroll=el('div','jc-review-table-scroll');scroll.append(table);root.append(scroll);
+  for(const [rowIndex,row] of draft[kind].entries()){const card=el('details','jc-record');card.dataset.testid=`draft-${row.key}`;const summary=el('summary','',row.name??tr('newRecord'));summary.lang=row.nameLang??language;card.append(summary);
    card.append(el('p','jc-record-meta','existingId' in row&&row.existingId!==null?tr('existing'):tr('newRecord')));
    const grid=el('div','jc-grid');grid.append(field(row,'name'));
    if(kind==='branches'){(row as Draft['branches'][number]).timeZone='Asia/Amman';grid.append(field(row,'address'),field(row,'mapUrl','url'));card.append(grid,schedule(row,'openingHours'));}
@@ -66,27 +67,39 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
     if(kind==='staff'){
      grid.append(field(row,'email','email'),field(row,'phone','tel'),field(row,'jobTitle'),select(row,'role',['secretary','doctor','service_provider','other_staff'].map(value=>({value,label:tr(value)}))));const person=row as Draft['staff'][number],branches=[...data.options.branches,...draft.branches.filter(b=>!data.options.branches.some(e=>e.key===b.key))].map(b=>({key:b.key,name:b.name??tr('newRecord'),timeZone:b.timeZone??'Asia/Amman',openingHours:b.openingHours}));
      const first=branches.find(b=>b.key===person.branchKey)??branches[0];person.branchSchedules??=first?[{branchKey:first.key,workingHours:person.workingHours??first.openingHours??emptyWeek(),breaks:person.breaks??emptyWeek()}]:[];
-     card.append(grid,createStaffBranchSchedules(branches,person.branchSchedules,language,`draft-${person.key}-branches`,next=>{person.branchSchedules=next;person.branchKey=next.length===1?next[0]!.branchKey:null;person.workingHours=next[0]?.workingHours??null;person.breaks=next[0]?.breaks??emptyWeek();markDirty();},true).node,services(row));
+     card.append(grid,createStaffBranchSchedules(branches,person.branchSchedules,language,`draft-${person.key}-branches`,next=>{person.branchSchedules=next;person.branchKey=next.length===1?next[0]!.branchKey:null;person.workingHours=next[0]?.workingHours??null;person.breaks=next[0]?.breaks??emptyWeek();markDirty();},false).node,services(row));
      const secure=el('fieldset','jc-selection');secure.append(el('legend','',tr('accountReview')),el('p','jc-muted',language==='ar'?'كلمة مرور أولية، 10 أحرف على الأقل.':'Initial password, at least 10 characters.'));const password=el('input');password.type='password';password.minLength=10;password.maxLength=200;password.autocomplete='new-password';password.dir='ltr';password.dataset.testid=`password-${row.key}`;secure.append(labelField(row,'password',password));
      const pset=el('fieldset','jc-selection');pset.append(el('legend','',tr('permissions')));const permissions=el('div','jc-permissions'),checks=new Map<string,HTMLInputElement>();const defaults=data.staffAccess.find(s=>s.key===row.key)?.permissions??[];
      for(const permission of data.grantablePermissions){const [area,operation]=permission.split('.'),label=el('label','jc-check'),check=el('input');check.type='checkbox';check.checked=defaults.includes(permission);check.dataset.testid=`access-${row.key}-${permission}`;label.append(check,el('span','',`${tr(area!)} · ${tr(operation==='manage'?'managePermission':'readPermission')}`));checks.set(permission,check);permissions.append(label);}pset.append(permissions);secure.append(pset);card.append(secure);credentials.set(row.key,{password,checks});
     }
    }
-   card.append(button(kind==='branches'?(language==='ar'?'حذف الفرع':'Delete branch'):tr('remove'),()=>{if(!window.confirm(kind==='branches'?(language==='ar'?'حذف الفرع ونقل كل بياناته إلى الأرشيف؟':'Delete branch and move all its data to the archive?'):tr('deleteConfirm')))return;if(kind==='branches'&&callbacks.archiveBranch){void callbacks.archiveBranch(row.key,draft);return;}const list=draft[kind] as Row[],i=list.findIndex(r=>r.key===row.key);if(i>=0)list.splice(i,1);credentials.delete(row.key);card.remove();markDirty();root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Number(root.dataset.setupPage)||0}));},'jc-link jc-remove',`remove-${row.key}`));reviewRecordPages(card,language,row.key);root.append(card);
+   // Keep all fields mounted in one table, with no record or field pagination.
+   const tableRow=el('tr');tableRow.dataset.testid=`draft-${row.key}`;
+   const number=el('td','jc-review-number',String(rowIndex+1));tableRow.append(number);
+   const cells:HTMLElement[]=[];
+   for(const node of Array.from(card.children) as HTMLElement[]){
+    if(node.tagName==='SUMMARY'||node.classList.contains('jc-record-meta'))continue;
+    if(node.classList.contains('jc-grid'))cells.push(...Array.from(node.children) as HTMLElement[]);else cells.push(node);
+   }
+   // Put the name first; following columns retain all settings and access controls.
+   const nameIndex=cells.findIndex(node=>!!node.querySelector(`[data-testid="draft-${row.key}-name"]`));
+   if(nameIndex>0)cells.unshift(cells.splice(nameIndex,1)[0]!);
+   if(rowIndex===0){const headings=el('tr');headings.append(el('th','', '#'));for(const node of cells){const heading=el('th','',node.querySelector('label,legend,.jc-label')?.textContent??(node.classList.contains('jc-check')?(language==='ar'?'متابعة':'Follow-up'):(language==='ar'?'الإعدادات':'Settings')));heading.scope='col';headings.append(heading);}head.append(headings);}
+   for(const node of cells){const cell=el('td');cell.append(node);tableRow.append(cell);}body.append(tableRow);
   }
  }
- const cards=Array.from(root.querySelectorAll<HTMLElement>('.jc-record'));const pager=setupPager(root,cards,language,'concierge-review-pages');if(pager){root.classList.add('jc-paged-review');root.insertBefore(pager,cards[0]!);}
+
  const confirmation=el('label','jc-check');confirm=el('input');confirm.type='checkbox';confirm.dataset.testid='concierge-confirm';confirmation.append(confirm,el('span','',language==='ar'?'راجعت البيانات وأوافق على حفظ الإعداد.':'I reviewed the details and approve this setup.'));root.append(confirmation);
  const scheduleInvalid=()=>{
   const input=root.querySelector<HTMLInputElement>('.weekly-schedule input:invalid');if(!input)return false;
-  const card=input.closest<HTMLDetailsElement>('.jc-record');if(card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));card.open=true;revealReviewField(card,input);}
+  const card=input.closest<HTMLElement>('tr');if(card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));input.scrollIntoView({block:'center',inline:'center'});}
   input.scrollIntoView({block:'center'});input.reportValidity();return true;
  };
  const actions=el('div','jc-review-actions');
  save=button(tr('saveDraft'),()=>{if(busy||scheduleInvalid())return;busy=true;disable(true);void callbacks.save(draft).catch(()=>{}).finally(()=>{busy=false;disable(false);});},'jc-button','concierge-save-draft');
  apply=button(language==='ar'?'اعتمد الإعداد':'Confirm setup',()=>{if(busy||!confirm.checked||scheduleInvalid())return;const provision:Provision[]=[];
-  const badPhone=draft.staff.find(person=>person.phone&&!normalizePhone(person.phone));if(badPhone){callbacks.error(phoneValidationMessage(language));const input=root.querySelector<HTMLInputElement>(`[data-testid="draft-${badPhone.key}-phone"]`),card=input?.closest<HTMLDetailsElement>('.jc-record');if(input&&card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));card.open=true;revealReviewField(card,input);input.reportValidity();}return;}
-  for(const person of draft.staff){if(savedRoles.get(person.key)!==person.role){callbacks.error(tr('missing'));return;}const c=credentials.get(person.key)!;if(c.password.value.length<10){callbacks.error(tr('passwordRequired'));const card=c.password.closest<HTMLDetailsElement>('.jc-record');if(card){const index=Array.from(root.querySelectorAll('.jc-record')).indexOf(card);root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:index}));card.open=true;revealReviewField(card,c.password);}c.password.focus();return;}provision.push({key:person.key,initialPassword:c.password.value,permissions:[...c.checks].filter(([,input])=>input.checked).map(([p])=>p)});}
+  const badPhone=draft.staff.find(person=>person.phone&&!normalizePhone(person.phone));if(badPhone){callbacks.error(phoneValidationMessage(language));const input=root.querySelector<HTMLInputElement>(`[data-testid="draft-${badPhone.key}-phone"]`),card=input?.closest<HTMLElement>('tr');if(input&&card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));input.scrollIntoView({block:'center',inline:'center'});input.reportValidity();}return;}
+  for(const person of draft.staff){if(savedRoles.get(person.key)!==person.role){callbacks.error(tr('missing'));return;}const c=credentials.get(person.key)!;if(c.password.value.length<10){callbacks.error(tr('passwordRequired'));const card=c.password.closest<HTMLElement>('tr');if(card){const index=Array.from(root.querySelectorAll('.jc-record')).indexOf(card);root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:index}));c.password.scrollIntoView({block:'center',inline:'center'});}c.password.focus();return;}provision.push({key:person.key,initialPassword:c.password.value,permissions:[...c.checks].filter(([,input])=>input.checked).map(([p])=>p)});}
   busy=true;disable(true);void (async()=>{if(dirty){const fresh=await callbacks.save(draft);if(!fresh||fresh.issues.length)return;}await callbacks.apply(provision);})().catch(()=>{}).finally(()=>{for(const p of provision)p.initialPassword='';busy=false;disable(false);});
  },'jc-button jc-primary','concierge-apply');
  function disable(value:boolean){for(const c of root.querySelectorAll<HTMLInputElement|HTMLButtonElement|HTMLSelectElement>('input,button,select'))c.disabled=value;if(!value){root.querySelectorAll('.weekly-schedule').forEach(node=>node.dispatchEvent(new CustomEvent('jormall:schedule-refresh')));save.disabled=!dirty;apply.disabled=!confirm.checked||(!dirty&&data.issues.length>0)||total===0;confirm.disabled=false;root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Number(root.dataset.setupPage)||0}));}}

@@ -36,6 +36,7 @@ export function WorkspaceHome(){
    {permission:'inventory.read',action:{label:w('المخزون','Inventory'),hint:w('المواد والمستلزمات','Supplies and materials'),glyph:'▤',path:'/business/inventory'}},
   ];
   if(user.role==='manager'&&['inventory','services','employees','rooms','settings'].every(area=>can(user,`${area}.read`)))available.push({permission:'inventory.read',action:{label:w('المعدات والماتيريال','Equipment & Materials'),hint:w('ربط الموارد وحساب تكلفة الجلسة','Connect resources and calculate session cost'),glyph:'⚙',path:'/business/equipment-materials'}});
+  available.push({permission:'services.read',action:{label:w('الباقات والعروض','Packages & Offers'),hint:w('الباقات وصلاحية الجلسات والعروض الترويجية','Packages, session validity and promotional offers'),glyph:'▣',path:'/business/packages-offers'}});
   const actions=available.filter(a=>can(user,a.permission)).map(a=>a.action);
   target.replaceChildren(workspaceSurface(q.data.profile,language,q.data.sections,{onNavigate:navigate,canBook:book,canReadServices:hasServices,compact:!hasServices,actions}));return()=>target.replaceChildren();},[q.data,language,navigate,hasServices,book,user]);
  if(!user?.clinicId)return null;

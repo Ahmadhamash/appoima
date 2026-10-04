@@ -1,4 +1,4 @@
-import { activeBranch } from './branch-scope';
+import { activeRoom, activeBranch } from './branch-scope';
 import {batchExpirySQL} from './inventory-batches';
 import {and,asc,eq,inArray,isNull,sql} from 'drizzle-orm';
 import {branchesTable,roomsTable,inventoryProductsTable,inventoryItemsTable,inventoryMovementsTable,inventorySettingsTable,inventoryTransfersTable,inventoryPurchaseOrdersTable,inventoryPurchaseOrderLinesTable,serviceMaterialCostsTable,type User} from '@workspace/db';
@@ -27,7 +27,7 @@ export async function locationBalance(tx:Tx,clinicId:number,itemId:number,roomId
 export async function validateInventoryLocation(tx:Tx,clinicId:number,branchId:number,roomId:number|null){
  if(roomId===null)return;
  if((await inventorySettingsInTx(tx,clinicId)).movementMode!=='room')throw badRequest('inventory_room_tracking_disabled');
- const [room]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)),eq(roomsTable.branchId,branchId),eq(roomsTable.id,roomId)));
+ const [room]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeRoom()),eq(roomsTable.branchId,branchId),eq(roomsTable.id,roomId)));
  if(!room)throw badRequest('inventory_room_branch_mismatch');
 }
 export async function inventoryBranches(tx:Tx,clinicId:number,availability:'all'|'selected',branchIds:number[]){
@@ -44,7 +44,7 @@ export async function productBreakdowns(tx:Tx,clinicId:number,productIds:number[
  const locations=ids.length?await tx.select({itemId:inventoryMovementsTable.itemId,roomId:inventoryMovementsTable.roomId,quantity:sql<string>`sum(${inventoryMovementsTable.quantity})::text`}).from(inventoryMovementsTable)
   .where(and(and(eq(inventoryMovementsTable.clinicId,clinicId), activeBranch(inventoryMovementsTable.branchId)),inArray(inventoryMovementsTable.itemId,ids))).groupBy(inventoryMovementsTable.itemId,inventoryMovementsTable.roomId):[];
  const branchIds=[...new Set(rows.map(row=>row.branch.id))];
- const rooms=roomTracking&&branchIds.length?await tx.select({id:roomsTable.id,name:roomsTable.name,nameLang:roomsTable.nameLang,branchId:roomsTable.branchId}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)),inArray(roomsTable.branchId,branchIds))).orderBy(asc(roomsTable.name)):[];
+ const rooms=roomTracking&&branchIds.length?await tx.select({id:roomsTable.id,name:roomsTable.name,nameLang:roomsTable.nameLang,branchId:roomsTable.branchId}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeRoom()),inArray(roomsTable.branchId,branchIds))).orderBy(asc(roomsTable.name)):[];
  const result=new Map<number,Awaited<ReturnType<typeof branchBreakdown>>[]>();
  for(const {item,branch} of rows){const list=result.get(item.productId)??[];list.push(branchBreakdown(item.id,branch,locations.filter(location=>location.itemId===item.id),rooms.filter(room=>room.branchId===branch.id)));result.set(item.productId,list);}
  return result;

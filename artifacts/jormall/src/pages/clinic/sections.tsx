@@ -64,10 +64,11 @@ export function BusinessPage() {
       <PageHeader title={t('sections.business.title')} />
       <ChoiceGrid
         choices={[
-          ...(user?.role==='manager'&&['inventory','services','employees','rooms','settings'].every(area=>can(user.permissions,`${area}.read`))?[{icon:Boxes,title:lang==='ar'?'المعدات والماتيريال':'Equipment & Materials',hint:lang==='ar'?'ربط الموارد بالخدمات وحساب تكلفة الجلسة':'Connect resources to services and calculate session cost',testId:'choice-equipment-materials',href:'/business/equipment-materials'}]:[]),
           { icon: Scissors, title: t('sections.business.services'), hint: t('sections.business.servicesHint'), permission: 'services.read', testId: 'choice-services', href: '/business/services' },
           { icon: DoorOpen, title: t('sections.business.rooms'), hint: t('sections.business.roomsHint'), permission: 'rooms.read', testId: 'choice-rooms', href: '/business/rooms' },
           { icon: Boxes, title: t('sections.business.inventory'), hint: t('sections.business.inventoryHint'), permission: 'inventory.read', testId: 'choice-inventory', href: '/business/inventory' },
+          ...(user?.role==='manager'&&['inventory','services','employees','rooms','settings'].every(area=>can(user.permissions,`${area}.read`))?[{icon:Boxes,title:lang==='ar'?'المعدات والماتيريال':'Equipment & Materials',hint:lang==='ar'?'ربط الموارد بالخدمات وحساب تكلفة الجلسة':'Connect resources to services and calculate session cost',testId:'choice-equipment-materials',href:'/business/equipment-materials'}]:[]),
+          { icon: Boxes,title:lang==='ar'?'الباقات والعروض':'Packages & Offers',hint:lang==='ar'?'إدارة الباقات والعروض ورصيد جلسات المرضى':'Manage packages, offers and patient session balances',permission:'services.read',testId:'choice-packages-offers',href:'/business/packages-offers'},
           { icon: Settings, title: t('sections.business.settings'), hint: t('sections.business.settingsHint'), permission: 'settings.read', testId: 'choice-settings', href: '/business/settings' },
         ]}
       />

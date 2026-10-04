@@ -7,7 +7,7 @@ import { branchSchema, serviceSchema, serviceBatchSchema, roomSchema, customerSc
 import * as setup from "../services/setup";
 import {serviceGroupEditSchema,serviceGroupDeleteSchema,serviceGroupPageSchema} from '../domain/setup-validation';
 import {listServiceGroups,getServiceGroup,saveServiceGroup,deleteServiceGroup} from '../services/service-groups';
-import {roomOverview,roomSchedule,createRoomBlock,removeRoomBlock} from '../services/room-workflows';
+import {roomOverview,roomSchedule,createRoomBlock,removeRoomBlock,deleteRoom} from '../services/room-workflows';
 import {roomBlockSchema,roomRangeSchema} from '../domain/room-workflow-validation';
 
 const router: IRouter = Router();
@@ -54,6 +54,7 @@ router.delete('/clinic/rooms/blocks/:id',requirePermission('rooms.manage'),async
 router.get("/clinic/rooms/:id", requirePermission("rooms.read"), async (req, res) => res.json({ item: await setup.getRoom(req.user!, id(req.params["id"])) }));
 router.post("/clinic/rooms", requirePermission("rooms.manage"), async (req, res) => res.status(201).json({ item: await setup.saveRoom(req.user!, roomSchema.parse(req.body)) }));
 router.put("/clinic/rooms/:id", requirePermission("rooms.manage"), async (req, res) => res.json({ item: await setup.saveRoom(req.user!, roomSchema.parse(req.body), id(req.params["id"])) }));
+router.delete('/clinic/rooms/:id',requirePermission('rooms.manage'),async(req,res)=>{z.object({confirmed:z.literal(true)}).strict().parse(req.body);res.json(await deleteRoom(req.user!,id(req.params['id'])));});
 
 router.get("/clinic/customers", requirePermission("customers.read"), async (req, res) => res.json(await setup.listCustomers(req.user!, pageSchema.parse(req.query))));
 router.get("/clinic/customers/:id", requirePermission("customers.read"), async (req, res) => res.json({ item: await setup.getCustomer(req.user!, id(req.params["id"])) }));

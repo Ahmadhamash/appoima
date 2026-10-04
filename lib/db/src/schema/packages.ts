@@ -1,3 +1,4 @@
+import type { PromotionSnapshot } from "./promotions";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -46,6 +47,8 @@ export const packageTemplatesTable = pgTable(
     discount: numeric("discount", { precision: 12, scale: 3 })
       .notNull()
       .default("0"),
+    description: text("description").notNull().default(""),
+    usageRules: text("usage_rules").notNull().default(""),
     intervalDays: integer("interval_days").notNull().default(7),
     expiryDays: integer("expiry_days"),
     plan: jsonb("plan").$type<PaymentPlan>().notNull(),
@@ -82,6 +85,7 @@ export const billingInvoicesTable = pgTable(
     discount: numeric("discount", { precision: 12, scale: 3 })
       .notNull()
       .default("0"),
+    promotion: jsonb("promotion").$type<PromotionSnapshot | null>(),
     depositPolicy: text("deposit_policy")
       .$type<"refundable" | "non_refundable" | "wallet">()
       .notNull()
@@ -132,6 +136,8 @@ export const patientPackagesTable = pgTable(
     invoiceId: integer("invoice_id").notNull(),
     name: text("name").notNull(),
     items: jsonb("items").$type<PackageItem[]>().notNull(),
+    usageRules: text("usage_rules").notNull().default(""),
+    description: text("description").notNull().default(""),
     intervalDays: integer("interval_days").notNull().default(7),
     plan: jsonb("plan").$type<PaymentPlan>().notNull(),
     status: text("status")

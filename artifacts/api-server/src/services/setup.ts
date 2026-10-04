@@ -1,4 +1,4 @@
-import { activeBranch, activeEmployee, employeeAtBranch } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee, employeeAtBranch } from './branch-scope';
 import { and, eq, ilike, or, inArray, sql, asc, isNull } from "drizzle-orm";
 import {
   db, usersTable, branchesTable, servicesTable, roomsTable, customersTable,
@@ -124,7 +124,7 @@ export async function saveServiceInTx(tx: Tx, clinicId: number, fresh: User, inp
     await branchExists(tx, clinicId, fields.branchId);
     await validateEmployees(tx, clinicId, employeeIds, fields.branchId, true);
     if (id) {
-      const linked = await tx.select({ branchId: roomsTable.branchId }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId)))).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.serviceId, id)));
+      const linked = await tx.select({ branchId: roomsTable.branchId }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), and(eq(roomsTable.clinicId, clinicId), activeRoom()))).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.serviceId, id)));
       if (linked.some((r) => !compatibleBranch(fields.branchId, r.branchId))) throw badRequest("branch_mismatch");
     }
     const [row] = id
@@ -172,7 +172,7 @@ export async function saveServicesBatch(actor: User, input: ServiceBatchInput) {
 export async function listRooms(actor: User, p: PageInput) {
   ensure(actor, "rooms.read");
   const clinicId = clinicOf(actor);
-  const condition = and(and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId)), p.search ? ilike(roomsTable.name, `%${p.search}%`) : undefined);
+  const condition = and(and(eq(roomsTable.clinicId, clinicId), activeRoom()), p.search ? ilike(roomsTable.name, `%${p.search}%`) : undefined);
   const rows = await db.select().from(roomsTable).where(condition).orderBy(asc(roomsTable.name), asc(roomsTable.id)).limit(p.pageSize).offset((p.page - 1) * p.pageSize);
   const [count] = await db.select({ total: sql<number>`count(*)::int` }).from(roomsTable).where(condition);
   const links = rows.length ? await db.select().from(roomServicesTable).where(and(eq(roomServicesTable.clinicId, clinicId), inArray(roomServicesTable.roomId, rows.map((r) => r.id)))) : [];
@@ -181,7 +181,7 @@ export async function listRooms(actor: User, p: PageInput) {
 export async function getRoom(actor: User, id: number) {
   ensure(actor, "rooms.read");
   const clinicId = clinicOf(actor);
-  const [row] = await db.select().from(roomsTable).where(and(and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId)), eq(roomsTable.id, id)));
+  const [row] = await db.select().from(roomsTable).where(and(and(eq(roomsTable.clinicId, clinicId), activeRoom()), eq(roomsTable.id, id)));
   if (!row) throw notFound("record_not_found");
   const links = await db.select().from(roomServicesTable).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.roomId, id)));
   return { ...row, serviceIds: links.map((l) => l.serviceId) };
@@ -189,7 +189,7 @@ export async function getRoom(actor: User, id: number) {
 export async function saveRoom(actor: User, input: RoomInput, id?: number) {
   return write(actor, "rooms.manage", async (tx, clinicId, fresh) => {
     const { serviceIds, ...fields } = input;
-    const [existingRoom] = id ? await tx.select({extra:roomsTable.extra}).from(roomsTable).where(and(eq(roomsTable.id,id),and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)))) : [];
+    const [existingRoom] = id ? await tx.select({extra:roomsTable.extra}).from(roomsTable).where(and(eq(roomsTable.id,id),and(eq(roomsTable.clinicId,clinicId), activeRoom()))) : [];
     const roomFields = { ...fields, extra: { ...existingRoom?.extra, ...fields.extra, openingHours: null, breaks: null } };
     await branchExists(tx, clinicId, fields.branchId);
     await validateServices(tx, clinicId, serviceIds, fields.branchId);
@@ -199,7 +199,7 @@ export async function saveRoom(actor: User, input: RoomInput, id?: number) {
     }
     if(input.extra?.employeeIds)await validateEmployees(tx,clinicId,input.extra.employeeIds,fields.branchId);
     const [row] = id
-      ? await tx.update(roomsTable).set(roomFields).where(and(eq(roomsTable.id, id), and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId)))).returning()
+      ? await tx.update(roomsTable).set(roomFields).where(and(eq(roomsTable.id, id), and(eq(roomsTable.clinicId, clinicId), activeRoom()))).returning()
       : await tx.insert(roomsTable).values({ ...roomFields, clinicId }).returning();
     if (!row) throw notFound("record_not_found");
     await tx.delete(roomServicesTable).where(and(eq(roomServicesTable.clinicId, clinicId), eq(roomServicesTable.roomId, row.id)));

@@ -1,4 +1,4 @@
-import { activeBranch, activeEmployee } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee } from './branch-scope';
 import { appointmentsTable } from "@workspace/db";
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { db, clinicsTable, branchesTable, usersTable, servicesTable, roomsTable, roomServicesTable, type Clinic } from "@workspace/db";
@@ -41,7 +41,7 @@ async function buildOverview(clinic: Clinic): Promise<ClinicOverview> {
     .where(and(eq(branchesTable.clinicId, clinic.id), activeBranch(branchesTable.id)));
   const branchRows = await db.select({ openingHours: branchesTable.openingHours }).from(branchesTable).where(and(eq(branchesTable.clinicId, clinic.id), activeBranch(branchesTable.id)));
   const services = await db.select({ id: servicesTable.id, requiresRoom: servicesTable.requiresRoom, requiredEquipment: servicesTable.requiredEquipment }).from(servicesTable).where(and(and(eq(servicesTable.clinicId, clinic.id), activeBranch(servicesTable.branchId)), eq(servicesTable.isActive, true)));
-  const compatible = await db.select({ serviceId: roomServicesTable.serviceId, equipment: roomsTable.extra }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), and(eq(roomsTable.clinicId, clinic.id), activeBranch(roomsTable.branchId)))).where(and(eq(roomServicesTable.clinicId, clinic.id), eq(roomsTable.status, "available")));
+  const compatible = await db.select({ serviceId: roomServicesTable.serviceId, equipment: roomsTable.extra }).from(roomServicesTable).innerJoin(roomsTable, and(eq(roomsTable.id, roomServicesTable.roomId), and(eq(roomsTable.clinicId, clinic.id), activeRoom()))).where(and(eq(roomServicesTable.clinicId, clinic.id), eq(roomsTable.status, "available")));
   const [activeStaff] = await db.select({ count: sql<number>`count(*)::int` }).from(usersTable).where(and(and(eq(usersTable.clinicId, clinic.id), activeEmployee()), eq(usersTable.isActive, true), sql`${usersTable.role} <> 'manager'`));
   const branchCount = branches?.count ?? 0;
   return {

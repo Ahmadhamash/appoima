@@ -15,7 +15,7 @@ import { HttpError, forbidden, conflict } from '../lib/errors';
 import { createSonioxAssistKey } from '../concierge/providers';
 import { schedulingCatalog, availability, createAppointment } from './scheduling';
 import { listCustomers } from './setup';
-import { bookingSchema } from '../domain/scheduling-validation';
+import { bookingSchema, bookingBaseSchema } from '../domain/scheduling-validation';
 import { intakeIssues } from '@workspace/service-definition';
 import { normalizeHelpText } from '../domain/assistant-help';
 const budget=new AssistantBudget();
@@ -124,7 +124,7 @@ export function assistantChat(actor:User,raw:unknown) {
     return {reply:parsed.reply.trim(),action:parsed.action==='book'?null:route?{href:route.href}:null,proposal:null};
   });
 }
-const chatBookingSchema=bookingSchema.innerType().pick({branchId:true,customerId:true,serviceId:true,employeeId:true,startsAt:true,idempotencyKey:true});
+const chatBookingSchema=bookingBaseSchema.pick({branchId:true,customerId:true,serviceId:true,employeeId:true,startsAt:true,idempotencyKey:true});
 export function assistantBook(actor:User,raw:unknown){return audited(actor,'book',async fresh=>{
   const input=chatBookingSchema.parse(raw);
   return {id:await createAppointment(fresh,bookingSchema.parse({...input,notes:'',notesLang:'ar',intakeAnswers:{}}))};

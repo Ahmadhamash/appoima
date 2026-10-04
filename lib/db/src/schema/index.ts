@@ -15,3 +15,5 @@ export * from './inventory-locations';
 export * from './packages';
 
 export * from './inventory-batches';
+
+export * from './promotions';

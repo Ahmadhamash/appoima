@@ -1,4 +1,4 @@
-import { activeBranch, activeEmployee } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee } from './branch-scope';
 import {and,asc,eq,gt,inArray,lt,ne,sql} from 'drizzle-orm';
 import {appointmentsTable,branchesTable,customersTable,roomsTable,roomBlocksTable,roomServicesTable,servicesTable,usersTable,type User} from '@workspace/db';
 import {hasPermission} from '../domain/permissions';
@@ -13,7 +13,7 @@ export async function roomOverview(actor:User){return withOperations(actor,false
  allowed(fresh);const clinicId=operatingClinic(fresh),now=new Date();
  const rows=await tx.select({room:roomsTable,branch:{id:branchesTable.id,name:branchesTable.name,nameLang:branchesTable.nameLang,timeZone:branchesTable.timeZone}})
   .from(roomsTable).innerJoin(branchesTable,and(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id)),eq(branchesTable.id,roomsTable.branchId)))
-  .where(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name)).limit(500);
+  .where(and(eq(roomsTable.clinicId,clinicId), activeRoom())).orderBy(asc(roomsTable.name)).limit(500);
  const ids=rows.map(row=>row.room.id);
  const links=ids.length?await tx.select({roomId:roomServicesTable.roomId,serviceId:roomServicesTable.serviceId}).from(roomServicesTable)
   .where(and(eq(roomServicesTable.clinicId,clinicId),inArray(roomServicesTable.roomId,ids))):[];
@@ -27,7 +27,7 @@ export async function roomOverview(actor:User){return withOperations(actor,false
 
 export async function roomSchedule(actor:User,input:RoomRange){return withOperations(actor,false,async(tx,fresh)=>{
  allowed(fresh);const clinicId=operatingClinic(fresh),from=new Date(input.from),to=new Date(input.to);
- if(input.roomId){const [room]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)),eq(roomsTable.id,input.roomId)));if(!room)throw notFound('record_not_found');}
+ if(input.roomId){const [room]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeRoom()),eq(roomsTable.id,input.roomId)));if(!room)throw notFound('record_not_found');}
  const roomFilter=input.roomId?eq(roomBlocksTable.roomId,input.roomId):undefined;
  const blocks=await tx.select().from(roomBlocksTable).where(and(and(eq(roomBlocksTable.clinicId,clinicId), activeBranch(roomBlocksTable.branchId)),roomFilter,lt(roomBlocksTable.startsAt,to),gt(roomBlocksTable.endsAt,from)))
   .orderBy(asc(roomBlocksTable.startsAt)).limit(2000);
@@ -42,10 +42,10 @@ export async function roomSchedule(actor:User,input:RoomRange){return withOperat
 });}
 
 export async function createRoomBlock(actor:User,roomId:number,input:RoomBlockInput){return operationsCommand(actor,`room:block:${roomId}`,input,async(tx,fresh)=>{
- allowed(fresh,true);const [room]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,operatingClinic(fresh)), activeBranch(roomsTable.branchId)),eq(roomsTable.id,roomId)));if(!room)throw notFound('record_not_found');
+ allowed(fresh,true);const [room]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,operatingClinic(fresh)), activeRoom()),eq(roomsTable.id,roomId)));if(!room)throw notFound('record_not_found');
 },async(tx,fresh)=>{
  const clinicId=operatingClinic(fresh),from=new Date(input.startsAt),to=new Date(input.endsAt);
- const [room]=await tx.select({branchId:roomsTable.branchId}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)),eq(roomsTable.id,roomId)));
+ const [room]=await tx.select({branchId:roomsTable.branchId}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeRoom()),eq(roomsTable.id,roomId)));
  const [booking]=await tx.select({id:appointmentsTable.id}).from(appointmentsTable).where(and(and(eq(appointmentsTable.clinicId,clinicId), activeBranch(appointmentsTable.branchId)),eq(appointmentsTable.roomId,roomId),ne(appointmentsTable.status,'cancelled'),lt(appointmentsTable.startsAt,to),gt(appointmentsTable.endsAt,from))).limit(1);
  const [block]=await tx.select({id:roomBlocksTable.id}).from(roomBlocksTable).where(and(and(eq(roomBlocksTable.clinicId,clinicId), activeBranch(roomBlocksTable.branchId)),eq(roomBlocksTable.roomId,roomId),lt(roomBlocksTable.startsAt,to),gt(roomBlocksTable.endsAt,from))).limit(1);
  if(booking||block)throw conflict('slot_taken');
@@ -60,4 +60,18 @@ export async function removeRoomBlock(actor:User,id:number){return withOperation
  await tx.delete(roomBlocksTable).where(and(and(eq(roomBlocksTable.clinicId,clinicId), activeBranch(roomBlocksTable.branchId)),eq(roomBlocksTable.id,id)));
  await recordAudit({clinicId,actorUserId:fresh.id,action:'room.block_removed',entityType:'room_block',entityId:id},tx);
  return {id};
+});}
+
+/** The same clinic lock serializes deletion with bookings and room edits. Retain history. */
+export async function deleteRoom(actor:User,id:number){return withOperations(actor,true,async(tx,fresh)=>{
+ allowed(fresh,true);const clinicId=operatingClinic(fresh);
+ const [room]=await tx.select().from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId),activeBranch(roomsTable.branchId),eq(roomsTable.id,id)));
+ if(!room)throw notFound('record_not_found');
+ if(room.deletedAt)return {id,deletedAt:room.deletedAt.toISOString()};
+ const [booking]=await tx.select({id:appointmentsTable.id}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,clinicId),eq(appointmentsTable.roomId,id),inArray(appointmentsTable.status,['pending','confirmed','checked_in','in_service']),sql`(${appointmentsTable.endsAt} > now() or ${appointmentsTable.status} in ('checked_in', 'in_service'))`)).limit(1);
+ if(booking)throw conflict('room_has_appointments');
+ const deletedAt=new Date();
+ await tx.update(roomsTable).set({deletedAt,status:'maintenance'}).where(and(eq(roomsTable.clinicId,clinicId),eq(roomsTable.id,id)));
+ await recordAudit({clinicId,actorUserId:fresh.id,action:'room.deleted',entityType:'room',entityId:id},tx);
+ return {id,deletedAt:deletedAt.toISOString()};
 });}

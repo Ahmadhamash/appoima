@@ -1,4 +1,4 @@
-import { activeBranch, activeEmployee } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee } from './branch-scope';
 import {itemBatches,batchExpirySQL} from './inventory-batches';
 import {saveInventoryServiceUsage,readInventoryServiceUsage} from './inventory-service-usage';
 import {syncAppointmentInvoice} from './packages';
@@ -34,7 +34,7 @@ async function balanceFor(tx:Tx,clinicId:number,itemId:number):Promise<bigint> {
 }
 export async function inventoryCatalog(actor:User) {
   return withOperations(actor,false,async(tx,fresh)=>{requireInventory(fresh);
-    return {services:await tx.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,operatingClinic(fresh)), activeBranch(servicesTable.branchId)),eq(servicesTable.isActive,true))).orderBy(asc(servicesTable.name)),movementMode:(await inventorySettingsInTx(tx,operatingClinic(fresh))).movementMode,rooms:await tx.select({id:roomsTable.id,name:roomsTable.name,nameLang:roomsTable.nameLang,branchId:roomsTable.branchId}).from(roomsTable).where(and(eq(roomsTable.clinicId,operatingClinic(fresh)), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name)),branches:await tx.select({id:branchesTable.id,name:branchesTable.name,nameLang:branchesTable.nameLang,timeZone:branchesTable.timeZone})
+    return {services:await tx.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,operatingClinic(fresh)), activeBranch(servicesTable.branchId)),eq(servicesTable.isActive,true))).orderBy(asc(servicesTable.name)),movementMode:(await inventorySettingsInTx(tx,operatingClinic(fresh))).movementMode,rooms:await tx.select({id:roomsTable.id,name:roomsTable.name,nameLang:roomsTable.nameLang,branchId:roomsTable.branchId}).from(roomsTable).where(and(eq(roomsTable.clinicId,operatingClinic(fresh)), activeRoom())).orderBy(asc(roomsTable.name)),branches:await tx.select({id:branchesTable.id,name:branchesTable.name,nameLang:branchesTable.nameLang,timeZone:branchesTable.timeZone})
       .from(branchesTable).where(and(eq(branchesTable.clinicId,operatingClinic(fresh)), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.name)),canManage:hasPermission(fresh,'inventory.manage')};
   });
 }

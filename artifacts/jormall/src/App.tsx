@@ -114,6 +114,7 @@ function PrivateRoutes() {
                   {!isOwner && has('people') && <Route path="/people" component={PeoplePage} />}
                   {!isOwner && has('business') && <Route path="/business/settings" component={BranchesPage} />}
                   {!isOwner && has('business') && <Route path="/business/services/packages" component={PackagesPage} />}
+                  {!isOwner && has('business') && <Route path="/business/packages-offers" component={PackagesPage} />}
                   {!isOwner && has('business') && <Route path="/business/services" component={ServicesPage} />}
                   {!isOwner && has('business') && <Route path="/business/rooms" component={RoomsPage} />}
                   {!isOwner && has('business') && <Route path="/business/equipment-materials" component={EquipmentMaterialsPage} />}

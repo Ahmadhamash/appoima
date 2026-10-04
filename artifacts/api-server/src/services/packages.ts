@@ -1,8 +1,11 @@
+import { bookingQuoteInTx, confirmQuoteTerms } from './promotions';
+import { purchasePackageSchema, catalogStatusSchema } from '../domain/promotions';
 import { activeBranch, activeEmployee } from './branch-scope';
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   packageTemplatesTable,
+  packageNotificationsTable,
   patientPackagesTable,
   billingInvoicesTable,
   paymentEntriesTable,
@@ -108,7 +111,7 @@ async function items(
     );
   if (
     rows.length !== input.length ||
-    rows.some((s) => !s.isActive || s.currency !== "JOD")
+    rows.some((s) => !s.isActive || s.deletedAt || s.currency !== "JOD")
   )
     throw badRequest("package_invalid_service");
   return input.map((i) => ({
@@ -205,6 +208,7 @@ export async function packageCatalog(actor: User) {
           and(
             and(eq(servicesTable.clinicId, operatingClinic(fresh)), activeBranch(servicesTable.branchId)),
             eq(servicesTable.isActive, true),
+            isNull(servicesTable.deletedAt),
           ),
         ),
       canManage: hasPermission(fresh, "services.manage"),
@@ -214,44 +218,28 @@ export async function packageCatalog(actor: User) {
 export async function savePackageTemplate(
   actor: User,
   input: z.infer<typeof packageInputSchema>,
+  id?: number,
 ) {
   return operationsCommand(
     actor,
-    "package.template",
+    `package.template:${id ?? "new"}`,
     input,
     async (_tx, fresh) => permission(fresh, "services.manage"),
     async (tx, fresh) => {
       const { idempotencyKey: _key, ...fields } = input;
-      const [row] = await tx
-        .insert(packageTemplatesTable)
-        .values({
-          ...fields,
-          clinicId: operatingClinic(fresh),
-          items: await items(tx, fresh, input.items),
-          createdBy: fresh.id,
-        })
-        .returning();
-      await audit(tx, fresh, "package.template_created", row!.id, {
+      const values = { ...fields, items: await items(tx, fresh, input.items) };
+      const [row] = id ? await tx.update(packageTemplatesTable).set(values).where(and(eq(packageTemplatesTable.clinicId, operatingClinic(fresh)), eq(packageTemplatesTable.id, id))).returning() : await tx.insert(packageTemplatesTable).values({ ...values, clinicId: operatingClinic(fresh), createdBy: fresh.id }).returning();
+      if (!row) throw notFound("record_not_found");
+      await audit(tx, fresh, id ? "package.template_updated" : "package.template_created", row.id, {
         name: input.name,
       });
       return row!.id;
     },
   );
 }
-export async function assignPackage(
-  actor: User,
-  customerId: number,
-  input: z.infer<typeof assignPackageSchema>,
-) {
-  return operationsCommand(
-    actor,
-    `package.assign:${customerId}`,
-    input,
-    async (tx, fresh) => {
-      permission(fresh, "customers.manage");
-      await patient(tx, fresh, customerId);
-    },
-    async (tx, fresh) => {
+export async function createPatientPackageInTx(tx: Tx, fresh: User, customerId: number, input: z.infer<typeof assignPackageSchema>) {
+  permission(fresh, "customers.manage");
+  await patient(tx, fresh, customerId);
       const clinicId = operatingClinic(fresh),
         [template] = await tx
           .select()
@@ -294,6 +282,8 @@ export async function assignPackage(
           invoiceId: inv!.id,
           name: template.name,
           items: packageItems,
+          description: template.description,
+          usageRules: template.usageRules,
           intervalDays: input.intervalDays ?? template.intervalDays,
           plan: input.plan ?? template.plan,
           expiresAt: template.expiryDays
@@ -309,8 +299,27 @@ export async function assignPackage(
         items: packageItems,
       });
       return row!.id;
-    },
-  );
+}
+export async function assignPackage(actor: User, customerId: number, input: z.infer<typeof assignPackageSchema>) {
+ return operationsCommand(actor, `package.assign:${customerId}`, input, async (tx, fresh) => { permission(fresh,"customers.manage"); await patient(tx,fresh,customerId); }, (tx,fresh) => createPatientPackageInTx(tx,fresh,customerId,input));
+}
+export async function purchasePackageForBooking(tx: Tx, fresh: User, customerId: number, serviceId: number, input: z.infer<typeof purchasePackageSchema>, commandKey: string) {
+ const quote = await bookingQuoteInTx(tx, fresh, {customerId,serviceId,templateId:input.templateId,offerId:input.offerId});
+ confirmQuoteTerms(quote,input.expectedPrice,input.eligibilityConfirmed,input.rulesAccepted);
+ const [template] = await tx.select().from(packageTemplatesTable).where(and(eq(packageTemplatesTable.clinicId,operatingClinic(fresh)),eq(packageTemplatesTable.id,input.templateId)));
+ const packageId = await createPatientPackageInTx(tx,fresh,customerId,{templateId:input.templateId,discount:decimal(milli(template!.originalPrice)-milli(quote.price)),depositPolicy:'refundable',idempotencyKey:commandKey});
+ const p = await pkg(tx,fresh,packageId);
+ if(quote.promotion) await tx.update(billingInvoicesTable).set({promotion:quote.promotion}).where(and(eq(billingInvoicesTable.clinicId,p.clinicId),eq(billingInvoicesTable.id,p.invoiceId)));
+ if(input.payment&&milli(input.payment.amount)>0n) await recordPaymentInTx(tx,fresh,p.invoiceId,{kind:'payment',lines:[input.payment],note:'Payment received at package purchase',idempotencyKey:commandKey});
+ await audit(tx,fresh,'package.purchase_confirmed',packageId,{offerId:input.offerId??null,rulesAccepted:input.rulesAccepted,eligibilityConfirmed:input.eligibilityConfirmed});
+ return packageId;
+}
+export function setPackageTemplateActive(actor:User,id:number,input:z.infer<typeof catalogStatusSchema>) {
+ return operationsCommand(actor,`package.template_active:${id}`,input,async(_tx,fresh)=>permission(fresh,'services.manage'),async(tx,fresh)=>{
+  const [row]=await tx.update(packageTemplatesTable).set({isActive:input.isActive}).where(and(eq(packageTemplatesTable.clinicId,operatingClinic(fresh)),eq(packageTemplatesTable.id,id))).returning();
+  if(!row)throw notFound('record_not_found');
+  await audit(tx,fresh,'package.template_status_changed',id,{isActive:input.isActive});return id;
+ });
 }
 export async function customerBilling(actor: User, customerId: number) {
   return withOperations(actor, false, async (tx, fresh) => {
@@ -361,6 +370,7 @@ export async function customerBilling(actor: User, customerId: number) {
           eq(patientPackagesTable.customerId, customerId),
         ),
       );
+    const reservations = await tx.select({packageId:packageBookingsTable.packageId,serviceId:packageBookingsTable.serviceId}).from(packageBookingsTable).innerJoin(appointmentsTable,and(eq(appointmentsTable.clinicId,packageBookingsTable.clinicId),eq(appointmentsTable.id,packageBookingsTable.appointmentId))).where(and(eq(packageBookingsTable.clinicId,clinicId),eq(packageBookingsTable.customerId,customerId),inArray(appointmentsTable.status,['pending','confirmed','checked_in','in_service'])));
     const wallet = await tx
       .select()
       .from(walletEntriesTable)
@@ -405,10 +415,14 @@ export async function customerBilling(actor: User, customerId: number) {
               : p.status,
           used: used.length,
           remaining: total - used.length,
+          reserved: reservations.filter(r=>r.packageId===p.id).length,
+          available: total-used.length-reservations.filter(r=>r.packageId===p.id).length,
           totalSessions: total,
           items: p.items.map((item) => ({
             ...item,
             used: used.filter((s) => s.serviceId === item.serviceId).length,
+            reserved: reservations.filter(r=>r.packageId===p.id&&r.serviceId===item.serviceId).length,
+            available: item.quantity-used.filter(s=>s.serviceId===item.serviceId).length-reservations.filter(r=>r.packageId===p.id&&r.serviceId===item.serviceId).length,
           })),
           invoice: invoicesWithBalance.find((inv) => inv.id === p.invoiceId)!,
           sessions: used.map((e) => ({
@@ -428,17 +442,8 @@ export async function customerBilling(actor: User, customerId: number) {
     };
   });
 }
-export async function recordPayment(
-  actor: User,
-  id: number,
-  input: z.infer<typeof paymentSchema>,
-) {
-  return operationsCommand(
-    actor,
-    `billing.payment:${id}`,
-    input,
-    async (_tx, fresh) => permission(fresh, "customers.manage"),
-    async (tx, fresh) => {
+export async function recordPaymentInTx(tx:Tx,fresh:User,id:number,input:z.infer<typeof paymentSchema>) {
+ permission(fresh,'customers.manage');
       const inv = await invoice(tx, fresh, id),
         current = finance(
           inv.originalPrice,
@@ -485,8 +490,9 @@ export async function recordPayment(
         lines: input.lines,
       });
       return id;
-    },
-  );
+}
+export async function recordPayment(actor: User,id: number,input:z.infer<typeof paymentSchema>) {
+ return operationsCommand(actor,`billing.payment:${id}`,input,async(_tx,fresh)=>permission(fresh,'customers.manage'),(tx,fresh)=>recordPaymentInTx(tx,fresh,id,input));
 }
 export async function refundPayment(
   actor: User,
@@ -733,6 +739,7 @@ async function consume(
           eq(patientPackagesTable.id, p.id),
         ),
       );
+  if (appointmentId && used.length + 1 === p.items.reduce((n,i)=>n+i.quantity,0)) await tx.insert(packageNotificationsTable).values({clinicId:p.clinicId,packageId:p.id,customerId:p.customerId,appointmentId,event:"final_completed"}).onConflictDoNothing();
   await audit(tx, actor, "package.session_used", p.id, {
     serviceId,
     appointmentId,
@@ -863,6 +870,16 @@ export async function setPackageStatus(
     },
   );
 }
+export async function packageSessionSummary(tx:Tx,actor:User,id:number) {
+ const p=await pkg(tx,actor,id),entries=await tx.select({id:sessionEntriesTable.id}).from(sessionEntriesTable).where(and(eq(sessionEntriesTable.clinicId,p.clinicId),eq(sessionEntriesTable.packageId,p.id)));
+ const total=p.items.reduce((n,i)=>n+i.quantity,0);
+ return {id:p.id,name:p.name,remaining:total-entries.length,totalSessions:total,usageRules:p.usageRules,expiresAt:p.expiresAt};
+}
+export async function checkPackageBookingValidity(tx:Tx,actor:User,id:number,endsAt:string,rulesAccepted:boolean) {
+ const p=await activePackage(tx,actor,id);
+ if(p.expiresAt&&Date.parse(endsAt)>p.expiresAt.getTime())throw conflict('package_session_outside_validity');
+ if(p.usageRules&&!rulesAccepted)throw badRequest('package_rules_confirmation_required');
+}
 export async function appointmentPackage(tx: Tx, actor: User, id: number) {
   const [link] = await tx
     .select()
@@ -884,8 +901,12 @@ export async function packageAppointmentTransition(
 ) {
   const link = await appointmentPackage(tx, actor, a.id);
   if (!link) return;
-  if (["confirmed", "in_service", "completed"].includes(status))
+  if (["confirmed", "checked_in", "in_service", "completed"].includes(status))
     await enforcePackagePayment(tx, actor, link.packageId, overrideReason);
+  if(status==='checked_in') {
+    const summary=await packageSessionSummary(tx,actor,link.packageId);
+    if(summary.remaining===1)await tx.insert(packageNotificationsTable).values({clinicId:a.clinicId,packageId:link.packageId,customerId:a.customerId,appointmentId:a.id,event:'final_check_in'}).onConflictDoNothing();
+  }
   if (status === "completed")
     await consume(
       tx,
@@ -976,11 +997,12 @@ export async function syncAppointmentInvoice(
     inv.discount,
     await payments(tx, a.clinicId, inv.id),
   );
-  if (milli(total) < milli(paid.paid) + milli(inv.discount))
+  const originalTotal=decimal(milli(total)+milli(inv.discount));
+  if (milli(originalTotal) < milli(paid.paid) + milli(inv.discount))
     throw conflict("invoice_adjustment_requires_refund");
   await tx
     .update(billingInvoicesTable)
-    .set({ originalPrice: total })
+    .set({ originalPrice: originalTotal })
     .where(
       and(
         eq(billingInvoicesTable.clinicId, a.clinicId),
@@ -989,23 +1011,10 @@ export async function syncAppointmentInvoice(
     );
   await audit(tx, actor, "billing.invoice_updated", inv.id, {
     before: inv.originalPrice,
-    after: total,
+    after: originalTotal,
   });
 }
-export async function createAppointmentInvoice(
-  actor: User,
-  id: number,
-  input: z.infer<typeof appointmentInvoiceSchema>,
-) {
-  return operationsCommand(
-    actor,
-    `billing.appointment:${id}`,
-    input,
-    async (_tx, fresh) => {
-      permission(fresh, "customers.manage");
-      if (!hasPermission(fresh, "appointments.read")) throw forbidden();
-    },
-    async (tx, fresh) => {
+export async function createAppointmentInvoiceInTx(tx:Tx,fresh:User,id:number,input:z.infer<typeof appointmentInvoiceSchema>) {
       const [a] = await tx
         .select()
         .from(appointmentsTable)
@@ -1047,13 +1056,15 @@ export async function createAppointmentInvoice(
           customerId: a.customerId,
           appointmentId: id,
           name: service!.name,
-          originalPrice: total,
-          discount: "0",
+          originalPrice: decimal(milli(total) + (a.promotion ? milli(a.promotion.originalPrice)-milli(a.promotion.price) : 0n)),
+          discount: a.promotion ? decimal(milli(a.promotion.originalPrice)-milli(a.promotion.price)) : "0",
+          promotion: a.promotion,
           depositPolicy: input.depositPolicy,
           createdBy: fresh.id,
         })
         .returning();
       return inv!.id;
-    },
-  );
+}
+export async function createAppointmentInvoice(actor:User,id:number,input:z.infer<typeof appointmentInvoiceSchema>) {
+ return operationsCommand(actor,`billing.appointment:${id}`,input,async(_tx,fresh)=>{permission(fresh,'customers.manage');if(!hasPermission(fresh,'appointments.read'))throw forbidden();},(tx,fresh)=>createAppointmentInvoiceInTx(tx,fresh,id,input));
 }

@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { useManagerBranch } from '@/lib/manager-branch';
 import { useI18n } from '@/lib/i18n';
 import { LanguageSwitcher } from './language-switcher';
+import { PackageNotifications } from './operations/package-notifications';
 import { canOpenSetupStep, SETUP_PATH, useClinicSetup } from '@/lib/clinic-setup';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 
@@ -73,6 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {location!==home&&<Link href={home} data-testid="nav-home" className="focus-ring inline-flex size-10 items-center justify-center rounded-xl border border-[#e1e6ef] text-primary hover:bg-primary/10" aria-label={t('nav.home')}><House className="size-5"/></Link>}
           {branchPicker}
           <LanguageSwitcher/>
+          <PackageNotifications/>
           <div className="hidden border-s border-[#e4e9f1] ps-3 text-end md:block">
             <p className="max-w-32 truncate text-sm font-semibold" data-testid="text-user-name" lang={user?.nameLang} dir={user?.nameLang==='ar'?'rtl':'ltr'}>{user?.name}</p>
             <p className="text-xs text-[#68778b]">{user&&t(`roles.${user.role}`)}</p>

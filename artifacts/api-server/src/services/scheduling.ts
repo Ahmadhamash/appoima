@@ -1,10 +1,12 @@
+import {bookingQuoteInTx,confirmQuoteTerms} from './promotions';
+import {paymentCheck} from '../domain/packages';
 import { activeBranch, activeEmployee, employeeAtBranch } from './branch-scope';
 import { intakeSnapshot, ServiceDefinitionError } from '@workspace/service-definition';
 import {paymentSummary,type ProductSelection} from '../domain/patient-billing';
 import {patientProductOptions,plannedProductSelections,resolveProductCharges} from './patient-billing';
 import {milli} from '../domain/costing';
 import {seriesDates} from '../domain/packages';
-import {ensurePackageReservation,enforcePackagePayment,packagePaymentCheck,packageAppointmentTransition,appointmentPackage,cancelAppointmentDeposit,syncAppointmentInvoice} from './packages';
+import {purchasePackageForBooking,checkPackageBookingValidity,createAppointmentInvoiceInTx,packageSessionSummary,ensurePackageReservation,enforcePackagePayment,packagePaymentCheck,packageAppointmentTransition,appointmentPackage,cancelAppointmentDeposit,syncAppointmentInvoice} from './packages';
 import {withOperations} from './operations-context';
 import {bookingPreviewSchema} from '../domain/scheduling-validation';
 import {z} from 'zod';
@@ -21,7 +23,7 @@ import {
   serviceEmployeesTable, roomServicesTable, appointmentsTable, appointmentStatusHistoryTable,
   schedulingCommandsTable, type User, type Appointment,
   appointmentCostSnapshotsTable,
-  packageBookingsTable,
+  packageBookingsTable,packageTemplatesTable,
 } from '@workspace/db';
 import { hasPermission } from '../domain/permissions';
 import {
@@ -107,10 +109,14 @@ export async function createAppointment(actor: User, input: BookingInput) {
     const [customer] = await tx.select({id: customersTable.id}).from(customersTable).where(and(and(eq(customersTable.clinicId, clinicId), activeBranch(customersTable.branchId)), eq(customersTable.id, input.customerId)));
     if (!customer) throw notFound('record_not_found');
     const dates=seriesDates(input.startsAt,input.series?.count??1,input.series?.intervalDays??7);
-    if(input.packageId){await ensurePackageReservation(tx,fresh,input.packageId,input.customerId,input.serviceId,dates.length);await enforcePackagePayment(tx,fresh,input.packageId,input.overrideReason);}
+    const packageId=input.purchasePackage?await purchasePackageForBooking(tx,fresh,input.customerId,input.serviceId,input.purchasePackage,input.idempotencyKey):input.packageId;
+    const offerQuote=input.offerId?await bookingQuoteInTx(tx,fresh,{customerId:input.customerId,serviceId:input.serviceId,offerId:input.offerId}):null;
+    if(offerQuote)confirmQuoteTerms(offerQuote,input.expectedOfferPrice,input.offerEligibilityConfirmed);
+    if(packageId){await ensurePackageReservation(tx,fresh,packageId,input.customerId,input.serviceId,dates.length);await enforcePackagePayment(tx,fresh,packageId,input.overrideReason);}
     let firstId=0;
     for(const startsAt of dates){
     const context = await selectedSlot(tx, fresh, {...input,startsAt});
+    if(packageId)await checkPackageBookingValidity(tx,fresh,packageId,context.selected.endsAt,!!input.purchasePackage?.rulesAccepted||input.packageRulesAccepted);
     const [service]=await tx.select({definition:servicesTable.definition,price:servicesTable.price,currency:servicesTable.currency,followUpEnabled:servicesTable.followUpEnabled}).from(servicesTable).where(and(and(eq(servicesTable.clinicId,clinicId), activeBranch(servicesTable.branchId)),eq(servicesTable.id,input.serviceId)));
     if(!service)throw notFound('record_not_found');
     if(input.expectedServicePrice!==undefined&&milli(input.expectedServicePrice)!==milli(service.price))throw conflict('billing_price_changed');
@@ -130,21 +136,28 @@ export async function createAppointment(actor: User, input: BookingInput) {
       durationMinutes: context.durationMinutes, requiresRoom: context.requiresRoom, status: 'pending',
       notes: input.notes, notesLang: input.notesLang, serviceIntake, createdBy: fresh.id,
       appointmentType:input.appointmentType,followUpOfId:input.followUpOfId??null,
-      chargePrice:input.packageId?'0':input.chargePrice??(input.appointmentType==='follow_up'?'0':service.price),chargeCurrency:service.currency,productCharges}).returning();
-    await history(tx, fresh, 'created', null, a!);if(input.packageId)await tx.insert(packageBookingsTable).values({clinicId,customerId:input.customerId,packageId:input.packageId,appointmentId:a!.id,serviceId:input.serviceId});if(!firstId)firstId=a!.id;
+      promotion:offerQuote?.promotion??null,
+      chargePrice:packageId?'0':offerQuote?.price??input.chargePrice??(input.appointmentType==='follow_up'?'0':service.price),chargeCurrency:service.currency,productCharges}).returning();
+    await history(tx, fresh, 'created', null, a!);if(packageId)await tx.insert(packageBookingsTable).values({clinicId,customerId:input.customerId,packageId,appointmentId:a!.id,serviceId:input.serviceId});if(offerQuote)await createAppointmentInvoiceInTx(tx,fresh,a!.id,{depositPolicy:'refundable',idempotencyKey:input.idempotencyKey});if(!firstId)firstId=a!.id;
     }return firstId;
   });
 }
 export async function previewBookingSeries(actor:User,input:z.infer<typeof bookingPreviewSchema>){return withOperations(actor,false,async(tx,fresh)=>{
- requireScheduler(fresh);const [customer]=await tx.select({id:customersTable.id}).from(customersTable).where(and(and(eq(customersTable.clinicId,scheduleClinic(fresh)), activeBranch(customersTable.branchId)),eq(customersTable.id,input.customerId)));if(!customer)throw notFound('record_not_found');
+ requireScheduler(fresh);const [customer]=await tx.select({id:customersTable.id}).from(customersTable).where(and(eq(customersTable.clinicId,scheduleClinic(fresh)),activeBranch(customersTable.branchId),eq(customersTable.id,input.customerId)));if(!customer)throw notFound('record_not_found');
  const dates=seriesDates(input.startsAt,input.series?.count??1,input.series?.intervalDays??7);if(input.packageId)await ensurePackageReservation(tx,fresh,input.packageId,input.customerId,input.serviceId,dates.length);
- const sessions=[];for(const startsAt of dates){try{const context=await selectedSlot(tx,fresh,{...input,startsAt});sessions.push({startsAt,endsAt:context.selected.endsAt,available:true,error:null});}catch(error){if(!(error instanceof HttpError))throw error;sessions.push({startsAt,endsAt:null,available:false,error:error.code});}}
- return {sessions,canBook:sessions.every(s=>s.available),payment:input.packageId?await packagePaymentCheck(tx,fresh,input.packageId):null};
+ const quote=input.purchasePackage||input.offerId?await bookingQuoteInTx(tx,fresh,{customerId:input.customerId,serviceId:input.serviceId,templateId:input.purchasePackage?.templateId,offerId:input.purchasePackage?.offerId??input.offerId}):null;
+ if(input.purchasePackage&&!hasPermission(fresh,'customers.manage'))throw forbidden();
+ if(quote)confirmQuoteTerms(quote,input.purchasePackage?.expectedPrice??input.expectedOfferPrice,true,true);
+ const [template]=input.purchasePackage?await tx.select().from(packageTemplatesTable).where(and(eq(packageTemplatesTable.clinicId,scheduleClinic(fresh)),eq(packageTemplatesTable.id,input.purchasePackage.templateId))):[];
+ const sessions=[];for(const startsAt of dates){try{const context=await selectedSlot(tx,fresh,{...input,startsAt});if(input.packageId)await checkPackageBookingValidity(tx,fresh,input.packageId,context.selected.endsAt,true);if(template?.expiryDays&&Date.parse(context.selected.endsAt)>Date.now()+template.expiryDays*86400000)throw conflict('package_session_outside_validity');sessions.push({startsAt,endsAt:context.selected.endsAt,available:true,error:null});}catch(error){if(!(error instanceof HttpError))throw error;sessions.push({startsAt,endsAt:null,available:false,error:error.code});}}
+ const payment=input.packageId?await packagePaymentCheck(tx,fresh,input.packageId):template&&quote?paymentCheck(quote.price,input.purchasePackage?.payment?.amount??'0',template.plan,1):null;
+ return {sessions,canBook:sessions.every(s=>s.available),payment,quote};
  });}
 export async function saveAppointmentCharge(actor:User,id:number,input:{price:string;expectedVersion:number;idempotencyKey:string}){
   return command(actor,`charge:${id}`,input,async(tx,fresh)=>{if(!canChangeCharge(fresh,await findAppointment(tx,fresh,id)))throw forbidden();},async(tx,fresh)=>{
     const a=await findAppointment(tx,fresh,id);
     if(await appointmentPackage(tx,fresh,id))throw conflict('package_appointment_fee_locked');
+    if(a.promotion)throw conflict('offer_appointment_fee_locked');
     if(a.version!==input.expectedVersion)throw conflict('appointment_changed');
     if(['cancelled','no_show'].includes(a.status))throw conflict('invalid_transition');
     const [frozen]=await tx.select({id:appointmentCostSnapshotsTable.id}).from(appointmentCostSnapshotsTable).where(and(eq(appointmentCostSnapshotsTable.clinicId,a.clinicId),eq(appointmentCostSnapshotsTable.appointmentId,id)));
@@ -221,6 +234,7 @@ export async function rescheduleAppointment(actor: User, id: number, input: Resc
     if (before.version !== input.expectedVersion) throw conflict('appointment_changed');
     if (!canReschedule(fresh, before)) throw conflict('invalid_reschedule');
     const context = await selectedSlot(tx, fresh, {branchId: before.branchId, serviceId: before.serviceId, employeeId: input.employeeId, startsAt: input.startsAt}, before);
+    const packageLink=await appointmentPackage(tx,fresh,id);if(packageLink)await checkPackageBookingValidity(tx,fresh,packageLink.packageId,context.selected.endsAt,true);
     if (before.employeeId === input.employeeId && before.startsAt.getTime() === Date.parse(context.selected.startsAt) && before.roomId === context.selected.roomId) throw badRequest('reschedule_unchanged');
     const [after] = await tx.update(appointmentsTable).set({employeeId: input.employeeId, roomId: context.selected.roomId, requiresRoom:context.requiresRoom,
       startsAt: new Date(context.selected.startsAt), endsAt: new Date(context.selected.endsAt),
@@ -338,11 +352,11 @@ export async function getAppointment(actor: User, id: number) {
   const packageLink=await appointmentPackage(tx,actor,id);
   const packagePayment=packageLink&&!['completed','cancelled','no_show'].includes(a.status)?await packagePaymentCheck(tx,actor,packageLink.packageId):null;
   return {...row, billing:paymentSummary(a.chargePrice,a.productCharges,a.productChargesBasis), requiresRoom: a.requiresRoom, room: room ?? null, customerDetails,
-    packageId:packageLink?.packageId??null,packagePayment,
+    packageId:packageLink?.packageId??null,packagePayment,promotion:a.promotion,packageSummary:packageLink?await packageSessionSummary(tx,actor,packageLink.packageId):null,
     ...(canWriteNotes(actor, a) ? {notes: a.notes, notesLang: a.notesLang, serviceIntake:a.serviceIntake} : {}),
     // General read access does not imply access to provider/operational notes or free-text reasons.
     history: events.map((e) => canWriteNotes(actor, a) ? e : {...e, reason: ''}),
-    canEditNotes: canWriteNotes(actor, a), canReschedule: canReschedule(actor, a), canEditCharge:!packageLink&&!costFrozen&&canChangeCharge(actor,a)&&!['cancelled','no_show'].includes(a.status),
+    canEditNotes: canWriteNotes(actor, a), canReschedule: canReschedule(actor, a), canEditCharge:!packageLink&&!a.promotion&&!costFrozen&&canChangeCharge(actor,a)&&!['cancelled','no_show'].includes(a.status),
     nextActions: allowedTransitions(actor, a).filter((to) => to !== 'no_show' || a.startsAt.getTime() <= Date.now())};
   });
 }

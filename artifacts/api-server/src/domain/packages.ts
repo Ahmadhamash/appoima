@@ -28,6 +28,8 @@ const items = z
 export const packageInputSchema = z
   .object({
     name: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(2000).default(""),
+    usageRules: z.string().trim().max(2000).default(""),
     items,
     originalPrice: money,
     discount: money.default("0"),

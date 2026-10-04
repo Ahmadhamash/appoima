@@ -1,4 +1,4 @@
-import { activeBranch, activeEmployee } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee } from './branch-scope';
 import { and, eq, ne, lt, gte, inArray, or, sql } from 'drizzle-orm';
 import { branchesTable, servicesTable, usersTable, roomsTable, roomBlocksTable, roomServicesTable, serviceEmployeesTable, appointmentsTable, type User, type Appointment } from '@workspace/db';
 import { computeSlots, branchDate } from '../domain/scheduling-time';
@@ -22,7 +22,7 @@ export async function slotContext(tx: Executor, actor: User, input: Availability
   if (!assigned) throw badRequest('employee_not_eligible');
   const linkedRooms = await tx.select({id: roomsTable.id,extra:roomsTable.extra}).from(roomsTable)
     .innerJoin(roomServicesTable, and(eq(roomServicesTable.roomId, roomsTable.id), eq(roomServicesTable.clinicId, clinicId)))
-    .where(and(and(eq(roomsTable.clinicId, clinicId), activeBranch(roomsTable.branchId)), eq(roomsTable.branchId, branch.id), eq(roomsTable.status, 'available'), eq(roomServicesTable.serviceId, service.id)));
+    .where(and(and(eq(roomsTable.clinicId, clinicId), activeRoom()), eq(roomsTable.branchId, branch.id), eq(roomsTable.status, 'available'), eq(roomServicesTable.serviceId, service.id)));
   const compatible = linkedRooms.filter(room => roomHasEquipment(service.requiredEquipment, room.extra['equipment']));
   // Broad UTC envelope handles every supported UTC offset; room conflicts and employee conflicts
   // across OTHER branches are both included. Only this explicitly authorized reschedule is excluded.

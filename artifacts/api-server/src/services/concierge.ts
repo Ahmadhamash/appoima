@@ -1,7 +1,7 @@
 import { serviceCategories } from './setup';
 import { archiveDraftBranch } from '../domain/archive-draft-branch';
 import { archiveBranchInTx } from './branch-archive';
-import { activeBranch, activeEmployee } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee } from './branch-scope';
 import { gatheringReporter, type ProgressSink } from '../concierge/progress';
 import { previousSetupStep, canNavigateSetup, nextSetupStep, type JourneyStep } from '../domain/concierge-workflow';
 import { uploadedIdentity } from '../domain/concierge-file-identity';
@@ -95,7 +95,7 @@ export async function businessContext(actor:User) {
   const c=ensureManager(actor);const allowed=(p:Permission)=>hasPermission(actor,p);
   const branches=allowed('settings.read')?await db.select().from(branchesTable).where(and(eq(branchesTable.clinicId,c), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id)).limit(201):[];
   const services=allowed('services.read')?await db.select({id:servicesTable.id,name:servicesTable.name,nameLang:servicesTable.nameLang,branchId:servicesTable.branchId,durationMinutes:servicesTable.durationMinutes,price:servicesTable.price,currency:servicesTable.currency,requiresRoom:servicesTable.requiresRoom}).from(servicesTable).where(and(eq(servicesTable.clinicId,c), and(activeBranch(servicesTable.branchId), isNull(servicesTable.deletedAt)))).orderBy(asc(servicesTable.id)).limit(201):[];
-  const rooms=allowed('rooms.read')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,capacity:roomsTable.capacity}).from(roomsTable).where(and(eq(roomsTable.clinicId,c), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.id)).limit(201):[];
+  const rooms=allowed('rooms.read')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,capacity:roomsTable.capacity}).from(roomsTable).where(and(eq(roomsTable.clinicId,c), activeRoom())).orderBy(asc(roomsTable.id)).limit(201):[];
   const staff=allowed('employees.read')?await db.select({id:usersTable.id,name:usersTable.name,role:usersTable.role,branchId:usersTable.branchId,isActive:usersTable.isActive}).from(usersTable).where(and(eq(usersTable.clinicId,c), activeEmployee())).orderBy(asc(usersTable.id)).limit(201):[];
   const [appointmentCount]=allowed('appointments.read')?await db.select({count:sql<number>`count(*)::int`}).from(appointmentsTable).where(and(eq(appointmentsTable.clinicId,c), activeBranch(appointmentsTable.branchId))):[{count:null}];
   const [customerCount]=allowed('customers.read')?await db.select({count:sql<number>`count(*)::int`}).from(customersTable).where(and(eq(customersTable.clinicId,c), activeBranch(customersTable.branchId))):[{count:null}];
@@ -323,7 +323,7 @@ export async function conciergeServiceOptions(actor:User){
   actor=await freshManager(actor);const clinicId=ensureManager(actor);
   const branches=await db.select({id:branchesTable.id,name:branchesTable.name}).from(branchesTable).where(and(eq(branchesTable.clinicId,clinicId), activeBranch(branchesTable.id))).orderBy(asc(branchesTable.id)).limit(200);
   const employees=hasPermission(actor,'employees.read')?await db.select({id:usersTable.id,name:usersTable.name,branchId:usersTable.branchId}).from(usersTable).where(and(and(eq(usersTable.clinicId,clinicId), activeEmployee()),eq(usersTable.isActive,true))).orderBy(asc(usersTable.name)).limit(200):[];
-  const rooms=hasPermission(actor,'rooms.manage')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId))).orderBy(asc(roomsTable.name)).limit(200):[];
+  const rooms=hasPermission(actor,'rooms.manage')?await db.select({id:roomsTable.id,name:roomsTable.name,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId), activeRoom())).orderBy(asc(roomsTable.name)).limit(200):[];
   return {branches:branches.map(b=>({...b,key:`branch_${b.id}`})),employees,rooms,categories:hasPermission(actor,'services.read')?await serviceCategories(actor):[]};
 }
 export async function acceptServiceSuggestion(actor:User,revision:number,key:string){

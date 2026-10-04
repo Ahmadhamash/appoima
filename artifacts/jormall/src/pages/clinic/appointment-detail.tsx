@@ -80,6 +80,7 @@ export default function AppointmentDetailPage() {
         </dl>
       </section>
       <AppointmentActions key={`actions-${a.id}-${a.version}`} appointment={a}/>
+      {a.packageSummary&&<section className="space-y-2 rounded-xl border bg-primary/5 p-4 text-sm" data-testid="appointment-package-summary"><h2 className="font-semibold">{a.packageSummary.name}</h2><p>{lang==='ar'?'جلسة مشمولة بالباقة — بدون رسوم جلسة إضافية.':'Session covered by the package — no additional session fee.'}</p><p>{lang==='ar'?'الجلسات المتبقية':'Remaining sessions'}: {a.packageSummary.remaining} / {a.packageSummary.totalSessions}</p>{a.packageSummary.remaining===1&&['checked_in','in_service'].includes(a.status)&&<p role="status" className="font-semibold" data-testid="package-final-check-in">{lang==='ar'?'المريض حضر لجلسة الباقة الأخيرة.':'The patient checked in for the final package session.'}</p>}{a.packageSummary.remaining===0&&a.status==='completed'&&<p role="status" className="font-semibold" data-testid="package-final-completed">{lang==='ar'?'اكتملت الجلسة الأخيرة وانتهى رصيد الباقة.':'The final session is completed and the package is exhausted.'}</p>}{a.packageSummary.usageRules&&<p className="whitespace-pre-wrap">{a.packageSummary.usageRules}</p>}</section>}
       <AppointmentPrice key={`price-${a.id}-${a.version}`} appointment={a}/>
       <AppointmentPayment key={`payment-${a.id}-${a.version}`} appointment={a}/>
       <AppointmentLedger appointmentId={a.id} customerId={a.customerId}/>

@@ -22,8 +22,12 @@ export type PackageItem = {
   name: string;
   quantity: number;
   used?: number;
+  reserved?: number;
+  available?: number;
 };
 export type PackageTemplate = {
+  description: string;
+  usageRules: string;
   id: number;
   name: string;
   items: PackageItem[];
@@ -56,6 +60,7 @@ export type PaymentEntry = {
   actor: string;
 };
 export type Invoice = {
+  promotion?: PromotionSnapshot | null;
   id: number;
   appointmentId: number | null;
   name: string;
@@ -65,6 +70,10 @@ export type Invoice = {
   payments: PaymentEntry[];
 };
 export type PatientPackage = {
+  description: string;
+  usageRules: string;
+  reserved?: number;
+  available?: number;
   id: number;
   customerId: number;
   creator: string;
@@ -114,11 +123,11 @@ export function usePackageCatalog(enabled = true) {
     enabled,
   });
 }
-export function useCustomerBilling(customerId: number) {
+export function useCustomerBilling(customerId: number, enabled = true) {
   return useQuery({
     queryKey: ["billing", "customer", customerId],
     queryFn: () => api<Billing>(`/clinic/billing/customers/${customerId}`),
-    enabled: customerId > 0,
+    enabled: enabled && customerId > 0,
   });
 }
 export function useBillingCommand(onSaved?: (id: number) => void) {
@@ -181,3 +190,22 @@ export const statusNames: Record<string, [string, string]> = {
   refunded: ["مستردة", "Refunded"],
   partially_refunded: ["مستردة جزئيًا", "Partially refunded"],
 };
+
+export type OfferEligibility = { customerType: 'all' | 'new' | 'existing'; minimumSpend: string; maxPerPatient: number | null; conditions: string };
+export type PromotionSnapshot = { id: number; name: string; kind: 'percent' | 'amount' | 'price'; value: string; originalPrice: string; price: string; startsOn: string; endsOn: string; eligibility: OfferEligibility };
+export type PromotionalOffer = Omit<PromotionSnapshot, 'originalPrice' | 'price'> & { serviceIds: number[]; packageIds: number[]; isActive: boolean };
+export type BookingQuote = { originalPrice: string; price: string; promotion: PromotionSnapshot | null; usageRules: string; expiryDays: number | null; totalSessions: number; offers: (PromotionalOffer & { price: string; eligible: boolean; reason: string | null })[] };
+export type PackageNotice = { id: number; event: 'final_check_in' | 'final_completed'; appointmentId: number; packageId: number; customerId: number; customer: string; package: string; createdAt: string; read: boolean };
+export function useOfferCatalog(enabled = true) {
+  return useQuery({ queryKey: ['billing', 'offers'], queryFn: () => api<{ items: PromotionalOffer[]; canManage: boolean }>('/clinic/billing/offers'), enabled });
+}
+export function useBookingQuote(input: { customerId?: number; serviceId?: number; templateId?: number; offerId?: number }, enabled: boolean) {
+  return useQuery({ queryKey: ['billing', 'quote', input], queryFn: () => api<BookingQuote>('/clinic/billing/quote', { method: 'POST', body: input }), enabled: enabled && !!input.customerId && !!input.serviceId, staleTime: 0 });
+}
+export function usePackageNotifications(enabled: boolean) {
+  return useQuery({ queryKey: ['billing', 'notifications'], queryFn: () => api<{ unread: number; items: PackageNotice[] }>('/clinic/billing/notifications'), enabled, refetchInterval: 15000, refetchOnWindowFocus: true });
+}
+export type BookingPackageOptions={single:BookingQuote;packages:(PackageTemplate&{quote:BookingQuote})[];canPurchase:boolean};
+export function useBookingPackages(customerId:number|undefined,serviceId:number|undefined,enabled=true){
+  return useQuery({queryKey:['billing','booking-options',customerId,serviceId],queryFn:()=>api<BookingPackageOptions>('/clinic/billing/booking-options',{method:'POST',body:{customerId,serviceId}}),enabled:enabled&&!!customerId&&!!serviceId,staleTime:0,refetchOnWindowFocus:true});
+}

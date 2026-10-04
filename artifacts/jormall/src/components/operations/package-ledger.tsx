@@ -9,7 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { FormField, FormError } from "@/components/form-field";
-import { SelectField, CheckField } from "@/components/setup/controls";
+import { SelectField, CheckField, TextareaField } from "@/components/setup/controls";
 import { useI18n, useErrorMessage } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { can } from "@/lib/setup-api";
@@ -161,11 +161,12 @@ export function PackageEditor({
     errorMessage = useErrorMessage(),
     catalog = usePackageCatalog();
   const [name, setName] = useState(template?.name ?? ""),
+    [description,setDescription]=useState(template?.description??""),
+    [usageRules,setUsageRules]=useState(template?.usageRules??""),
     [items, setItems] = useState<PackageItem[]>(template?.items ?? []),
     [price, setPrice] = useState(template?.originalPrice ?? "0"),
     [discount, setDiscount] = useState(template?.discount ?? "0"),
-    [interval, setInterval] = useState(template?.intervalDays ?? 7),
-    [expiry, setExpiry] = useState(template?.expiryDays?.toString() ?? ""),
+    [expiry, setExpiry] = useState(template ? template.expiryDays?.toString() ?? "" : "30"),
     [plan, setPlan] = useState<Plan>(template?.plan ?? { ...emptyPlan }),
     [depositPolicy, setDepositPolicy] = useState("refundable");
   const command = useBillingCommand(() => {
@@ -180,8 +181,8 @@ export function PackageEditor({
             ? "إضافة باقة للمريض"
             : "Assign patient package"
           : ar
-            ? "باقة أو عرض جديد"
-            : "New package or offer"
+            ? template ? "تعديل الباقة" : "باقة جديدة"
+            : template ? "Edit package" : "New package"
       }
       onClose={onClose}
     >
@@ -198,26 +199,26 @@ export function PackageEditor({
                 })),
                 originalPrice: price,
                 discount,
-                intervalDays: interval,
                 plan,
                 depositPolicy,
               }
             : {
                 name,
+                description,
+                usageRules,
                 items: items.map(({ serviceId, quantity }) => ({
                   serviceId,
                   quantity,
                 })),
                 originalPrice: price,
                 discount,
-                intervalDays: interval,
                 expiryDays: expiry ? Number(expiry) : null,
                 plan,
               };
           command.mutate({
             path: customerId
               ? `/clinic/billing/customers/${customerId}/packages`
-              : "/clinic/billing/packages",
+              : template ? `/clinic/billing/packages/${template.id}/edit` : "/clinic/billing/packages",
             body,
           });
         }}
@@ -225,7 +226,7 @@ export function PackageEditor({
         <fieldset disabled={command.isPending} className="space-y-4">
           {!customerId && (
             <FormField
-              label={ar ? "اسم الباقة / العرض" : "Package / offer name"}
+              label={ar ? "اسم الباقة" : "Package name"}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -233,6 +234,7 @@ export function PackageEditor({
               testId="package-name"
             />
           )}
+          {!customerId&&<TextareaField label={ar?'وصف الباقة':'Package description'} value={description} onChange={setDescription} maxLength={2000} testId="package-description"/>}
           <div className="space-y-3">
             <p className="font-medium">
               {ar ? "الخدمات وعدد جلساتها" : "Services and sessions"}
@@ -336,19 +338,10 @@ export function PackageEditor({
               onChange={(e) => setDiscount(e.target.value)}
               testId="package-discount"
             />
-            <FormField
-              label={ar ? "بين الجلسات (أيام)" : "Days between sessions"}
-              type="number"
-              min="1"
-              max="365"
-              value={interval}
-              onChange={(e) => setInterval(Number(e.target.value))}
-              testId="package-interval"
-            />
             {!customerId && (
               <FormField
                 label={
-                  ar ? "صلاحية بالأيام (اختياري)" : "Valid days (optional)"
+                  ar ? "الصلاحية من تاريخ الشراء (أيام)" : "Validity from purchase (days)"
                 }
                 type="number"
                 min="1"
@@ -356,6 +349,7 @@ export function PackageEditor({
                 value={expiry}
                 onChange={(e) => setExpiry(e.target.value)}
                 testId="package-expiry"
+                hint={ar?'اتركه فارغًا لباقة بلا انتهاء. تُحجز كل جلسة بشكل مستقل.':'Leave blank for no expiry. Each session is booked separately.'}
               />
             )}
           </div>
@@ -367,6 +361,7 @@ export function PackageEditor({
             · {items.reduce((n, i) => n + i.quantity, 0)}{" "}
             {ar ? "جلسة" : "sessions"}
           </p>
+          {!customerId&&<TextareaField label={ar?'قواعد الاستخدام':'Usage rules'} value={usageRules} onChange={setUsageRules} maxLength={2000} testId="package-rules" hint={ar?'الخدمات وعدد الجلسات والصلاحية تُطبق تلقائيًا. اكتب أي شروط إضافية لمراجعتها عند الحجز.':'Services, session balances and validity are enforced automatically. Add other terms to review at booking.'}/>}
           <PlanFields value={plan} onChange={setPlan} />
           {customerId && (
             <SelectField
@@ -403,6 +398,8 @@ export function PackageEditor({
               disabled={
                 !items.length ||
                 items.some((i) => !i.serviceId) ||
+                new Set(items.map(i=>i.serviceId)).size!==items.length ||
+                Number(discount)>Number(price) ||
                 !price ||
                 !discount
               }
@@ -411,7 +408,7 @@ export function PackageEditor({
               {ar ? "حفظ الباقة" : "Save package"}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>
-              {ar ? "رجوع" : "Back"}
+              {ar ? "إلغاء" : "Cancel"}
             </Button>
           </div>
         </fieldset>
@@ -824,12 +821,14 @@ function PackageCard({
           {statusNames[p.status]?.[ar ? 0 : 1] ?? p.status}
         </span>
       </div>
+      {p.description&&<p className="whitespace-pre-wrap text-sm">{p.description}</p>}
+      {p.usageRules&&<p className="whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{p.usageRules}</p>}
       <div className="rounded-xl border p-3">
         <p className="font-semibold" data-testid={`package-sessions-${p.id}`}>
           {p.used} / {p.totalSessions} {ar ? "جلسات مستخدمة" : "sessions used"}
         </p>
         <p className="text-sm">
-          {p.remaining} {ar ? "جلسات متبقية" : "sessions remaining"}
+          {ar?'المشتراة':'Purchased'}: {p.totalSessions} · {ar?'المحجوزة':'Reserved'}: {p.reserved??0} · {ar?'المتاحة':'Available'}: {p.available??p.remaining}
         </p>
         <progress
           className="mt-2 h-2 w-full"
@@ -838,7 +837,7 @@ function PackageCard({
         />
         {p.items.map((item) => (
           <p key={item.serviceId} className="text-xs text-muted-foreground">
-            {item.name}: {item.used ?? 0} / {item.quantity}
+            {item.name}: {ar?'المشتراة':'Purchased'} {item.quantity} · {ar?'المستخدمة':'Used'} {item.used??0} · {ar?'المحجوزة':'Reserved'} {item.reserved??0} · {ar?'المتاحة':'Available'} {item.available??item.quantity-(item.used??0)}
           </p>
         ))}
       </div>
@@ -895,7 +894,7 @@ function PackageCard({
           <Button
             variant="outline"
             size="sm"
-            disabled={p.status !== "active" || p.remaining <= 0}
+            disabled={p.status !== "active" || (p.available??p.remaining) <= 0}
             onClick={() => setUseOpen(true)}
             data-testid={`package-use-session-${p.id}`}
           >
@@ -905,7 +904,7 @@ function PackageCard({
             className="rounded-lg border px-3 py-2 text-xs"
             href={`/appointments/new?customerId=${p.customerId}&packageId=${p.id}`}
           >
-            {ar ? "حجز جلسات" : "Book sessions"}
+            {ar ? "حجز جلسة" : "Book a session"}
           </Link>
           {canOverride && ["active", "frozen"].includes(p.status) && (
             <>

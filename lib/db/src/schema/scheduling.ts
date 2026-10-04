@@ -1,3 +1,4 @@
+import type { PromotionSnapshot } from './promotions';
 import type { IntakeSnapshot } from '@workspace/service-definition';
 import { sql } from 'drizzle-orm';
 import { pgTable, pgEnum, serial, integer, text, timestamp, boolean, jsonb, numeric, index, unique, foreignKey, check } from 'drizzle-orm/pg-core';
@@ -21,6 +22,7 @@ export const appointmentsTable = pgTable('appointments', {
   chargePrice: numeric('charge_price', { precision: 12, scale: 3 }),
   chargeCurrency: text('charge_currency'),
   productCharges: jsonb('product_charges').$type<AppointmentProductCharge[]>().notNull().default([]),
+  promotion: jsonb('promotion').$type<PromotionSnapshot | null>(),
   productChargesBasis: text('product_charges_basis').$type<'planned'|'actual'|'manual'>().notNull().default('planned'),
   notesLang: languageEnum('notes_lang').notNull().default('en'), createdBy: integer('created_by').notNull(),
   version: integer('version').notNull().default(1), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),

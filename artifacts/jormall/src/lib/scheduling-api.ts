@@ -25,6 +25,7 @@ export type AppointmentSummary = {
 };
 export type Reservation = {startsAt: string; endsAt: string; employeeId: number; roomId: number|null};
 export type AppointmentDetail = AppointmentSummary & {
+  packageSummary?:{id:number;name:string;remaining:number;totalSessions:number;usageRules:string;expiresAt:string|null}|null;
   packageId?:number|null;packagePayment?:{warning:boolean;blocking:boolean;missing:string;sessionNumber:number}|null;
   serviceIntake?: IntakeSnapshot|null; appointmentType:'standard'|'follow_up';followUpOfId:number|null;chargePrice:string|null;chargeCurrency:string|null;canEditCharge:boolean;
   notes?: string; notesLang?: 'en'|'ar'; requiresRoom: boolean; room: Option|null; nextActions: Status[]; canReschedule: boolean; canEditNotes: boolean;

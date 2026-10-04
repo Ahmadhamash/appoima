@@ -43,6 +43,7 @@ export const roomsTable = pgTable("rooms", {
   nameLang: languageEnum("name_lang").notNull().default("en"),
   capacity: integer("capacity").notNull().default(1),
   status: roomStatusEnum("status").notNull().default("available"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   extra: jsonb("extra").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

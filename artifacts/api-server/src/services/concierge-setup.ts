@@ -1,4 +1,4 @@
-import { activeBranch, activeEmployee } from './branch-scope';
+import { activeRoom, activeBranch, activeEmployee } from './branch-scope';
 /** Allowlisted setup apply. Runs inside ONE caller-owned clinic-locked DB transaction. */
 import { normalizeServiceName } from '@workspace/service-definition';
 import { createHash } from 'node:crypto';
@@ -73,7 +73,7 @@ export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Recor
     }
     if(s.roomIds?.length){
       if(!hasPermission(actor,'rooms.manage'))throw forbidden();
-      const rooms=await tx.select({id:roomsTable.id,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)));
+      const rooms=await tx.select({id:roomsTable.id,branchId:roomsTable.branchId,status:roomsTable.status}).from(roomsTable).where(and(eq(roomsTable.clinicId,clinicId), activeRoom()));
       for(const id of s.roomIds){const room=rooms.find(r=>r.id===id);if(!room||room.status!=='available'||!compatibleBranch(input.branchId,room.branchId))throw badRequest('concierge_invalid_reference');}
       await tx.insert(roomServicesTable).values(s.roomIds.map(roomId=>({clinicId,serviceId:created!.id,roomId})));
     }
@@ -82,7 +82,7 @@ export async function applyConciergeSetup(tx:Tx,actor:User,raw:Draft,basis:Recor
   for(const r of draft.rooms){
     const branchId=resolveBranch(r.branchKey);if(!branchId)throw badRequest('concierge_invalid_reference');
     const input=roomSchema.parse({name:r.name,nameLang:language(r),branchId,capacity:r.capacity,status:'available',serviceIds:resolveServices(r.serviceKeys!,branchId)});
-    const [duplicate]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeBranch(roomsTable.branchId)),eq(roomsTable.branchId,branchId),sql`lower(trim(${roomsTable.name})) = lower(${input.name})`)).limit(1);if(duplicate)throw conflict('concierge_duplicate');
+    const [duplicate]=await tx.select({id:roomsTable.id}).from(roomsTable).where(and(and(eq(roomsTable.clinicId,clinicId), activeRoom()),eq(roomsTable.branchId,branchId),sql`lower(trim(${roomsTable.name})) = lower(${input.name})`)).limit(1);if(duplicate)throw conflict('concierge_duplicate');
     const {serviceIds,...fields}=input;const [created]=await tx.insert(roomsTable).values({...fields,clinicId}).returning({id:roomsTable.id});
     if(serviceIds.length)await tx.insert(roomServicesTable).values(serviceIds.map(serviceId=>({clinicId,roomId:created!.id,serviceId})));
     out.rooms!.push(created!.id);await audit('room.created','room',created!.id);
