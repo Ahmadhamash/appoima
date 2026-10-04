@@ -23,7 +23,8 @@ beforeAll(async()=>{
 });
 async function room(name:string){const r=await manager.post('/api/clinic/rooms').send({name,nameLang:'en',status:'available',branchId,serviceIds:[serviceId],extra:{description:'Original'},capacity:2});expect(r.status,JSON.stringify(r.body)).toBe(201);return r.body.item.id as number;}
 const remove=(id:number,client=manager)=>client.delete(`/api/clinic/rooms/${id}`).send({confirmed:true});
-async function appointment(roomId:number,status:'pending'|'confirmed'|'checked_in'|'in_service'|'completed'|'cancelled',past=false){const startsAt=past?new Date(Date.now()-2*86400000):future;return (await db.insert(appointmentsTable).values({clinicId,branchId,roomId,serviceId,customerId,employeeId,createdBy:managerId,status,startsAt,endsAt:new Date(startsAt.getTime()+30*60000),durationMinutes:30,requiresRoom:true}).returning())[0]!;}
+let pastAppointmentOffset=0;
+async function appointment(roomId:number,status:'pending'|'confirmed'|'checked_in'|'in_service'|'completed'|'cancelled',past=false){const startsAt=past?new Date(Date.now()-2*86400000-(pastAppointmentOffset++)*3600000):future;return (await db.insert(appointmentsTable).values({clinicId,branchId,roomId,serviceId,customerId,employeeId,createdBy:managerId,status,startsAt,endsAt:new Date(startsAt.getTime()+30*60000),durationMinutes:30,requiresRoom:true}).returning())[0]!;}
 describe('Room editing, confirmed deletion and booking protection',()=>{
  it('requires confirmation and permissions, refreshes settings and excludes removed rooms',async()=>{
   const id=await room('Editable');
@@ -43,6 +44,7 @@ describe('Room editing, confirmed deletion and booking protection',()=>{
   for(const status of ['checked_in','in_service'] as const){const id=await room('Overdue '+status),a=await appointment(id,status,true);expect((await remove(id)).body.error).toBe('room_has_appointments');await db.update(appointmentsTable).set({status:'completed'}).where(eq(appointmentsTable.id,a.id));expect((await remove(id)).status).toBe(200);}
  });
  it('serializes deletion with booking so an appointment never reserves a deleted room',async()=>{
+  await db.update(roomsTable).set({status:'maintenance'}).where(eq(roomsTable.clinicId,clinicId));
   const id=await room('Race'),[booking,deletion]=await Promise.all([manager.post('/api/clinic/appointments').send({branchId,customerId,serviceId,employeeId,startsAt:future.toISOString(),idempotencyKey:randomUUID()}),remove(id)]);
   expect(booking.status===201&&deletion.status===200).toBe(false);
   if(booking.status===201)expect(deletion.body.error).toBe('room_has_appointments');else expect(deletion.status).toBe(200);
