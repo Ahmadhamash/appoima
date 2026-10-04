@@ -31,7 +31,7 @@ async function fits(page,label){
    assert.equal(await page.locator('.jc-service-tree .jc-service-group').count(),2);
    assert.equal(await page.locator('.jc-service-tree .jc-service-batch-row').count(),2);
    await page.getByTestId('service-category-service_1').fill('نحت الجسم');await page.getByTestId('service-category-service_1').press('Enter');
-   await page.getByTestId('service-category-service_2-open-options').click();
+   await page.getByTestId('service-group-toggle-service_2').click();await page.getByTestId('service-category-service_2-open-options').click();
    const options=page.getByTestId('service-category-service_2-options');await options.getByRole('option',{name:'نحت الجسم',exact:true}).click();
    assert.equal(await page.locator('.jc-service-tree .jc-service-group').count(),1,'Same main service must group its subservices together');
    assert.equal(await page.getByTestId('service-name-service_2').inputValue(),'Session 2');

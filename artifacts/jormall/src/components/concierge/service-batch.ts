@@ -75,23 +75,35 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
   }
   const pager = setupPager(selection, parts, language, 'service-bulk-selection-pages'); if (pager) selection.prepend(pager);
  };
- let activeKey = draft.services[0]?.key;
+ let activeKey: string | undefined = draft.services[0]?.key;
+ // Unnamed main services stay separate while the manager is entering their names.
+ const unnamedGroups = new Map<string, string>();
+ let openGroup: (key?: string) => void = () => {};
  const renderServices = (target = activeKey) => {
   root.querySelector('[data-testid="concierge-service-pages"]')?.remove(); rows.replaceChildren();
-  const groups = new Map<string, ServiceDraft[]>(); for (const service of draft.services) { const name = section(service); groups.set(name, [...groups.get(name) ?? [], service]); }
-  const cards: HTMLElement[] = [], keys: string[] = [], sections: HTMLElement[] = [];
-  for (const [groupName, services] of groups) {
+  const groups = new Map<string, ServiceDraft[]>(); for (const service of draft.services) { const key = service.category ? section(service) : unnamedGroups.get(service.key) ?? service.key; groups.set(key, [...groups.get(key) ?? [], service]); }
+  const views: { services: ServiceDraft[]; group: HTMLElement; toggle: HTMLButtonElement; mainField: HTMLElement; title: HTMLElement; add: HTMLButtonElement; children: HTMLElement }[] = [];
+  let groupIndex = 0;
+  for (const services of groups.values()) {
+   const groupName = section(services[0]!), groupNumber = ++groupIndex;
    const group = el('section', 'jc-service-group'); group.dataset.testid = 'concierge-service-group'; group.dataset.groupName = groupName;
-   const groupNumber=Array.from(groups.keys()).indexOf(groupName)+1;
    const heading=el('div','jc-service-group-heading'),groupTitle=el('h3','',w('الخدمة الرئيسية','Main service'));
+   const collapsedTitle = el('span', 'jc-service-group-name', groupName);
+   const toggle = button('', () => openGroup(group.dataset.expanded === 'true' ? undefined : services[0]!.key), 'jc-service-group-toggle', `service-group-toggle-${services[0]!.key}`);
+   const arrow = el('span', 'jc-service-group-arrow', '⌄'); arrow.setAttribute('aria-hidden', 'true');
+   toggle.append(el('span', 'jc-service-main-index', String(groupNumber)), collapsedTitle, arrow);
    const main=createCategoryInput({id:`service-category-${services[0]!.key}`,value:services[0]!.category??'',language,options:categoryOptions,onChange:value=>{
     for(const service of services){service.category=value.trim()||null;definition(service).section=value.trim()||GENERIC[ar?0:1]!;}
-    group.dataset.groupName=value.trim();refresh();
+    group.dataset.groupName=value.trim();collapsedTitle.textContent=value.trim()||w('خدمة رئيسية جديدة','New main service');toggle.setAttribute('aria-label',w(`الخدمة الرئيسية ${groupNumber}: ${collapsedTitle.textContent}`,`Main service ${groupNumber}: ${collapsedTitle.textContent}`));refresh();
     for(const service of services){const row=rows.querySelector<HTMLElement>(`[data-testid="concierge-service-${service.key}"]`),done=ready(service);if(row){row.dataset.ready=String(done);const badge=row.querySelector<HTMLElement>('.jc-service-state');if(badge){badge.textContent=done?w('جاهزة','Ready'):w('تحتاج إكمال','Needs details');badge.dataset.ready=String(done);}}}
    },onCommit:name=>{rememberCategory(name);if(document.activeElement?.closest('.category-picker')===main.node&&name!==groupName)renderServices();}});
    const mainField=el('div','jc-service-main-field');mainField.append(groupTitle,main.node);
-   heading.append(el('span','jc-service-main-index',String(groupNumber)),mainField,el('span','jc-service-child-count',w(`${services.length} خدمات فرعية`,`${services.length} subservices`)),button(w('+ خدمة فرعية','+ Subservice'),()=>addService(services[0]),'jc-button',`service-sub-add-${services[0]!.key}`));group.append(heading);
-   const children=el('div','jc-service-tree-children');group.append(children);
+   const add=button(w('+ خدمة فرعية','+ Subservice'),()=>addService(services[0]),'jc-button',`service-sub-add-${services[0]!.key}`);
+   heading.append(toggle,mainField,el('span','jc-service-child-count',w(`${services.length} خدمات فرعية`,`${services.length} subservices`)),add);group.append(heading);
+   const children=el('div','jc-service-tree-children');children.id=`service-group-children-${services[0]!.key}`;group.append(children);
+   toggle.setAttribute('aria-controls', children.id);
+   toggle.setAttribute('aria-label', w(`الخدمة الرئيسية ${groupNumber}: ${groupName}`, `Main service ${groupNumber}: ${groupName}`));
+   views.push({services,group,toggle,mainField,title:collapsedTitle,add,children});
    for (const service of services) {
     const row = el('article', 'jc-service-batch-row'); row.dataset.testid = `concierge-service-${service.key}`;
     const title = el('div', 'jc-service-batch-title'), titleText = el('strong'), badge = el('span', 'jc-service-state'); title.append(el('span', 'jc-service-index', `${groupNumber}.${services.indexOf(service)+1}`), titleText, badge);
@@ -99,7 +111,7 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
      if (service.name && !window.confirm(w('حذف هذه الخدمة؟', 'Remove this service?'))) return;
      draft.services = draft.services.filter(item => item.key !== service.key); selected.delete(service.key);
      for (const room of draft.rooms) room.serviceKeys = room.serviceKeys?.filter(key => key !== service.key) ?? null; for (const person of draft.staff) person.serviceKeys = person.serviceKeys?.filter(key => key !== service.key) ?? null;
-     renderSelection(); renderServices(draft.services[0]?.key);
+     renderSelection(); renderServices(services.find(item=>item.key!==service.key)?.key ?? draft.services[0]?.key);
     }, 'jc-link', `service-remove-${service.key}`)); row.append(title);
     const name = el('input'), duration = el('input'), price = el('input'), room = el('select');
     name.value = service.name ?? ''; name.maxLength = 120; name.dataset.testid = `service-name-${service.key}`; name.placeholder = w('مثال: ليزر الجسم كامل', 'For example: Full body laser');
@@ -123,18 +135,28 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
     }
     const followUp = el('label', 'jc-import-follow-up'), check = el('input'); check.type = 'checkbox'; check.checked = service.followUpEnabled ?? false; check.dataset.testid = `service-follow-up-${service.key}`; check.onchange = () => { service.followUpEnabled = check.checked; refresh(); }; followUp.append(check, document.createTextNode(w('رتوش / موعد متابعة — السعر الافتراضي صفر', 'Retouch / follow-up — default price zero')));
     followUp.classList.add('jc-service-follow-up'); placements.append(followUp);
-    const fields=el('div','jc-service-table-fields');fields.append(...identity.children,...details.children,...placements.children);
-    row.append(fields);update();cards.push(row);keys.push(service.key);children.append(row);
+    const fields=el('div','jc-service-table-fields');fields.dataset.hasBranch=String(draft.branches.length>1);fields.append(...identity.children,...details.children,...placements.children);
+    row.append(fields);update();children.append(row);
    }
-   sections.push(group); rows.append(group);
+   rows.append(group);
   }
-  if (!cards.length) rows.append(el('p', 'jc-room-empty', w('أضف خدمة واحدة على الأقل للمتابعة.', 'Add at least one service to continue.')));
-  activeKey=target;
+  if (!draft.services.length) rows.append(el('p', 'jc-room-empty', w('أضف خدمة واحدة على الأقل للمتابعة.', 'Add at least one service to continue.')));
+  openGroup = key => {
+   activeKey=key;
+   for(const view of views){
+    const expanded=view.services.some(service=>service.key===key);
+    view.group.dataset.expanded=String(expanded);view.toggle.setAttribute('aria-expanded',String(expanded));
+    view.children.hidden=view.mainField.hidden=view.add.hidden=!expanded;view.title.hidden=expanded;
+   }
+   const opened=views.find(view=>view.group.dataset.expanded==='true');
+   if(opened) rows.scrollTop+=opened.group.getBoundingClientRect().top-rows.getBoundingClientRect().top;
+  };
+  openGroup(draft.services.some(service=>service.key===target)?target:draft.services[0]?.key);
   refresh();
  };
  const addService = (parent?: ServiceDraft) => {
   if (total() >= 50) { setupNotice(language, w('وصلت للحد المتاح', 'Setup limit reached'), w('وصلت للحد الأقصى لبيانات الإعداد. تقدر تضيف خدمات أخرى بعد إكماله.', 'The setup data limit is reached. Add more services after completing setup.')); return; }
-  const service=newService(parent);draft.services.push(service);renderSelection();renderServices(service.key);root.querySelector<HTMLInputElement>(`[data-testid="${parent?'service-name-':'service-category-'}${service.key}"]`)?.focus();
+  const service=newService(parent);if(parent&&!parent.category)unnamedGroups.set(service.key,unnamedGroups.get(parent.key)??parent.key);draft.services.push(service);renderSelection();renderServices(service.key);root.querySelector<HTMLInputElement>(`[data-testid="${parent?'service-name-':'service-category-'}${service.key}"]`)?.focus();
  };
  bulk.append(button(w('طبّق على الخدمات المحددة', 'Apply to selected services'), () => {
   if (!selected.size) { setupNotice(language, w('اختر الخدمات أولًا', 'Choose services first'), w('حدد الخدمات اللي إلها نفس التفاصيل.', 'Select the services that share these details.')); return; }
@@ -159,5 +181,6 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
  }, 'jc-button jc-primary', 'concierge-service-batch-save');
  toolbar.append(progress, button(w('+ خدمة رئيسية', '+ Main service'), () => addService(), 'jc-button', 'concierge-service-add'));
  const actions = el('div', 'jc-service-batch-actions'); if (back) actions.append(button(w('رجوع', 'Back'), () => void back(draft), 'jc-button', 'concierge-service-batch-back')); actions.append(saveButton);
- root.append(toolbar, bulk, rows, actions); renderSelection(); renderServices(); return root;
+ const tools=el('div','jc-service-tools');tools.append(toolbar,bulk);
+ root.append(tools, rows, actions); renderSelection(); renderServices(); return root;
 }
