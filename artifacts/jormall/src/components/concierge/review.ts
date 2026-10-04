@@ -18,18 +18,20 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
  function table(title:string,headers:string[],rows:{key?:string;cells:Cell[]}[]){
   root.append(el('h3','',title));const scroll=el('div','jc-review-table-scroll'),node=el('table','jc-review-table'),caption=el('caption','sr-only',title),head=el('thead'),heading=el('tr'),body=el('tbody');
   for(const label of headers){const th=el('th','',label);th.scope='col';heading.append(th);}head.append(heading);
-  for(const row of rows){const line=el('tr');if(row.key)line.dataset.testid=`draft-${row.key}`;for(const value of row.cells){const cell=el('td');if(value instanceof HTMLElement)cell.append(value);else cell.textContent=value===null||value===undefined||value===''?'—':String(value);line.append(cell);}body.append(line);}
+  for(const row of rows){const line=el('tr');if(row.key)line.dataset.testid=`draft-${row.key}`;for(const [index,value] of row.cells.entries()){const cell=el('td',headers[0]==='#'&&index===0?'jc-review-number':'');if(value instanceof HTMLElement)cell.append(value);else{const content=el('bdi','',value===null||value===undefined||value===''?'—':String(value));if(typeof value==='string'&&/^#[a-f0-9]{6}$/i.test(value))content.dir='ltr';cell.append(content);}line.append(cell);}body.append(line);}
   if(!rows.length){const row=el('tr'),cell=el('td','',w('لم تتم إضافة عناصر','No records added'));cell.colSpan=headers.length;row.append(cell);body.append(row);}
   node.append(caption,head,body);scroll.append(node);root.append(scroll);
  }
  const dayLabels:Record<typeof DAYS[number],[string,string]>={mon:['الاثنين','Monday'],tue:['الثلاثاء','Tuesday'],wed:['الأربعاء','Wednesday'],thu:['الخميس','Thursday'],fri:['الجمعة','Friday'],sat:['السبت','Saturday'],sun:['الأحد','Sunday']};
- function hours(week:Week|null|undefined,breaks=false){const list=el('ul','jc-review-hours');for(const day of DAYS){const ranges=week?.[day]??[],line=el('li');line.append(el('b','',dayLabels[day][ar?0:1]+': '),el('span','',ranges.length?ranges.map(r=>`${formatClockTime(r.open)} – ${formatClockTime(r.close)}`).join('، '):breaks?w('بدون استراحة','No breaks'):w('مغلق','Closed')));list.append(line);}return list;}
+ function hours(week:Week|null|undefined,breaks=false){const list=el('ul','jc-review-hours');for(const day of DAYS){const ranges=week?.[day]??[],line=el('li'),value=el('bdi','',ranges.length?ranges.map(r=>`${formatClockTime(r.open)} – ${formatClockTime(r.close)}`).join('، '):breaks?w('بدون استراحة','No breaks'):w('مغلق','Closed'));if(ranges.length)value.dir='ltr';line.append(el('b','',dayLabels[day][ar?0:1]+': '),value);list.append(line);}return list;}
  if(profile){const logo=profile.logoDataUrl?el('img'):null;if(logo){logo.src=profile.logoDataUrl!;logo.alt=w('شعار المركز','Clinic logo');logo.className='jc-review-logo';}
-  table(w('هوية المركز','Clinic identity'),[w('المعلومة','Field'),w('البيانات','Details')],[
-   {cells:[w('الاسم بالعربية','Arabic name'),profile.nameAr]},{cells:[w('الاسم بالإنجليزية','English name'),profile.nameEn]},
-   {cells:[w('الوصف بالعربية','Arabic subtitle'),profile.subtitleAr]},{cells:[w('الوصف بالإنجليزية','English subtitle'),profile.subtitleEn]},
-   {cells:[tr('phone'),profile.phone]},{cells:[tr('email'),profile.email]},{cells:[w('العنوان','Address'),profile.address]},{cells:[w('الموقع الإلكتروني','Website'),link(profile.website)]},
-   {cells:[w('اللون الرئيسي','Primary color'),profile.primaryColor]},{cells:[w('اللون الإضافي','Accent color'),profile.accentColor]},{cells:[w('الشعار','Logo'),logo]},
+  table(w('هوية المركز','Clinic identity'),[w('المعلومة','Field'),w('البيانات','Details'),w('المعلومة','Field'),w('البيانات','Details')],[
+   {cells:[w('الاسم بالعربية','Arabic name'),profile.nameAr,w('الاسم بالإنجليزية','English name'),profile.nameEn]},
+   {cells:[w('الوصف بالعربية','Arabic subtitle'),profile.subtitleAr,w('الوصف بالإنجليزية','English subtitle'),profile.subtitleEn]},
+   {cells:[tr('phone'),profile.phone,tr('email'),profile.email]},
+   {cells:[w('العنوان','Address'),profile.address,w('الموقع الإلكتروني','Website'),link(profile.website)]},
+   {cells:[w('اللون الرئيسي','Primary color'),profile.primaryColor,w('اللون الإضافي','Accent color'),profile.accentColor]},
+   {cells:[w('الشعار','Logo'),logo,'','']},
   ]);
  }
  table(tr('branches'),['#',tr('recordName'),w('موقع الفرع','Branch address'),w('رابط الخريطة','Map link'),w('المنطقة الزمنية','Time zone'),tr('openingHours')],draft.branches.map((b,index)=>({key:b.key,cells:[index+1,b.name,b.address,link(b.mapUrl),b.timeZone??'Asia/Amman',hours(b.openingHours)]})));
@@ -45,9 +47,12 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
   const account=el('div','jc-field'),label=el('label','',w('كلمة مرور أولية (10 أحرف على الأقل)','Initial password (at least 10 characters)'));label.htmlFor=password.id;account.append(label,password);
   const permissions=el('div','jc-permissions'),checks=new Map<string,HTMLInputElement>(),defaults=data.staffAccess.find(s=>s.key===person.key)?.permissions??[];
   for(const permission of data.grantablePermissions){const [area,operation]=permission.split('.'),label=el('label','jc-check'),check=el('input');check.type='checkbox';check.checked=defaults.includes(permission);check.dataset.testid=`access-${person.key}-${permission}`;label.append(check,el('span','',`${tr(area!)} · ${tr(operation==='manage'?'managePermission':'readPermission')}`));checks.set(permission,check);permissions.append(label);}
-  credentials.set(person.key,{password,checks});return {key:person.key,cells:[index+1,person.name,person.email,person.phone,person.jobTitle,person.role?tr(person.role):'—',staffHours(person),serviceNames(person.serviceKeys),permissions,account]};
+  const identity=el('div','jc-review-cell-stack');identity.append(el('strong','',person.name||'—'),el('span','',person.jobTitle||'—'),el('span','',person.role?tr(person.role):'—'));
+  const contact=el('div','jc-review-cell-stack');contact.append(el('bdi','',person.email||'—'),el('bdi','',person.phone||'—'));
+  const access=el('div','jc-review-cell-stack');access.append(permissions,account);
+  credentials.set(person.key,{password,checks});return {key:person.key,cells:[index+1,identity,contact,staffHours(person),serviceNames(person.serviceKeys),access]};
  });
- table(tr('staff'),['#',tr('recordName'),tr('email'),tr('phone'),tr('jobTitle'),tr('role'),w('الفروع والدوام والاستراحات','Branches, working hours and breaks'),tr('serviceKeys'),tr('permissions'),tr('accountReview')],staffRows);
+ table(tr('staff'),['#',w('الموظف والمسمى والدور','Staff, job title and role'),w('البريد والهاتف','Email and phone'),w('الفروع والدوام والاستراحات','Branches, working hours and breaks'),tr('serviceKeys'),w('الحساب والصلاحيات','Account and permissions')],staffRows);
  if(data.issues.length){const message=el('p','jc-error',w('راجع الحقول الناقصة في قسمها من شريط الخطوات قبل اعتماد الإعداد.','Review missing fields in their section using the step bar before confirming setup.'));message.setAttribute('role','alert');root.append(message);}
  const total=KINDS.reduce((n,k)=>n+draft[k].length,0),confirmation=el('label','jc-check'),confirm=el('input');confirm.type='checkbox';confirm.dataset.testid='concierge-confirm';confirmation.append(confirm,el('span','',w('راجعت البيانات وأوافق على حفظ الإعداد.','I reviewed the details and approve this setup.')));root.append(confirmation);
  const actions=el('div','jc-review-actions'),apply=button(w('اعتمد الإعداد','Confirm setup'),()=>{
