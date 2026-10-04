@@ -42,9 +42,9 @@ const en = {
   enableSound: "Enable voice playback",
   sound: "Hear this message",
   voiceUnavailable:
-    "Voice is not configured yet. Add the OpenAI key on the server. Manual setup is available now.",
+    "Voice is currently unavailable. You can continue entering clinic details by typing.",
   aiUnavailable:
-    "Conversational setup needs an OpenAI server key. Manual setup still works.",
+    "The assistant is currently unavailable. You can continue entering clinic details manually.",
   setupStatus: "Provider configuration is not a live connection test.",
   continueText: "Continue without the microphone",
   send: "Send",
@@ -233,9 +233,9 @@ const ar: Record<Key, string> = {
   enableSound: "تفعيل الصوت",
   sound: "اسمع الرسالة",
   voiceUnavailable:
-    "الصوت لسه مش مُعدّ. أضف مفتاح OpenAI بإعدادات السيرفر. التعبئة اليدوية شغّالة.",
+    "الصوت غير متاح حاليًا. يمكنك متابعة إدخال معلومات العيادة بالكتابة.",
   aiUnavailable:
-    "التجهيز بالمحادثة يحتاج مفتاح OpenAI على السيرفر. بتقدر تعبّي البيانات يدويًا.",
+    "المساعد غير متاح حاليًا. يمكنك متابعة إدخال معلومات العيادة يدويًا.",
   setupStatus: "وجود الإعدادات لا يعني أنه تم اختبار الاتصال الفعلي.",
   continueText: "نكمل بدون ميكروفون",
   send: "إرسال",
@@ -426,16 +426,16 @@ export function errorText(lang: Language, code: string): string {if(code==='conc
       "The administrator-configured usage limit was reached. Check usage settings.",
     ],
     concierge_provider_auth: [
-      "مفتاح المزوّد أو صلاحياته مش صحيحة. راجع إعدادات السيرفر.",
-      "The provider rejected its key or permissions. Check server secrets.",
+      "الخدمة المساعدة غير متاحة حاليًا. يمكنك متابعة التعبئة يدويًا أو التواصل مع مسؤول النظام.",
+      "The assistant service is currently unavailable. You can continue manually or contact the system administrator.",
     ],
     concierge_provider_limit: [
-      "المزوّد مشغول أو الرصيد غير كافٍ. جرّب بعد شوي وراجع حساب المزوّد.",
-      "The provider is busy or has insufficient quota. Retry later and check its account.",
+      "الخدمة المساعدة مشغولة حاليًا. حاول مرة أخرى بعد قليل أو تابع التعبئة يدويًا.",
+      "The assistant service is busy. Try again shortly or continue entering details manually.",
     ],
     concierge_provider_quota: [
-      "رصيد OpenAI للمفتاح الحالي مستنفد. لتشغيل الصوت والبحث، أضف رصيدًا لحساب API أو حدّث المفتاح بمفتاح من مشروع فيه رصيد. الانتظار وحده ما بحل المشكلة.",
-      "The current OpenAI API key has no available credit. Add API credit or use a key from a funded project to enable voice and search. Waiting alone will not resolve this.",
+      "وصلت الخدمة المساعدة لحد الاستخدام. يمكنك متابعة التعبئة يدويًا أو التواصل مع مسؤول النظام لإعادة إتاحتها.",
+      "The assistant service has reached its usage limit. You can continue manually or contact the system administrator to restore access.",
     ],
     concierge_timeout: [
       "الرد تأخّر. جرّب مرة ثانية لنكمّل.",

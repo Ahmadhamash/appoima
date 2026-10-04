@@ -154,7 +154,14 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
           value.workingHours[day].push({ open: close, close: time(Math.min(start + 60, 1439)) }); render(); emit();
         }, 'weekly-schedule-add-interval', `${id}-${hoursKey}-${day}-add`));
         const breaks = el('div', 'weekly-schedule-breaks'), breakHeader = el('div', 'weekly-schedule-break-header');
-        breakHeader.append(el('span', '', w('البريكات (اختياري)', 'Breaks (optional)')));
+        const noBreakLabel = el('label', 'weekly-schedule-no-break'), noBreak = el('input');
+        noBreak.type = 'checkbox'; noBreak.checked = !value.breaks[day].length; noBreak.dataset.testid = `${id}-breaks-${day}-none`;
+        noBreakLabel.append(noBreak, document.createTextNode(w('بدون بريك', 'No Break')));
+        noBreak.onchange = () => {
+          if (noBreak.checked) { value.breaks[day] = []; render(); emit(); }
+          else if (!value.breaks[day].length) addBreak(day);
+        };
+        breakHeader.append(el('span', '', w('الاستراحة (اختياري)', 'Break (optional)')), noBreakLabel);
         if (value.breaks[day].length < 8) breakHeader.append(button(w('+ إضافة بريك', '+ Add break'), () => addBreak(day), 'weekly-schedule-add-break', `${id}-breaks-${day}-add`));
         breaks.append(breakHeader); ranges('breaks', breaks);
         card.append(workPart,breaks);

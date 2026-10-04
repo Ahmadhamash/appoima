@@ -35,7 +35,7 @@ export function buildStructuredSetup(source: Draft, kind: 'branches' | 'staff', 
   const cards: HTMLElement[] = [];
   draft[kind].forEach((row, index) => {
    const card = el('fieldset', 'jc-service-batch-row'); card.dataset.testid = `setup-${kind}-card`; card.append(el('legend', '', `${kind === 'staff' ? w('الموظف', 'Staff member') : w('الفرع', 'Branch')} ${index + 1}`));
-   const fields = el('div', 'jc-service-batch-fields'); textField(fields, row, 'name', w('الاسم', 'Name'), true);
+   const fields = el('div', 'jc-service-batch-fields'); textField(fields, row, 'name', kind === 'branches' ? w('اسم الفرع', 'Branch Name') : w('اسم الموظف', 'Staff Name'), true);
    if (kind === 'branches') {
     textField(fields, row, 'address', w('موقع الفرع: المدينة، الشارع، المبنى', 'Branch address: city, street, building'), true, 'text', 400);
     textField(fields, row, 'mapUrl', w('رابط الموقع على الخريطة (اختياري)', 'Map link (optional)'), false, 'url', 500);

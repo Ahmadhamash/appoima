@@ -493,6 +493,7 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 .jc-dialog.jc-setup-mode .jc-structured-list>.jc-service-batch-row,.jc-dialog.jc-setup-mode .jc-room-list>.jc-service-batch-row{align-self:start;display:grid;gap:12px;min-width:0;margin:0}
 .jc-dialog.jc-setup-mode .jc-structured-hours>h3{display:block;margin:4px 0 10px;font-size:14px}
 .jc-dialog.jc-setup-mode .jc-room-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.jc-dialog.jc-setup-mode .jc-room-fields>label:first-child{grid-column:auto}
 .jc-dialog.jc-setup-mode .jc-staff-assignments .weekly-schedule-days{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));align-items:start}
 .jc-dialog .weekly-schedule [hidden]{display:none!important}
 .jc-dialog .weekly-schedule-shared{align-items:center;line-height:1.5;font-size:13px}
@@ -503,6 +504,34 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 .jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-day{gap:8px}
 .jc-dialog .weekly-schedule-active-day{margin:0;font-size:13px}
 .jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-breaks{width:min(100%,480px);justify-self:center}
+.jc-dialog.jc-setup-mode .jc-entry-links .jc-service-field,.jc-dialog.jc-setup-mode .jc-clinic-search .jc-service-field{display:grid;gap:8px;min-width:0;text-align:start;font-size:14px;font-weight:600}
+.jc-dialog.jc-setup-mode .jc-entry-links .jc-service-field textarea{box-sizing:border-box;width:100%;padding:12px;font-weight:400}
+.jc-dialog.jc-setup-mode .jc-clinic-search{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end}
+.jc-dialog.jc-setup-mode .jc-clinic-search input{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;font-weight:400}
+.jc-dialog.jc-setup-mode:has(.jc-import-review) .jc-stage{padding-top:6px;gap:8px}
+.jc-dialog.jc-setup-mode:has(.jc-import-review) .jc-orb-wrap,.jc-dialog.jc-setup-mode:has(.jc-import-review) .jc-status{display:none}
+.jc-dialog.jc-setup-mode:has(.jc-import-review) .jc-controls{width:100%;max-width:1200px!important;overflow:auto;scrollbar-gutter:stable}
+.jc-dialog.jc-setup-mode .jc-import-review{display:block;max-height:none;overflow:visible;padding:0 8px 8px}
+.jc-dialog.jc-setup-mode .jc-import-review .jc-import-section{padding:16px;margin-block:12px;border:1px solid #52698666;border-radius:16px}
+.jc-dialog.jc-setup-mode .jc-import-review h2{margin:0 0 12px;font-size:18px;line-height:1.5;font-weight:650}
+.jc-dialog.jc-setup-mode .jc-import-review .jc-import-row{margin:8px 0 0;padding:14px;background:#17263e}
+.jc-dialog.jc-setup-mode .jc-import-option-text{display:grid;gap:6px;min-width:0}
+.jc-dialog.jc-setup-mode .jc-import-option-text strong{font-size:14px;line-height:1.5}
+.jc-dialog.jc-setup-mode .jc-import-option-text small,.jc-dialog.jc-setup-mode .jc-import-detail-line{font-size:14px;line-height:1.65}
+.jc-dialog.jc-setup-mode .jc-import-detail-line{margin:0;padding:10px 0;border-bottom:1px solid #61789944}
+.jc-dialog.jc-setup-mode .jc-import-detail-line:last-child{border-bottom:0}
+.jc-dialog.jc-setup-mode .jc-import-review .jc-import-actions{position:sticky;bottom:0;z-index:2;margin-top:16px;padding:12px;background:#121e32;border:1px solid #60789966;border-radius:14px}
+.jc-dialog.jc-setup-mode .jc-import-review [hidden]{display:none!important}
+.jc-dialog.jc-setup-mode .jc-structured-setup .jc-service-field,.jc-dialog.jc-setup-mode .jc-room-batch .jc-service-field{font-size:14px;line-height:1.5;gap:7px}
+.jc-dialog.jc-setup-mode .jc-structured-setup legend{font-size:16px;font-weight:650;padding-inline:6px}
+.jc-dialog.jc-setup-mode .jc-room-services{display:grid;gap:10px;border-top:1px solid #61789944;padding-top:14px}
+.jc-dialog.jc-setup-mode .jc-room-services>strong{font-size:14px;font-weight:600}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-work-part{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-clock{flex:1;min-width:0;display:grid;gap:6px;font-size:13px}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-breaks{border-top:1px solid #61789944;padding-top:12px;width:min(100%,480px)}
+.jc-dialog .weekly-schedule-no-break{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer}
+.jc-dialog .weekly-schedule-no-break input{width:18px;height:18px;flex:none}
+@media(max-width:640px){.jc-dialog.jc-setup-mode .jc-import-review{padding-inline:2px}.jc-dialog.jc-setup-mode .jc-import-review .jc-import-section{padding:12px}.jc-dialog.jc-setup-mode .jc-import-review .jc-import-row{padding:12px}.jc-dialog.jc-setup-mode .jc-import-review h2{font-size:16px}.jc-dialog.jc-setup-mode .jc-import-review .jc-import-actions{gap:8px;padding:10px}}
 .jc-review-intake{display:grid;gap:4px;border-top:1px solid #91addc30;padding-top:8px}
 .jc-review-table .jc-review-service-group th{text-align:start;width:auto;background:#3b5578}
 @media(max-width:640px){.jc-dialog.jc-setup-mode .jc-structured-list,.jc-dialog.jc-setup-mode .jc-room-list{padding:4px;grid-template-columns:minmax(0,1fr)}.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-day-choices .weekly-schedule-day-header{min-width:80px;padding:5px}.jc-dialog.jc-setup-mode .jc-room-fields{grid-template-columns:1fr}}
