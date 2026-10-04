@@ -478,3 +478,10 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 .jc-review-table .staff-branch-schedules{min-width:360px}
 .jc-dialog.jc-setup-mode .jc-review .jc-review-actions{position:sticky;bottom:0;margin-top:12px;padding:10px;border-radius:12px;z-index:2}
 @media(max-width:640px){.jc-dialog.jc-setup-mode:has(.jc-review) .jc-stage{padding-inline:6px}.jc-dialog.jc-setup-mode .jc-review{padding:8px}.jc-review-table td{padding:8px}}
+
+.jc-review-hours{padding:0;margin:0;list-style:none;white-space:nowrap;line-height:1.8;min-width:200px}
+.jc-review-logo{width:80px;height:80px;object-fit:contain;border-radius:10px;background:white}
+.jc-review-table .jc-permissions{min-width:300px;font-size:12px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.jc-review-staff-hours{display:grid;gap:10px}.jc-review-staff-hours h4{margin:0 0 5px;font-size:13px}
+.jc-review-table a{color:#b4d4ff;text-decoration:underline;overflow-wrap:anywhere}
+.jc-review-table td{white-space:normal;overflow-wrap:anywhere}

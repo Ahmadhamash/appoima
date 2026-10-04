@@ -21,7 +21,7 @@ beforeAll(async()=>{
  await db.insert(serviceEmployeesTable).values({clinicId,serviceId,employeeId});
  const [c]=await db.insert(customersTable).values({clinicId,name:'Patient',email:'patient@example.test'}).returning();customerId=c!.id;
 });
-async function room(name:string){const r=await manager.post('/api/clinic/rooms').send({name,branchId,serviceIds:[serviceId],extra:{description:'Original'},capacity:2});expect(r.status,JSON.stringify(r.body)).toBe(201);return r.body.item.id as number;}
+async function room(name:string){const r=await manager.post('/api/clinic/rooms').send({name,nameLang:'en',status:'available',branchId,serviceIds:[serviceId],extra:{description:'Original'},capacity:2});expect(r.status,JSON.stringify(r.body)).toBe(201);return r.body.item.id as number;}
 const remove=(id:number,client=manager)=>client.delete(`/api/clinic/rooms/${id}`).send({confirmed:true});
 async function appointment(roomId:number,status:'pending'|'confirmed'|'checked_in'|'in_service'|'completed'|'cancelled',past=false){const startsAt=past?new Date(Date.now()-2*86400000):future;return (await db.insert(appointmentsTable).values({clinicId,branchId,roomId,serviceId,customerId,employeeId,createdBy:managerId,status,startsAt,endsAt:new Date(startsAt.getTime()+30*60000),durationMinutes:30,requiresRoom:true}).returning())[0]!;}
 describe('Room editing, confirmed deletion and booking protection',()=>{
@@ -29,14 +29,14 @@ describe('Room editing, confirmed deletion and booking protection',()=>{
   const id=await room('Editable');
   expect((await manager.delete(`/api/clinic/rooms/${id}`).send({confirmed:false})).status).toBe(400);
   expect((await remove(id,viewer)).status).toBe(403);expect((await remove(id,foreign)).status).toBe(404);
-  const edited=await manager.put(`/api/clinic/rooms/${id}`).send({name:'Updated room',branchId,capacity:3,status:'maintenance',serviceIds:[serviceId],extra:{description:'Updated',color:'#123456',features:['Sink / Handwash']}});expect(edited.status).toBe(200);
+  const edited=await manager.put(`/api/clinic/rooms/${id}`).send({name:'Updated room',nameLang:'en',branchId,capacity:3,status:'maintenance',serviceIds:[serviceId],extra:{description:'Updated',color:'#123456',features:['Sink / Handwash']}});expect(edited.status).toBe(200);
   expect((await manager.get(`/api/clinic/rooms/${id}`)).body.item).toMatchObject({name:'Updated room',capacity:3,status:'maintenance',extra:{description:'Updated',color:'#123456'}});
   const old=await appointment(id,'completed',true);expect((await remove(id)).status).toBe(200);expect((await remove(id)).status).toBe(200);
   expect((await manager.get(`/api/clinic/rooms/${id}`)).status).toBe(404);
   expect((await manager.get('/api/clinic/rooms/overview')).body.rooms.some((r:{id:number})=>r.id===id)).toBe(false);
   expect((await manager.get('/api/clinic/rooms')).body.items.some((r:{id:number})=>r.id===id)).toBe(false);
   expect((await db.select().from(appointmentsTable).where(eq(appointmentsTable.id,old.id)))[0]!.roomId).toBe(id);
-  expect((await manager.put(`/api/clinic/rooms/${id}`).send({name:'Restore',branchId,serviceIds:[]})).status).toBe(404);
+  expect((await manager.put(`/api/clinic/rooms/${id}`).send({name:'Restore',nameLang:'en',capacity:1,status:'available',branchId,serviceIds:[]})).status).toBe(404);
  });
  it('blocks every live future status and overdue checked-in or in-service appointments',async()=>{
   for(const status of ['pending','confirmed','checked_in','in_service'] as const){const id=await room(status),a=await appointment(id,status);expect((await remove(id)).body.error).toBe('room_has_appointments');await db.update(appointmentsTable).set({status:'cancelled'}).where(eq(appointmentsTable.id,a.id));expect((await remove(id)).status).toBe(200);}

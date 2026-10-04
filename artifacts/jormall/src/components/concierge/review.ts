@@ -1,108 +1,61 @@
-import { createCategoryInput, categoryNames } from '../category-input';
-import { createStaffBranchSchedules } from '../staff-branch-schedules';
-
-import { createDefinition, normalizePhone } from '@workspace/service-definition';
-import { createPhoneInput, phoneValidationMessage } from '../phone-input';
-import { DAYS,KINDS,type Draft,type Kind,type Language,type Review,type Week,type Provision } from './contract';
-import { el,button } from './dom';
+import type { WorkspaceProfile } from '@workspace/service-definition';
+import { DAYS, KINDS, type Draft, type Language, type Review, type Week, type Provision } from './contract';
+import { el, button } from './dom';
 import { text } from './copy';
-import { createBranchHoursEditor } from '../weekly-schedule';
+import { normalizePhone } from '@workspace/service-definition';
+import { phoneValidationMessage } from '../phone-input';
+import { formatClockTime } from '@/lib/time-format';
 
-type Row=Draft[Kind][number];
-const emptyWeek=()=>Object.fromEntries(DAYS.map(day=>[day,[]])) as unknown as Week;
-export function buildReview(data:Review,language:Language,callbacks:{save:(draft:Draft)=>Promise<Review|void>;apply:(staff:Provision[])=>Promise<void>;back:()=>void;archiveBranch?:(key:string,draft:Draft)=>Promise<void>;error:(message:string)=>void}):HTMLElement{
- const knownCategories=new Set(data.options.categories??[]);
- const tr=(k:string)=>text(language,k),draft=structuredClone(data.draft),root=el('section','jc-review');root.dataset.testid='concierge-review';let dirty=false,busy=false;
+type Cell = string | number | null | undefined | HTMLElement;
+export function buildReview(data:Review,language:Language,callbacks:{save:(draft:Draft)=>Promise<Review|void>;apply:(staff:Provision[])=>Promise<void>;back:()=>void;archiveBranch?:(key:string,draft:Draft)=>Promise<void>;error:(message:string)=>void},profile?:WorkspaceProfile):HTMLElement {
+ const ar=language==='ar',w=(a:string,e:string)=>ar?a:e,tr=(key:string)=>text(language,key),draft=structuredClone(data.draft),root=el('section','jc-review');root.dataset.testid='concierge-review';
+ let dirty=false,busy=false;
  for(const service of draft.services){if(!service.branchScope&&service.branchKey){service.branchScope='branch';dirty=true;}else if(!service.branchScope&&draft.branches.length===1){service.branchScope='branch';service.branchKey=draft.branches[0]!.key;dirty=true;}if(service.currency!=='JOD'){service.currency='JOD';dirty=true;}if(service.definition?.section&&service.category!==service.definition.section){service.category=service.definition.section;dirty=true;}}
- const header=el('div');header.append(el('h2','',tr('review')),el('p','jc-muted',tr('draftNote')),el('p','jc-muted',tr('scopeNote')));root.append(header);
- const warning=data.issues.length?el('p','jc-error',tr('missing')):null;if(warning){warning.setAttribute('role','status');root.append(warning);}
-
+ const branchName=(key:string|null)=>[...draft.branches,...data.options.branches].find(b=>b.key===key)?.name??'—';
+ const serviceNames=(keys:string[]|null)=>keys?.map(key=>[...draft.services,...data.options.services].find(s=>s.key===key)?.name??key).join('، ')||'—';
+ const yes=(value:boolean|null|undefined)=>value===null||value===undefined?'—':tr(value?'yes':'no');
+ function link(value:string|null|undefined){if(!value)return '—';try{if(!['http:','https:'].includes(new URL(value).protocol))return value;}catch{return value;}const a=el('a','',value);a.href=value;a.target='_blank';a.rel='noopener noreferrer';return a;}
+ function table(title:string,headers:string[],rows:{key?:string;cells:Cell[]}[]){
+  root.append(el('h3','',title));const scroll=el('div','jc-review-table-scroll'),node=el('table','jc-review-table'),caption=el('caption','sr-only',title),head=el('thead'),heading=el('tr'),body=el('tbody');
+  for(const label of headers){const th=el('th','',label);th.scope='col';heading.append(th);}head.append(heading);
+  for(const row of rows){const line=el('tr');if(row.key)line.dataset.testid=`draft-${row.key}`;for(const value of row.cells){const cell=el('td');if(value instanceof HTMLElement)cell.append(value);else cell.textContent=value===null||value===undefined||value===''?'—':String(value);line.append(cell);}body.append(line);}
+  if(!rows.length){const row=el('tr'),cell=el('td','',w('لم تتم إضافة عناصر','No records added'));cell.colSpan=headers.length;row.append(cell);body.append(row);}
+  node.append(caption,head,body);scroll.append(node);root.append(scroll);
+ }
+ const dayLabels:Record<typeof DAYS[number],[string,string]>={mon:['الاثنين','Monday'],tue:['الثلاثاء','Tuesday'],wed:['الأربعاء','Wednesday'],thu:['الخميس','Thursday'],fri:['الجمعة','Friday'],sat:['السبت','Saturday'],sun:['الأحد','Sunday']};
+ function hours(week:Week|null|undefined,breaks=false){const list=el('ul','jc-review-hours');for(const day of DAYS){const ranges=week?.[day]??[],line=el('li');line.append(el('b','',dayLabels[day][ar?0:1]+': '),el('span','',ranges.length?ranges.map(r=>`${formatClockTime(r.open)} – ${formatClockTime(r.close)}`).join('، '):breaks?w('بدون استراحة','No breaks'):w('مغلق','Closed')));list.append(line);}return list;}
+ if(profile){const logo=profile.logoDataUrl?el('img'):null;if(logo){logo.src=profile.logoDataUrl!;logo.alt=w('شعار المركز','Clinic logo');logo.className='jc-review-logo';}
+  table(w('هوية المركز','Clinic identity'),[w('المعلومة','Field'),w('البيانات','Details')],[
+   {cells:[w('الاسم بالعربية','Arabic name'),profile.nameAr]},{cells:[w('الاسم بالإنجليزية','English name'),profile.nameEn]},
+   {cells:[w('الوصف بالعربية','Arabic subtitle'),profile.subtitleAr]},{cells:[w('الوصف بالإنجليزية','English subtitle'),profile.subtitleEn]},
+   {cells:[tr('phone'),profile.phone]},{cells:[tr('email'),profile.email]},{cells:[w('العنوان','Address'),profile.address]},{cells:[w('الموقع الإلكتروني','Website'),link(profile.website)]},
+   {cells:[w('اللون الرئيسي','Primary color'),profile.primaryColor]},{cells:[w('اللون الإضافي','Accent color'),profile.accentColor]},{cells:[w('الشعار','Logo'),logo]},
+  ]);
+ }
+ table(tr('branches'),['#',tr('recordName'),w('موقع الفرع','Branch address'),w('رابط الخريطة','Map link'),w('المنطقة الزمنية','Time zone'),tr('openingHours')],draft.branches.map((b,index)=>({key:b.key,cells:[index+1,b.name,b.address,link(b.mapUrl),b.timeZone??'Asia/Amman',hours(b.openingHours)]})));
+ table(tr('services'),['#',w('الخدمة الرئيسية','Main service'),w('الخدمة الفرعية','Subservice'),tr('branchKey'),tr('durationMinutes'),w('السعر (JOD)','Price (JOD)'),tr('requiresRoom'),w('متابعة / رتوش','Follow-up / Retouch')],draft.services.map((s,index)=>({key:s.key,cells:[index+1,s.definition?.section||s.category,s.name,s.branchScope==='all'?tr('clinicWide'):branchName(s.branchKey),s.durationMinutes,s.price,yes(s.requiresRoom),yes(!!s.followUpEnabled)]})));
+ table(tr('rooms'),['#',tr('recordName'),tr('branchKey'),tr('capacity'),tr('serviceKeys')],draft.rooms.map((r,index)=>({key:r.key,cells:[index+1,r.name,branchName(r.branchKey),r.capacity,serviceNames(r.serviceKeys)]})));
  const credentials=new Map<string,{password:HTMLInputElement;checks:Map<string,HTMLInputElement>}>();
- const savedRoles=new Map(draft.staff.map(p=>[p.key,p.role]));
- const total=KINDS.reduce((sum,k)=>sum+draft[k].length,0);if(!total)root.append(el('p','jc-notice',tr('noDraft')));
- const validField=(row:Row,field:string)=>{const value=(row as unknown as Record<string,unknown>)[field];if(field==='phone')return !value||typeof value==='string'&&!!normalizePhone(value);if(field==='email')return typeof value==='string'&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);if(field==='name')return typeof value==='string'&&value.trim().length>0;if(field==='timeZone'){try{return typeof value==='string'&&!!new Intl.DateTimeFormat('en',{timeZone:value}).resolvedOptions().timeZone;}catch{return false;}}if(field==='durationMinutes'||field==='capacity')return typeof value==='number'&&Number.isInteger(value)&&value>0&&value<=(field==='durationMinutes'?1440:1000);if(field==='price')return typeof value==='string'&&/^\d{1,9}(\.\d{1,3})?$/.test(value);if(field==='currency')return typeof value==='string'&&/^[A-Z]{3}$/.test(value);if(field==='branchKey'&&'branchScope' in row&&row.branchScope==='all')return true;if(field==='openingHours'||field==='workingHours'||field==='breaks'){if(!value)return false;return Object.values(value as Week).every(ranges=>ranges.every(range=>/^\d\d:\d\d$/.test(range.open)&&/^\d\d:\d\d$/.test(range.close)&&range.open<range.close));}return value!==null&&value!==undefined&&value!=='';};
- const invalid=(key:string,field:string)=>{const row=KINDS.flatMap(kind=>draft[kind] as Row[]).find(item=>item.key===key);return !!row&&data.issues.some(i=>i.key===key&&(i.field===field||i.field.startsWith(field+'.')))&&!validField(row,field);};
- let save:HTMLButtonElement,apply:HTMLButtonElement,confirm:HTMLInputElement;
- function markDirty(){dirty=true;data.draft=structuredClone(draft);if(save)save.disabled=false;if(apply)apply.disabled=true;if(confirm){confirm.checked=false;confirm.disabled=false;}if(warning)warning.textContent=language==='ar'?'كمّل الخانات المطلوبة قبل اعتماد الإعداد.':'Complete the required fields before confirming.';}
- function labelField(row:Row,key:string,input:HTMLInputElement|HTMLSelectElement){const id=`jc-${row.key}-${key}`;input.id=id;input.dataset.testid=`draft-${row.key}-${key}`;const wrap=el('div','jc-field'),label=el('label','jc-label',key==='address'?(language==='ar'?'موقع الفرع':'Branch address'):key==='mapUrl'?(language==='ar'?'رابط الخريطة':'Map link'):tr(key==='name'?'recordName':key)),hint=el('small','jc-muted',key==='currency'?(language==='ar'?'استخدم 3 أحرف مثل JOD':'Use 3 letters, for example JOD'):tr('required'));label.htmlFor=id;wrap.append(label,input,hint);const refresh=()=>{const bad=invalid(row.key,key);wrap.classList.toggle('jc-invalid',bad);input.setAttribute('aria-invalid',String(bad));hint.hidden=!bad;};input.addEventListener('input',refresh);input.addEventListener('change',refresh);refresh();return wrap;}
- function field(row:Row,key:string,type='text'){
-  if(key==='phone'){const person=row as Draft['staff'][number];return createPhoneInput({value:person.phone??'',label:tr('phone'),language,error:invalid(row.key,key)?phoneValidationMessage(language):undefined,testId:`draft-${row.key}-phone`,onChange:value=>{person.phone=value||null;markDirty();}}).node;}
-  const input=el('input');input.type=type;const record=row as unknown as Record<string,unknown>;input.value=record[key]===null?'':String(record[key]??'');if(type==='text')input.maxLength=key==='address'?400:key==='name'?120:key==='timeZone'?100:200;if(key==='email')input.maxLength=200;if(key==='phone')input.maxLength=50;if(key==='price'){input.type='number';input.min='0';input.step='.001';}if(type==='number'){input.min='1';input.step='1';}if(['email','phone','timeZone','price','currency'].includes(key))input.dir='ltr';
-  input.addEventListener('input',()=>{if(key==='currency'){input.value=input.value.toUpperCase();if(input.value==='JD')input.value='JOD';}record[key]=input.value===''?null:type==='number'?Number(input.value):input.value;if(key==='name')record.nameLang=/[\u0600-\u06ff]/u.test(input.value)?'ar':'en';markDirty();});
-  const wrap=labelField(row,key,input);
-  if(key==='price'){
-   const currencyHint=el('small','jc-muted',language==='ar'?'الأسعار بالدينار الأردني (JOD).':'Prices are in Jordanian dinars (JOD).');
-   currencyHint.id=`${input.id}-currency`;input.setAttribute('aria-describedby',currencyHint.id);wrap.append(currencyHint);
-  }
-  return wrap;
+ function staffHours(person:Draft['staff'][number]){const box=el('div','jc-review-staff-hours');const shifts=person.branchSchedules?.length?person.branchSchedules:person.branchKey?[{branchKey:person.branchKey,workingHours:person.workingHours,breaks:person.breaks}]:[];
+  if(!shifts.length)box.append(el('p','', '—'));
+  for(const shift of shifts){const section=el('section');section.append(el('h4','',branchName(shift.branchKey)),hours(shift.workingHours),el('p','jc-label',tr('breaks')),hours(shift.breaks,true));box.append(section);}return box;
  }
- function select(row:Row,key:string,options:{value:string;label:string}[],emptyLabel='choose'){
-  const input=el('select'),record=row as unknown as Record<string,unknown>;const blank=el('option','',tr(emptyLabel));blank.value='';input.append(blank);for(const opt of options){const o=el('option','',opt.label);o.value=opt.value;input.append(o);}input.value=record[key]===null?'':String(record[key]);input.onchange=()=>{record[key]=input.value===''?null:key==='requiresRoom'?input.value==='true':input.value;if(key==='branchKey'&&draft.services.some(service=>service.key===row.key))record.branchScope=input.value?'branch':'all';markDirty();};return labelField(row,key,input);
- }
- function category(row:Row){
-  const service=row as Draft['services'][number],field=el('label','jc-field');
-  const picker=createCategoryInput({id:`draft-${row.key}-category`,value:service.category??'',language,options:()=>categoryNames([...knownCategories,...draft.services.map(s=>s.category)]),onChange:value=>{service.category=value.trim()||null;if(service.definition)service.definition.section=value.trim();markDirty();},onCommit:name=>knownCategories.add(name)});
-  field.append(el('span','jc-label',tr('category')),picker.node);return field;
- }
- function schedule(row:Row,key:'openingHours'){
-  const branch=row as Draft['branches'][number];
-  return createBranchHoursEditor(branch.openingHours??emptyWeek(),{id:`draft-${row.key}`,language,label:tr(key),pagedDays:false},next=>{branch.openingHours=next;markDirty();}).node;
- }
- const branchOptions=[...data.options.branches.map(b=>({value:b.key,label:b.name})),...draft.branches.filter(b=>!data.options.branches.some(e=>e.key===b.key)).map(b=>({value:b.key,label:b.name??tr('newRecord')}))];
- const serviceOptions=[...data.options.services.map(s=>({value:s.key,label:s.name})),...draft.services.map(s=>({value:s.key,label:s.name??tr('newRecord')}))];
- function services(row:Row){const record=row as unknown as Record<string,unknown>,set=el('fieldset','jc-selection');set.append(el('legend','',tr('serviceKeys')));const choices=[{value:'',label:tr('noServices')},...serviceOptions];const inputs:HTMLInputElement[]=[];
-  for(const opt of choices){const label=el('label','jc-check'),check=el('input');check.type='checkbox';check.value=opt.value;const selected=record.serviceKeys as string[]|null;check.checked=opt.value?!!selected?.includes(opt.value):selected?.length===0;inputs.push(check);label.append(check,el('span','',opt.label));check.onchange=()=>{if(opt.value===''){if(check.checked)for(const c of inputs)if(c!==check)c.checked=false;}else if(check.checked)inputs[0]!.checked=false;const v=inputs.filter(c=>c.value&&c.checked).map(c=>c.value);record.serviceKeys=v.length?v:inputs[0]!.checked?[]:null;markDirty();};set.append(label);}if(!serviceOptions.length)set.append(el('p','jc-muted',tr('noCompatible')));return set;
- }
- for(const kind of KINDS){if(!draft[kind].length)continue;root.append(el('h3','',tr(kind)));
-  const table=el('table','jc-review-table'),head=el('thead'),body=el('tbody');table.append(head,body);const scroll=el('div','jc-review-table-scroll');scroll.append(table);root.append(scroll);
-  for(const [rowIndex,row] of draft[kind].entries()){const card=el('details','jc-record');card.dataset.testid=`draft-${row.key}`;const summary=el('summary','',row.name??tr('newRecord'));summary.lang=row.nameLang??language;card.append(summary);
-   card.append(el('p','jc-record-meta','existingId' in row&&row.existingId!==null?tr('existing'):tr('newRecord')));
-   const grid=el('div','jc-grid');grid.append(field(row,'name'));
-   if(kind==='branches'){(row as Draft['branches'][number]).timeZone='Asia/Amman';grid.append(field(row,'address'),field(row,'mapUrl','url'));card.append(grid,schedule(row,'openingHours'));}
-   else {
-    if(kind==='rooms')grid.append(select(row,'branchKey',branchOptions,kind==='rooms'?'choose':'clinicWide'));
-    else if(kind==='services'){const service=row as Draft['services'][number],scope=el('select');for(const choice of [{value:'',label:tr('choose')},{value:'all',label:tr('clinicWide')},...branchOptions]){const opt=el('option','',choice.label);opt.value=choice.value;scope.append(opt);}scope.value=service.branchScope==='all'?'all':service.branchKey??'';scope.onchange=()=>{service.branchScope=scope.value==='all'?'all':scope.value?'branch':null;service.branchKey=scope.value&&scope.value!=='all'?scope.value:null;markDirty();};grid.append(labelField(row,'branchScope',scope));}
-    if(kind==='services'){const followLabel=el('label','jc-check'),follow=el('input');follow.type='checkbox';follow.checked=!!(row as Draft['services'][number]).followUpEnabled;follow.dataset.testid=`draft-${row.key}-followUpEnabled`;follow.onchange=()=>{(row as Draft['services'][number]).followUpEnabled=follow.checked;markDirty();};followLabel.append(follow,el('span','',language==='ar'?'رتوش / موعد متابعة — السعر الافتراضي صفر، قابل للتعديل لكل موعد':'Retouch / follow-up appointment — default zero, editable per appointment'));card.append(followLabel);grid.append(field(row,'durationMinutes','number'),field(row,'price'),category(row),select(row,'requiresRoom',[{value:'true',label:tr('yes')},{value:'false',label:tr('no')} ]));card.append(grid);}
-    if(kind==='rooms'){grid.append(field(row,'capacity','number'));card.append(grid,services(row));}
-    if(kind==='staff'){
-     grid.append(field(row,'email','email'),field(row,'phone','tel'),field(row,'jobTitle'),select(row,'role',['secretary','doctor','service_provider','other_staff'].map(value=>({value,label:tr(value)}))));const person=row as Draft['staff'][number],branches=[...data.options.branches,...draft.branches.filter(b=>!data.options.branches.some(e=>e.key===b.key))].map(b=>({key:b.key,name:b.name??tr('newRecord'),timeZone:b.timeZone??'Asia/Amman',openingHours:b.openingHours}));
-     const first=branches.find(b=>b.key===person.branchKey)??branches[0];person.branchSchedules??=first?[{branchKey:first.key,workingHours:person.workingHours??first.openingHours??emptyWeek(),breaks:person.breaks??emptyWeek()}]:[];
-     card.append(grid,createStaffBranchSchedules(branches,person.branchSchedules,language,`draft-${person.key}-branches`,next=>{person.branchSchedules=next;person.branchKey=next.length===1?next[0]!.branchKey:null;person.workingHours=next[0]?.workingHours??null;person.breaks=next[0]?.breaks??emptyWeek();markDirty();},false).node,services(row));
-     const secure=el('fieldset','jc-selection');secure.append(el('legend','',tr('accountReview')),el('p','jc-muted',language==='ar'?'كلمة مرور أولية، 10 أحرف على الأقل.':'Initial password, at least 10 characters.'));const password=el('input');password.type='password';password.minLength=10;password.maxLength=200;password.autocomplete='new-password';password.dir='ltr';password.dataset.testid=`password-${row.key}`;secure.append(labelField(row,'password',password));
-     const pset=el('fieldset','jc-selection');pset.append(el('legend','',tr('permissions')));const permissions=el('div','jc-permissions'),checks=new Map<string,HTMLInputElement>();const defaults=data.staffAccess.find(s=>s.key===row.key)?.permissions??[];
-     for(const permission of data.grantablePermissions){const [area,operation]=permission.split('.'),label=el('label','jc-check'),check=el('input');check.type='checkbox';check.checked=defaults.includes(permission);check.dataset.testid=`access-${row.key}-${permission}`;label.append(check,el('span','',`${tr(area!)} · ${tr(operation==='manage'?'managePermission':'readPermission')}`));checks.set(permission,check);permissions.append(label);}pset.append(permissions);secure.append(pset);card.append(secure);credentials.set(row.key,{password,checks});
-    }
-   }
-   // Keep all fields mounted in one table, with no record or field pagination.
-   const tableRow=el('tr');tableRow.dataset.testid=`draft-${row.key}`;
-   const number=el('td','jc-review-number',String(rowIndex+1));tableRow.append(number);
-   const cells:HTMLElement[]=[];
-   for(const node of Array.from(card.children) as HTMLElement[]){
-    if(node.tagName==='SUMMARY'||node.classList.contains('jc-record-meta'))continue;
-    if(node.classList.contains('jc-grid'))cells.push(...Array.from(node.children) as HTMLElement[]);else cells.push(node);
-   }
-   // Put the name first; following columns retain all settings and access controls.
-   const nameIndex=cells.findIndex(node=>!!node.querySelector(`[data-testid="draft-${row.key}-name"]`));
-   if(nameIndex>0)cells.unshift(cells.splice(nameIndex,1)[0]!);
-   if(rowIndex===0){const headings=el('tr');headings.append(el('th','', '#'));for(const node of cells){const heading=el('th','',node.querySelector('label,legend,.jc-label')?.textContent??(node.classList.contains('jc-check')?(language==='ar'?'متابعة':'Follow-up'):(language==='ar'?'الإعدادات':'Settings')));heading.scope='col';headings.append(heading);}head.append(headings);}
-   for(const node of cells){const cell=el('td');cell.append(node);tableRow.append(cell);}body.append(tableRow);
-  }
- }
-
- const confirmation=el('label','jc-check');confirm=el('input');confirm.type='checkbox';confirm.dataset.testid='concierge-confirm';confirmation.append(confirm,el('span','',language==='ar'?'راجعت البيانات وأوافق على حفظ الإعداد.':'I reviewed the details and approve this setup.'));root.append(confirmation);
- const scheduleInvalid=()=>{
-  const input=root.querySelector<HTMLInputElement>('.weekly-schedule input:invalid');if(!input)return false;
-  const card=input.closest<HTMLElement>('tr');if(card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));input.scrollIntoView({block:'center',inline:'center'});}
-  input.scrollIntoView({block:'center'});input.reportValidity();return true;
- };
- const actions=el('div','jc-review-actions');
- save=button(tr('saveDraft'),()=>{if(busy||scheduleInvalid())return;busy=true;disable(true);void callbacks.save(draft).catch(()=>{}).finally(()=>{busy=false;disable(false);});},'jc-button','concierge-save-draft');
- apply=button(language==='ar'?'اعتمد الإعداد':'Confirm setup',()=>{if(busy||!confirm.checked||scheduleInvalid())return;const provision:Provision[]=[];
-  const badPhone=draft.staff.find(person=>person.phone&&!normalizePhone(person.phone));if(badPhone){callbacks.error(phoneValidationMessage(language));const input=root.querySelector<HTMLInputElement>(`[data-testid="draft-${badPhone.key}-phone"]`),card=input?.closest<HTMLElement>('tr');if(input&&card){root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Array.from(root.querySelectorAll('.jc-record')).indexOf(card)}));input.scrollIntoView({block:'center',inline:'center'});input.reportValidity();}return;}
-  for(const person of draft.staff){if(savedRoles.get(person.key)!==person.role){callbacks.error(tr('missing'));return;}const c=credentials.get(person.key)!;if(c.password.value.length<10){callbacks.error(tr('passwordRequired'));const card=c.password.closest<HTMLElement>('tr');if(card){const index=Array.from(root.querySelectorAll('.jc-record')).indexOf(card);root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:index}));c.password.scrollIntoView({block:'center',inline:'center'});}c.password.focus();return;}provision.push({key:person.key,initialPassword:c.password.value,permissions:[...c.checks].filter(([,input])=>input.checked).map(([p])=>p)});}
-  busy=true;disable(true);void (async()=>{if(dirty){const fresh=await callbacks.save(draft);if(!fresh||fresh.issues.length)return;}await callbacks.apply(provision);})().catch(()=>{}).finally(()=>{for(const p of provision)p.initialPassword='';busy=false;disable(false);});
+ const staffRows=draft.staff.map((person,index)=>{
+  const password=el('input');password.type='password';password.minLength=10;password.maxLength=200;password.autocomplete='new-password';password.dir='ltr';password.dataset.testid=`password-${person.key}`;password.id=`password-${person.key}`;
+  const account=el('div','jc-field'),label=el('label','',w('كلمة مرور أولية (10 أحرف على الأقل)','Initial password (at least 10 characters)'));label.htmlFor=password.id;account.append(label,password);
+  const permissions=el('div','jc-permissions'),checks=new Map<string,HTMLInputElement>(),defaults=data.staffAccess.find(s=>s.key===person.key)?.permissions??[];
+  for(const permission of data.grantablePermissions){const [area,operation]=permission.split('.'),label=el('label','jc-check'),check=el('input');check.type='checkbox';check.checked=defaults.includes(permission);check.dataset.testid=`access-${person.key}-${permission}`;label.append(check,el('span','',`${tr(area!)} · ${tr(operation==='manage'?'managePermission':'readPermission')}`));checks.set(permission,check);permissions.append(label);}
+  credentials.set(person.key,{password,checks});return {key:person.key,cells:[index+1,person.name,person.email,person.phone,person.jobTitle,person.role?tr(person.role):'—',staffHours(person),serviceNames(person.serviceKeys),permissions,account]};
+ });
+ table(tr('staff'),['#',tr('recordName'),tr('email'),tr('phone'),tr('jobTitle'),tr('role'),w('الفروع والدوام والاستراحات','Branches, working hours and breaks'),tr('serviceKeys'),tr('permissions'),tr('accountReview')],staffRows);
+ if(data.issues.length){const message=el('p','jc-error',w('راجع الحقول الناقصة في قسمها من شريط الخطوات قبل اعتماد الإعداد.','Review missing fields in their section using the step bar before confirming setup.'));message.setAttribute('role','alert');root.append(message);}
+ const total=KINDS.reduce((n,k)=>n+draft[k].length,0),confirmation=el('label','jc-check'),confirm=el('input');confirm.type='checkbox';confirm.dataset.testid='concierge-confirm';confirmation.append(confirm,el('span','',w('راجعت البيانات وأوافق على حفظ الإعداد.','I reviewed the details and approve this setup.')));root.append(confirmation);
+ const actions=el('div','jc-review-actions'),apply=button(w('اعتمد الإعداد','Confirm setup'),()=>{
+  if(busy||!confirm.checked||data.issues.length)return;
+  const badPhone=draft.staff.find(p=>p.phone&&!normalizePhone(p.phone));if(badPhone){callbacks.error(phoneValidationMessage(language));return;}
+  const provision:Provision[]=[];for(const person of draft.staff){const entry=credentials.get(person.key)!;if(entry.password.value.length<10){callbacks.error(tr('passwordRequired'));entry.password.scrollIntoView({block:'center',inline:'center'});entry.password.focus();return;}provision.push({key:person.key,initialPassword:entry.password.value,permissions:[...entry.checks].filter(([,input])=>input.checked).map(([permission])=>permission)});}
+  busy=true;disable(true);void(async()=>{if(dirty){const fresh=await callbacks.save(draft);if(!fresh||fresh.issues.length)return;}await callbacks.apply(provision);})().catch(()=>{}).finally(()=>{for(const p of provision)p.initialPassword='';busy=false;disable(false);});
  },'jc-button jc-primary','concierge-apply');
- function disable(value:boolean){for(const c of root.querySelectorAll<HTMLInputElement|HTMLButtonElement|HTMLSelectElement>('input,button,select'))c.disabled=value;if(!value){root.querySelectorAll('.weekly-schedule').forEach(node=>node.dispatchEvent(new CustomEvent('jormall:schedule-refresh')));save.disabled=!dirty;apply.disabled=!confirm.checked||(!dirty&&data.issues.length>0)||total===0;confirm.disabled=false;root.dispatchEvent(new CustomEvent('jormall:setup-page',{detail:Number(root.dataset.setupPage)||0}));}}
- confirm.onchange=()=>{apply.disabled=!confirm.checked||(!dirty&&data.issues.length>0)||total===0;};
- actions.append(button(tr('back'),()=>{for(const c of credentials.values())c.password.value='';callbacks.back();},'jc-link','concierge-review-back'),save,apply);root.append(actions);disable(false);return root;
+ function disable(value:boolean){for(const control of root.querySelectorAll<HTMLInputElement|HTMLButtonElement>('input,button'))control.disabled=value;if(!value)apply.disabled=!confirm.checked||data.issues.length>0||total===0;}
+ confirm.onchange=()=>disable(false);actions.append(apply);root.append(actions);disable(false);return root;
 }
