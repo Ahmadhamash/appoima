@@ -504,7 +504,7 @@ export async function previewConcierge(actor:User) {
   state.draft=withDefaultStaffHours(state.draft,context.branches);
   const issues=draftIssues(state.draft,context.branches.map(b=>b.key),context.services.map(s=>s.key));
   const preview=previewConciergeSetup(fresh,state.draft);
-  return {...preview,revision:row.revision,draft:state.draft,issues:[...issues.filter(i=>!(i.code==='empty'&&state.workspace?.dirty)),...preview.issues],options:{branches:context.branches,services:context.services,categories:hasPermission(actor,'services.read')?await serviceCategories(actor):[]}};
+  return {...preview,revision:row.revision,draft:state.draft,issues:[...issues.filter(i=>!(i.code==='empty'&&state.workspace?.dirty)),...preview.issues],options:{staff:context.staff.map(p=>({id:p.id,name:p.name})),rooms:context.rooms.map(r=>({id:r.id,name:r.name})),branches:context.branches,services:context.services,categories:hasPermission(actor,'services.read')?await serviceCategories(actor):[]}};
 }
 export async function applyConcierge(actor:User,revision:number,credentials:{key:string;initialPassword:string;permissions:string[]}[]) {
   const result=await withSession(actor,async(tx,row,fresh)=>{

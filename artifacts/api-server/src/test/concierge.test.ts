@@ -7,7 +7,7 @@ import * as linkedClinic from '../concierge/linked-clinic';
 import {randomUUID} from 'node:crypto';
 import {beforeEach,afterEach,afterAll,describe,it,expect,vi} from 'vitest';
 import {and,eq,inArray,sql} from 'drizzle-orm';
-import {db,branchDraftArchivesTable,usersTable,branchesTable,servicesTable,managerOnboardingTable,auditEventsTable} from '@workspace/db';
+import {db,branchDraftArchivesTable,usersTable,branchesTable,servicesTable,roomsTable,managerOnboardingTable,auditEventsTable} from '@workspace/db';
 import {Fixture,agent,login} from './helpers';
 import {ROLE_PRESETS} from '../domain/permissions';
 import {emptyDraft,type Draft} from '../domain/concierge-core';
@@ -26,6 +26,21 @@ async function conversation(){enable();const s=await start();const r=await post(
 async function save(draft:Draft){const s=await conversation();const r=await put('/draft',{revision:s.revision,draft});expect(r.status).toBe(200);return r.body;}
 async function branchCount(){const rows=await db.select({id:branchesTable.id}).from(branchesTable).where(eq(branchesTable.clinicId,clinic));return rows.length;}
 describe('Manager voice concierge: tenant safety, drafts and explicit atomic apply',()=>{
+ it('blocks final confirmation until an unclassified subservice has a real main service name',async()=>{
+  const draft=makeDraft();draft.services[0]!.category='Please enter the main service name.';
+  const saved=await save(draft);expect(saved.draft.services[0].category).toBeNull();
+  expect((await manager.get('/api/concierge/review')).body.issues).toContainEqual({key:'new_service',field:'category',code:'required'});
+  expect((await post('/apply',{revision:saved.revision,confirmed:true,staff:[]})).status).toBe(400);expect(await branchCount()).toBe(0);
+  draft.services[0]!.category='Medical skin treatments';const corrected=await put('/draft',{revision:saved.revision,draft});
+  expect((await post('/apply',{revision:corrected.body.revision,confirmed:true,staff:[]})).status).toBe(200);
+  expect((await db.select().from(servicesTable).where(eq(servicesTable.clinicId,clinic)))[0]!.category).toBe('Medical skin treatments');
+ });
+ it('persists setup rooms with capacity one even when a legacy draft submits a larger capacity',async()=>{
+  const draft=makeDraft();draft.services[0]!.requiresRoom=true;draft.rooms=[{key:'new_room',name:'Single treatment room',nameLang:'en',branchKey:'new_branch',capacity:5,serviceKeys:['new_service']}];
+  const saved=await save(draft);expect(saved.draft.rooms[0].capacity).toBe(1);
+  const applied=await post('/apply',{revision:saved.revision,confirmed:true,staff:[]});expect(applied.status,applied.body).toBe(200);
+  expect((await db.select().from(roomsTable).where(eq(roomsTable.clinicId,clinic)))[0]!.capacity).toBe(1);
+ });
  it('reopens completed setup sections, saves edits and resumes the selected section',async()=>{
   const s=await conversation();
   const blocked=await post('/step-select',{revision:s.revision,step:'review'});expect(blocked.status).toBe(409);

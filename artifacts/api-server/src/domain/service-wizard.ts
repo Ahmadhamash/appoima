@@ -1,22 +1,24 @@
-import { createDefinition, normalizeServiceName } from '@workspace/service-definition';
+import { createDefinition, normalizeServiceName, mainServiceName } from '@workspace/service-definition';
 import { parseDraft, nameLanguage, type Draft, type ServiceDraft, type Language, ConciergeInputError } from './concierge-core';
 export type ServiceSource={kind:'manual'|'conversation'|'public';label:string;url:string|null};
-export type ServiceSuggestion={key:string;name:string;detail:string;sourceUrl:string;followUpEnabled?:boolean};
+export type ServiceSuggestion={key:string;name:string;detail:string;sourceUrl:string;followUpEnabled?:boolean;isSubservice?:boolean;mainServiceName?:string|null};
 /** Enforces the service-only boundary independently of model instructions. */
 export function assertServiceOnly(current:Draft,next:Draft) {
   for(const kind of ['branches','rooms','staff'] as const)if(JSON.stringify(current[kind])!==JSON.stringify(next[kind]))throw new ConciergeInputError('concierge_services_only');
 }
 /** Public sources NEVER overwrite a manager's draft, and do not become live services. */
-export function publicServiceSuggestions(details:{services:{name:string;detail:string;sourceUrl:string}[]},draft:Draft,existing:{name:string}[]):ServiceSuggestion[]{
+export function publicServiceSuggestions(details:{services:{name:string;detail:string;sourceUrl:string;isSubservice?:boolean;mainServiceName?:string|null}[]},draft:Draft,existing:{name:string}[]):ServiceSuggestion[]{
   const seen=new Set([...draft.services,...existing].map(s=>normalizeServiceName(s.name??'')));
+  const parents=new Set(details.services.filter(s=>s.isSubservice&&s.mainServiceName).map(s=>normalizeServiceName(s.mainServiceName!)));
   return details.services.flatMap((s,index)=>{
-    const name=s.name.trim().slice(0,120),normalized=normalizeServiceName(name);if(!name||seen.has(normalized))return [];seen.add(normalized);
+    const name=s.name.trim().slice(0,120),normalized=normalizeServiceName(name);if(!name||seen.has(normalized)||s.isSubservice===false&&parents.has(normalized))return [];seen.add(normalized);
     let sourceUrl='';try{const url=new URL(s.sourceUrl);if(url.protocol==='https:'&&!url.username&&!url.password)sourceUrl=url.href;}catch{/* No executable URLs. */}
-    return [{key:`public_service_${index+1}`,name,detail:s.detail.slice(0,1500),sourceUrl}];
+    return [{key:`public_service_${index+1}`,name,detail:s.detail.slice(0,1500),sourceUrl,...(typeof s.isSubservice==='boolean'?{isSubservice:s.isSubservice,mainServiceName:mainServiceName(s.mainServiceName)}:{})}];
   }).slice(0,50);
 }
 export function draftFromSuggestion(suggestion:ServiceSuggestion,key:string,language:Language):ServiceDraft {
-  return {key,followUpEnabled:suggestion.followUpEnabled??false,name:suggestion.name,nameLang:nameLanguage(suggestion.name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:null,requiresRoom:null,employeeIds:null,roomIds:null,definition:createDefinition('custom',language)};
+  const parent=mainServiceName(suggestion.mainServiceName)??(suggestion.isSubservice===false?mainServiceName(suggestion.name):null),definition=createDefinition('custom',language);if(parent)definition.section=parent;definition.description=suggestion.detail.trim().slice(0,500)||null;
+  return {key,followUpEnabled:suggestion.followUpEnabled??false,name:suggestion.name,nameLang:nameLanguage(suggestion.name),branchKey:null,branchScope:null,durationMinutes:null,price:null,currency:'JOD',category:parent,requiresRoom:null,employeeIds:null,roomIds:null,definition};
 }
 export function changedServiceSources(before:Draft,after:Draft,sources:Record<string,ServiceSource>,source:ServiceSource) {
   const next:Record<string,ServiceSource>={};for(const row of after.services){

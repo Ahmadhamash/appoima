@@ -1,6 +1,6 @@
 import { WORKSPACE_FIELDS, normalizePhone, type WorkspaceField } from '@workspace/service-definition';
 /** Provider-independent onboarding contract. Model output is DATA, never an executable command. */
-import { SERVICE_DEFINITION_SCHEMA, parseServiceDefinition, definitionIssues, normalizeServiceName, type ServiceDefinition } from '@workspace/service-definition';
+import { SERVICE_DEFINITION_SCHEMA, parseServiceDefinition, definitionIssues, normalizeServiceName, mainServiceName, type ServiceDefinition } from '@workspace/service-definition';
 import { DAYS, validRanges, isTimeZone, normalizeWeek, type Week } from './setup-rules';
 export type Language = 'ar' | 'en';
 export type Stage = 'name' | 'choice' | 'conversation' | 'complete' | 'manual';
@@ -68,6 +68,7 @@ export function parseDraft(raw: unknown): Draft {
   }
   if(raw && typeof raw==='object' && Array.isArray((raw as Draft).branches))raw={...raw,branches:(raw as Draft).branches.map(b=>({...b,address:b.address??null,mapUrl:b.mapUrl??null}))};
   if(raw&&typeof raw==='object'&&Array.isArray((raw as Draft).staff))raw={...raw,staff:(raw as Draft).staff.map(p=>({...p,branchSchedules:p.branchSchedules??null}))};
+  if(raw&&typeof raw==='object'&&Array.isArray((raw as Draft).rooms))raw={...raw,rooms:(raw as Draft).rooms.map(r=>({...r,capacity:r.capacity??1}))};
   check(raw, DRAFT_SCHEMA);
   const draft = structuredClone(raw) as Draft, keys = new Set<string>();
   if(draft.branches.length===1){
@@ -97,6 +98,8 @@ export function parseDraft(raw: unknown): Draft {
   for (const s of draft.services) {
     if(s.category!==null){if(!s.category.trim()||s.category.length>80||/[\u0000-\u001f\u007f]/u.test(s.category))fail();s.category=s.category.trim().replace(/\s+/g,' ');}
     if (s.definition) { try { s.definition = parseServiceDefinition(s.definition); } catch { fail(); } }
+    s.category=mainServiceName(s.category);
+    if(s.definition&&!mainServiceName(s.definition.section)){s.definition.section='Clinic services';s.category=null;}
     for (const selection of [s.employeeIds,s.roomIds]) if (selection && (selection.some(id=>!Number.isSafeInteger(id)||id<=0) || new Set(selection).size!==selection.length)) fail();
     if (s.branchScope === 'all' && s.branchKey !== null) fail();
     if (s.name) { const identity=normalizeServiceName(s.name)+'|'+(s.branchKey??'all'); if(serviceNames.has(identity)) throw new ConciergeInputError('concierge_duplicate'); serviceNames.add(identity); }
@@ -105,7 +108,7 @@ export function parseDraft(raw: unknown): Draft {
     if (s.price !== null && !/^\d{1,9}(\.\d{1,3})?$/.test(s.price)) fail();
     if (s.currency !== null && !/^[A-Z]{3}$/.test(s.currency)) fail();
   }
-  for (const r of draft.rooms) if (r.capacity !== null && (r.capacity < 1 || r.capacity > 1000)) fail();
+  for (const r of draft.rooms) { if (r.capacity !== null && (r.capacity < 1 || r.capacity > 1000)) fail(); r.capacity=1; }
   for (const p of draft.staff) {
     if(p.branchSchedules){if(new Set(p.branchSchedules.map(s=>s.branchKey)).size!==p.branchSchedules.length)fail();for(const s of p.branchSchedules){if(!KEY.test(s.branchKey))fail();for(const w of [s.workingHours,s.breaks])for(const d of DAYS)if(w[d].length>8||!validRanges(w[d]))fail();}if(p.branchSchedules.length){p.branchKey=p.branchSchedules.length===1?p.branchSchedules[0]!.branchKey:null;p.workingHours=p.branchSchedules[0]!.workingHours;p.breaks=p.branchSchedules[0]!.breaks;}}
     if (p.email !== null && (p.email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email))) fail();

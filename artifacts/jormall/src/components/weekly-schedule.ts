@@ -9,11 +9,15 @@ type Options = {
   id: string; language: Language; label?: string; hint?: string;
   hoursKey?: 'workingHours' | 'openingHours'; manualBranch?: boolean; branch?: boolean;
   pagedDays?: boolean;
+  sharedHours?: boolean;
 };
 
 export function createWeeklySchedule(initial: WeeklySchedule, options: Options, onChange: (value: WeeklySchedule) => void) {
   let value = structuredClone(initial);
   const { id, language, manualBranch = false, branch = false, hoursKey = 'workingHours', pagedDays = false } = options;
+  const openingDays = () => DAYS.filter(day => value.workingHours[day].length);
+  let commonDay: Day = openingDays()[0] ?? 'mon';
+  let sameHours = !!options.sharedHours && openingDays().every(day => JSON.stringify([value.workingHours[day],value.breaks[day]]) === JSON.stringify([value.workingHours[commonDay],value.breaks[commonDay]]));
   const ar = language === 'ar', w = (a: string, e: string) => ar ? a : e;
   const names = ar ? ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'] : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const root = el('fieldset', 'weekly-schedule'); root.dataset.testid = id;
@@ -22,6 +26,9 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
   const detailPages=new Map<Day,number>();
   const intervalPages=new Map<string,number>();
   const dayChoices=el('div','weekly-schedule-day-choices');
+  const sameLabel=el('label','weekly-schedule-shared jc-check'),sameCheck=el('input');
+  sameCheck.type='checkbox';sameCheck.dataset.testid=`${id}-same-hours`;sameCheck.checked=sameHours;
+  sameLabel.append(sameCheck,document.createTextNode(w('كل أيام الدوام لها نفس ساعات الفتح والاستراحة.','All opening days have the same opening and break hours.')));
   if (options.label) root.append(el('legend', '', options.label));
   root.append(el('p', 'weekly-schedule-hint', options.hint ?? w(
     'حدّد أيام الدوام، ثم انسخ الوقت والبريكات من يوم واحد إلى كل الأيام المحددة في هذا الفرع.',
@@ -32,7 +39,11 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
   sourceLabel.append(el('span', '', w('انسخ من', 'Copy from')), source);
   const status = el('p', 'weekly-schedule-status'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
   const days = el('div', 'weekly-schedule-days');
-  const emit = () => { status.textContent = ''; refresh(); onChange(structuredClone(value)); };
+  const syncCommon = () => {
+    if(!sameHours)return;
+    for(const day of openingDays())if(day!==commonDay){value.workingHours[day]=structuredClone(value.workingHours[commonDay]);value.breaks[day]=structuredClone(value.breaks[commonDay]);}
+  };
+  const emit = () => { syncCommon();status.textContent = ''; refresh(); onChange(structuredClone(value)); };
   const validDay = (day: Day) => scheduleDayValid(value.workingHours[day], value.breaks[day]) &&
     (!branch || branchHoursFromSchedule(value)[day].every(range => !!range.open && !!range.close));
   const apply = button(w('تطبيق على الكل', 'Apply to all'), () => {
@@ -46,8 +57,9 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
     render(); onChange(structuredClone(value));
     status.textContent = w(`تم تطبيق الوقت والبريكات على ${selected.length} أيام دوام.`, `Hours and breaks applied to ${selected.length} working days.`);
   }, 'weekly-schedule-apply', `${id}-apply-all`);
-  toolbar.append(sourceLabel, apply); if(pagedDays)root.append(dayChoices);root.append(toolbar, status, days);
+  toolbar.append(sourceLabel, apply);if(options.sharedHours)root.append(sameLabel);if(pagedDays||options.sharedHours)root.append(dayChoices);root.append(toolbar, status, days);
   source.onchange = () => refresh();
+  sameCheck.onchange=()=>{sameHours=sameCheck.checked;commonDay=openingDays().includes(source.value as Day)?source.value as Day:openingDays()[0]??'mon';syncCommon();render();emit();};
 
   const checkId = (day: Day) => manualBranch ? `${id}-${day}-open` : `${id}-${hoursKey}-${day}`;
   const inputId = (key: 'workingHours' | 'breaks', day: Day, index: number, part: 'open' | 'close') =>
@@ -88,6 +100,8 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
   }
 
   function render() {
+    root.dataset.sharedHours=String(sameHours);toolbar.hidden=sameHours;
+    if(!value.workingHours[commonDay].length)commonDay=openingDays()[0]??'mon';
     for(const day of DAYS){const card=days.querySelector<HTMLElement>(`[data-day="${day}"]`);if(card){detailPages.set(day,Number(card.dataset.setupPage)||0);for(const key of ['hours','breaks'])intervalPages.set(`${day}-${key}`,Number(card.querySelector<HTMLElement>(`.weekly-schedule-${key}`)?.dataset.setupPage)||0);}}
     days.replaceChildren();dayChoices.replaceChildren();
     const showDay=(day:Day)=>{activeDay=day;for(const card of days.children)(card as HTMLElement).hidden=(card as HTMLElement).dataset.day!==day;for(const control of dayChoices.querySelectorAll<HTMLButtonElement>('button'))control.setAttribute('aria-pressed',String(control.dataset.day===day));};
@@ -103,9 +117,12 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
         card.append(el('h4','weekly-schedule-active-day',names[index]!));
       }
       if (!check.checked) header.append(el('span', 'weekly-schedule-closed', w('إجازة', 'Closed')));
-      if(!pagedDays)card.append(header);
+      if(options.sharedHours){dayChoices.append(header);card.append(el('h4','weekly-schedule-active-day',sameHours?w('ساعات كل أيام الدوام المحددة','Hours for all selected opening days'):names[index]!));card.hidden=!check.checked||sameHours&&day!==commonDay;}
+      else if(!pagedDays)card.append(header);
       check.onchange = () => {
-        value.workingHours[day] = check.checked ? [{ open: '09:00', close: '17:00' }] : [];
+        if(check.checked===!!value.workingHours[day].length)return;
+        value.workingHours[day] = check.checked ? sameHours&&value.workingHours[commonDay].length?structuredClone(value.workingHours[commonDay]):[{ open: '09:00', close: '17:00' }] : [];
+        if(check.checked&&sameHours)value.breaks[day]=structuredClone(value.breaks[commonDay]);
         if (!check.checked) value.breaks[day] = [];
         render(); emit();
       };
@@ -120,7 +137,7 @@ export function createWeeklySchedule(initial: WeeklySchedule, options: Options, 
                 testId: inputId(key, day, rangeIndex, part),
                 label: `${names[index]} ${key === 'breaks' ? w('بريك', 'break') : w('دوام', 'work')} ${part === 'open' ? w('من', 'from') : w('إلى', 'to')}`,
                 onChange: next => { range[part] = next; emit(); } });
-              const caption = el('label', '', part === 'open' ? w('من', 'From') : w('إلى', 'To')); caption.htmlFor = clock.input.id;
+              const caption = el('label', '', key==='breaks'?(part==='open'?w('الاستراحة من','Break From'):w('الاستراحة إلى','Break To')):branch?(part==='open'?w('الفتح من','Opening From'):w('الفتح إلى','Opening To')):part === 'open' ? w('من', 'From') : w('إلى', 'To')); caption.htmlFor = clock.input.id;
               label.className = 'weekly-schedule-clock'; label.append(caption, clock.node); row.append(label);
             }
             if (key === 'breaks' || value[key][day].length > 1) {

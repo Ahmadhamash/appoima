@@ -337,7 +337,6 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 .jc-dialog.jc-setup-mode .jc-import-detail{max-height:none;overflow:visible}.jc-dialog.jc-setup-mode .jc-import-detail-line p{overflow-wrap:anywhere;font-size:12px;line-height:1.7}.jc-dialog.jc-setup-mode .jc-import-detail-logo{max-height:80px}
 .jc-dialog.jc-setup-mode .jc-import-edit-form textarea{min-height:68px;height:68px}.jc-dialog.jc-setup-mode .jc-import-edit-form{gap:8px}
 .jc-dialog.jc-setup-mode .jc-service-bulk-selection{display:block;max-height:none;overflow:visible;padding:8px;margin:8px 0}.jc-service-bulk-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.jc-dialog.jc-setup-mode .jc-service-batch:has(.jc-service-bulk[open])>.jc-service-batch-rows,.jc-dialog.jc-setup-mode .jc-service-batch:has(.jc-service-bulk[open])>.jc-page-nav,.jc-dialog.jc-setup-mode .jc-service-batch:has(.jc-service-bulk[open])>.jc-service-batch-progress{display:none}
 .jc-dialog.jc-setup-mode .jc-bulk-part>p{font-size:12px;line-height:1.6;margin:8px 0}.jc-dialog.jc-setup-mode .jc-service-bulk[open]{padding:12px}
 
 .jc-dialog.jc-setup-mode .jc-week-paged .jc-page-nav,.jc-dialog.jc-setup-mode .jc-week-paged .jc-day-name{display:none}
@@ -406,12 +405,10 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 .jc-dialog .staff-branch-schedules.space-y-3>*{margin-block-start:0;margin-block-end:0}
 .jc-dialog .staff-branch-shift-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.jc-dialog .staff-branch-shift-heading>button{font-weight:400;font-size:11px}
 .jc-dialog.jc-setup-mode .jc-review .weekly-schedule-paged>legend{display:none}.jc-dialog.jc-setup-mode .jc-review .jc-record summary{font-size:14px;line-height:1.4}.jc-dialog.jc-setup-mode .jc-review .jc-record-heading{vertical-align:top}.jc-dialog.jc-setup-mode .jc-review .jc-record-page-body{padding-top:0}
-.jc-dialog.jc-setup-mode .jc-service-entry:has(.jc-service-bulk[open]) .jc-service-batch-rows,.jc-dialog.jc-setup-mode .jc-service-entry:has(.jc-service-bulk[open])>[data-testid=concierge-service-pages]{display:none}
 .jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-stage{padding-top:6px;gap:6px}
 .jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-setup-journey{margin-top:0;padding-block:0}
 .jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-caption{font-size:24px;line-height:1.35;margin:0}
 .jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-journey-step{min-height:58px;gap:5px;font-size:12px}.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-journey-marker{width:32px;height:32px;font-size:14px}.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-journey-track::before,.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-journey-track::after{top:15px}
-.jc-structured-setup:has(.jc-structured-hours:not([hidden]),.jc-staff-assignments:not([hidden]))>.jc-service-field{display:none!important}.jc-service-batch-row:has(.jc-structured-hours:not([hidden]))>.jc-remove{display:none!important}
 .jc-dialog .weekly-schedule-paged .weekly-schedule-work-part{grid-template-columns:minmax(0,1fr) auto;align-items:end}.jc-dialog .weekly-schedule-paged .weekly-schedule-add-interval{max-width:105px;white-space:normal;min-height:42px}
 @media(max-width:640px){.jc-dialog.jc-setup-mode .jc-caption{font-size:21px;line-height:1.45;margin-bottom:0}.jc-dialog.jc-setup-mode .jc-structured-setup .jc-service-batch-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.jc-dialog.jc-setup-mode .jc-structured-setup .jc-service-batch-row{padding:10px 12px}.jc-dialog.jc-setup-mode .jc-structured-setup .jc-service-batch-fields>label:has(input[type=email],input[type=url]),.jc-dialog.jc-setup-mode .jc-structured-setup .jc-service-batch-fields>.phone-field{grid-column:1/-1}.jc-dialog.jc-setup-mode .jc-structured-setup .jc-page-nav{font-size:12px;gap:6px}.jc-dialog.jc-setup-mode .jc-structured-setup .jc-page-nav .jc-button{min-height:34px!important;padding:5px 10px!important}.jc-dialog .weekly-schedule-paged>.weekly-schedule-hint{font-size:11px}}
 @media(max-width:640px){.jc-dialog .weekly-schedule-paged .weekly-schedule-day-choices{grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.jc-dialog .weekly-schedule-paged .weekly-schedule-day-header{flex-direction:column;gap:2px;padding:4px 2px}.jc-dialog .weekly-schedule-paged .weekly-schedule-day-select{min-height:26px;width:100%;font-size:11px}.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-caption{font-size:20px;line-height:1.35}.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-service-entry,.jc-review,.jc-room-batch) .jc-journey-step{font-size:10px}}
@@ -419,7 +416,7 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 @media(max-height:720px){.jc-dialog .staff-branch-schedules>legend{display:none}}
 @media(max-height:720px){.jc-dialog.jc-setup-mode .jc-review{padding-block:6px;gap:4px}.jc-dialog.jc-setup-mode .jc-review .jc-record{padding-block:8px}}
 
-/* Expand one main service at a time and give its compact rows the available screen. */
+/* All main services and subservices share the available screen. */
 .jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-stage{padding:4px 12px 8px;gap:4px}
 .jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-caption{font-size:22px;line-height:1.3}
 .jc-dialog.jc-setup-mode:has(.jc-service-tree) .jc-journey-description{display:none}
@@ -488,3 +485,24 @@ html.jc-setup-open,html.jc-setup-open body,html.jc-setup-page,html.jc-setup-page
 .jc-review-table td{white-space:normal;overflow-wrap:anywhere}
 
 .jc-dialog.jc-setup-mode .jc-review>h3{display:block;margin:12px 0 8px;font-size:15px}
+
+/* One form per major section, with a single list that scrolls only when needed. */
+.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-room-batch) .jc-controls{width:100%;max-width:none!important;max-height:none!important;overflow:hidden!important}
+.jc-dialog.jc-setup-mode:has(.jc-structured-setup,.jc-room-batch) .jc-panel-step{overflow:hidden;min-height:0}
+.jc-dialog.jc-setup-mode .jc-structured-list,.jc-dialog.jc-setup-mode .jc-room-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));align-content:start;gap:12px;min-height:0;flex:1;overflow:auto;padding:8px;scrollbar-gutter:stable;overscroll-behavior:contain}
+.jc-dialog.jc-setup-mode .jc-structured-list>.jc-service-batch-row,.jc-dialog.jc-setup-mode .jc-room-list>.jc-service-batch-row{align-self:start;display:grid;gap:12px;min-width:0;margin:0}
+.jc-dialog.jc-setup-mode .jc-structured-hours>h3{display:block;margin:4px 0 10px;font-size:14px}
+.jc-dialog.jc-setup-mode .jc-room-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.jc-dialog.jc-setup-mode .jc-staff-assignments .weekly-schedule-days{grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));align-items:start}
+.jc-dialog .weekly-schedule [hidden]{display:none!important}
+.jc-dialog .weekly-schedule-shared{align-items:center;line-height:1.5;font-size:13px}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared)>.weekly-schedule-hint{display:none}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared)>.weekly-schedule-day-choices{display:flex;flex-wrap:wrap;gap:8px}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-day-choices .weekly-schedule-day-header{border:1px solid #52698666;border-radius:8px;padding:6px 8px;flex:1;min-width:100px}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-day-choices .weekly-schedule-closed{display:none}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-day{gap:8px}
+.jc-dialog .weekly-schedule-active-day{margin:0;font-size:13px}
+.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-breaks{width:min(100%,480px);justify-self:center}
+.jc-review-intake{display:grid;gap:4px;border-top:1px solid #91addc30;padding-top:8px}
+.jc-review-table .jc-review-service-group th{text-align:start;width:auto;background:#3b5578}
+@media(max-width:640px){.jc-dialog.jc-setup-mode .jc-structured-list,.jc-dialog.jc-setup-mode .jc-room-list{padding:4px;grid-template-columns:minmax(0,1fr)}.jc-dialog .weekly-schedule:has(.weekly-schedule-shared) .weekly-schedule-day-choices .weekly-schedule-day-header{min-width:80px;padding:5px}.jc-dialog.jc-setup-mode .jc-room-fields{grid-template-columns:1fr}}

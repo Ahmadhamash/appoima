@@ -134,6 +134,12 @@ export function intakeSnapshot(definition: ServiceDefinition | null | undefined,
 export function normalizeServiceName(value: string) {
   return value.normalize('NFKC').replace(/[\u064b-\u065f\u0670\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').trim().toLocaleLowerCase().replace(/\s+/g,' ');
 }
+/** UI instructions are never service names, including in older saved setup drafts. */
+export function mainServiceName(value: string | null | undefined): string | null {
+  const name = value?.trim().replace(/\s+/g, ' ');
+  if (!name || /^(please enter the main service name\.?|يرجى إدخال اسم الخدمة الرئيسية\.?)$/i.test(name)) return null;
+  return name;
+}
 export function missingServiceFields(service: {
   name?: string | null; durationMinutes?: number | null; price?: string | number | null; currency?: string | null;
   category?: string | null; requiresRoom?: boolean | null; branchScope?: string | null; branchKey?:string|null; definition?: ServiceDefinition | null;

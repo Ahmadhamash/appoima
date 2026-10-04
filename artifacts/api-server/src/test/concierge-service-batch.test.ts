@@ -1,10 +1,29 @@
 import {describe,expect,it} from 'vitest';
-import {applySharedServiceDetails,emptyDraft,mergeDraft,parseDraft} from '../domain/concierge-core';
+import {applySharedServiceDetails,draftIssues,emptyDraft,mergeDraft,parseDraft} from '../domain/concierge-core';
 import {importPublicDetails} from '../domain/concierge-public-import';
 import {setupWorkflow,canFinishStep} from '../domain/concierge-workflow';
 import {serviceSchema} from '../domain/setup-validation';
 
 describe('Imported service setup',()=>{
+ it('groups scraped subservices under the identified parent without creating a duplicate appointment service',()=>{
+  const draft=importPublicDetails(emptyDraft(),{branches:[],services:[{name:'Laser hair removal',isSubservice:false},{name:'Full body laser',isSubservice:true,mainServiceName:'Laser hair removal',detail:'Published treatment'},{name:'Beard laser',isSubservice:true,mainServiceName:'Laser hair removal'}]},{branches:[],services:[]});
+  expect(draft.services.map(s=>s.name)).toEqual(['Full body laser','Beard laser']);
+  expect(draft.services.every(s=>s.category==='Laser hair removal'&&s.definition?.section==='Laser hair removal')).toBe(true);
+  expect(draft.services[0]?.definition?.description).toBe('Published treatment');
+ });
+ it('requires the manager to name missing parents and never saves the placeholder as a service name',()=>{
+  const draft=importPublicDetails(emptyDraft(),{branches:[],services:[{name:'Unclassified treatment',isSubservice:true,mainServiceName:null}]},{branches:[],services:[]});
+  expect(draft.services[0]?.category).toBeNull();
+  draft.services[0]!.category='Please enter the main service name.';
+  const parsed=parseDraft(draft);expect(parsed.services[0]?.category).toBeNull();
+  expect(draftIssues(parsed).some(i=>i.key===parsed.services[0]!.key&&i.field==='category'&&i.code==='required')).toBe(true);
+  expect(canFinishStep('services',parsed,{branches:[],services:[],rooms:[]})).toBe(false);
+  expect(JSON.stringify(parsed)).not.toContain('Please enter the main service name');
+ });
+ it('defaults old and new setup rooms to one client, regardless of an older capacity setting',()=>{
+  const room={key:'room_one',name:'Treatment room',nameLang:'en' as const,branchKey:null,capacity:null,serviceKeys:[]};
+  expect(parseDraft({...emptyDraft(),rooms:[room,{...room,key:'room_two',capacity:5}]}).rooms.map(r=>r.capacity)).toEqual([1,1]);
+ });
  it('uses JOD for every imported service and never asks for a currency',()=>{
   const names=Array.from({length:15},(_,index)=>`Service ${index+1}`);
   const draft=importPublicDetails(emptyDraft(),{branches:[],services:names.map(name=>({name}))},{branches:[],services:[]});

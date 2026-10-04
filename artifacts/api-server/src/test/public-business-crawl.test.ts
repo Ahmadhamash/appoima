@@ -10,6 +10,14 @@ const node=(shortcode:string,text:string,username='clinic_example')=>({shortcode
 const readerFor=(pages:Record<string,string>)=>vi.fn(async(url:string)=>{if(!pages[url])throw new Error('unavailable');return {url,bytes:Buffer.from(pages[url]),mime:'text/html'};});
 afterEach(()=>vi.unstubAllEnvs());
 describe('public clinic sites, social profiles and posts',()=>{
+ it('accepts only an evidenced parent service and leaves an invented or missing parent unclassified',()=>{
+  const pages=[{url:site,text:'Laser hair removal: Full body laser and Beard laser.',kind:'website' as const}];
+  const service={name:'Full body laser',detail:'Published treatment',sourceUrl:site,evidence:'Full body laser and Beard laser.',isSubservice:true,mainServiceName:'Laser hair removal',mainServiceEvidence:'Laser hair removal: Full body laser',mainServiceSourceUrl:site};
+  expect(verifiedPublicDetails({services:[service]},pages).services[0]?.mainServiceName).toBe('Laser hair removal');
+  expect(verifiedPublicDetails({services:[{...service,mainServiceName:'Botox'}]},pages).services[0]?.mainServiceName).toBeNull();
+  expect(verifiedPublicDetails({services:[{...service,mainServiceSourceUrl:'https://unread.example/'}]},pages).services[0]?.mainServiceName).toBeNull();
+  expect(verifiedPublicDetails({services:[{...service,mainServiceName:null,mainServiceEvidence:null}]},pages).services[0]?.mainServiceName).toBeNull();
+ });
  it('does not treat a website template theme as the clinic brand color',()=>{
   const html='<meta name="theme-color" content="#6EC1E4"><style>:root{--e-global-color-primary:#6EC1E4}</style><h1>Clinic Example</h1>';
   expect(siteIdentity(html,site).colors).toEqual([]);

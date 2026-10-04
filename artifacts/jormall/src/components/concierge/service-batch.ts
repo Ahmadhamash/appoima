@@ -1,8 +1,7 @@
 import { createCategoryInput, categoryNames } from '../category-input';
 import { type Draft, type Language, type ServiceDraft } from './contract';
 import { button, el } from './dom';
-import { setupPager } from './paging';
-import { createDefinition, definitionIssues, normalizeServiceName } from '@workspace/service-definition';
+import { createDefinition, definitionIssues, normalizeServiceName, mainServiceName } from '@workspace/service-definition';
 import { setupNotice } from './setup-notice';
 
 const GENERIC = ['خدمات العيادة', 'Clinic services'];
@@ -12,7 +11,7 @@ const validPrice = (value: string | null) => value !== null && /^\d{1,9}(\.\d{1,
 export function buildServiceBatch(source: Draft, language: Language, save: (draft: Draft, advance: boolean) => Promise<void>, back?: (draft: Draft) => Promise<void>, changed?: (draft: Draft) => void, knownCategories: string[] = []): HTMLElement {
  const draft = structuredClone(source), ar = language === 'ar', w = (arabic: string, english: string) => ar ? arabic : english;
  const categoryName = (category: ServiceDraft['category']) => category ?? '';
- const categories=new Set(categoryNames(knownCategories)),categoryOptions=()=>categoryNames([...categories,...draft.services.map(s=>s.definition?.section&&!GENERIC.includes(s.definition.section)?s.definition.section:s.category)]);
+ const categories=new Set(categoryNames(knownCategories).filter(mainServiceName)),categoryOptions=()=>categoryNames([...categories,...draft.services.map(s=>s.definition?.section&&!GENERIC.includes(s.definition.section)?s.definition.section:s.category)]).filter(mainServiceName);
  const rememberCategory=(name:string)=>{categories.add(name);};
  const total = () => Object.values(draft).reduce((count, rows) => count + rows.length, 0);
  const definition = (service: ServiceDraft) => service.definition ??= createDefinition(service.category === 'Laser' ? 'laser' : 'custom', language);
@@ -21,9 +20,11 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
   if (name && !GENERIC.includes(name)) return name;
   return categoryName(service.category) || w('خدمات جديدة', 'New services');
  };
- const newService = (parent?: ServiceDraft): ServiceDraft => ({ key: `service_${crypto.randomUUID().replaceAll('-', '')}`, name: null, nameLang: null, branchKey: draft.branches.length === 1 ? draft.branches[0]!.key : null, branchScope: draft.branches.length === 1 ? 'branch' : null, durationMinutes: null, price: null, currency: 'JOD', category: parent?.category ?? null, requiresRoom: null, definition: parent ? { ...createDefinition(parent.category === 'Laser' ? 'laser' : 'custom', language), section: section(parent) } : null, followUpEnabled: false });
+ const newService = (parent?: ServiceDraft): ServiceDraft => ({ key: `service_${crypto.randomUUID().replaceAll('-', '')}`, name: null, nameLang: null, branchKey: draft.branches.length === 1 ? draft.branches[0]!.key : null, branchScope: draft.branches.length === 1 ? 'branch' : null, durationMinutes: null, price: null, currency: 'JOD', category: parent?.category ?? null, requiresRoom: null, definition: parent ? { ...createDefinition(parent.category === 'Laser' ? 'laser' : 'custom', language), section: mainServiceName(parent.category) ?? GENERIC[ar?0:1]! } : null, followUpEnabled: false });
  if (!draft.services.length && total() < 50) draft.services.push(newService());
  for (const service of draft.services) {
+  service.category=mainServiceName(service.category);
+  if(service.definition&&!mainServiceName(service.definition.section))service.definition.section=GENERIC[ar?0:1]!;
   service.currency = 'JOD'; if(service.definition?.section&&!GENERIC.includes(service.definition.section))service.category=service.definition.section; if(service.category)definition(service).section=service.category; if (service.name) service.nameLang ??= /[\u0600-\u06ff]/.test(service.name) ? 'ar' : 'en';
   if (!service.branchScope) { if (service.branchKey) service.branchScope = 'branch'; else if (draft.branches.length === 1) { service.branchScope = 'branch'; service.branchKey = draft.branches[0]!.key; } }
  }
@@ -38,7 +39,7 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
   if (!service.name?.trim()) fields.push(w('اسم الخدمة', 'Service name'));
   if (!validDuration(service.durationMinutes)) fields.push(w('المدة', 'Duration'));
   if (!validPrice(service.price)) fields.push(w('السعر', 'Price'));
-  if (!service.category) fields.push(w('الخدمة الرئيسية', 'Main service'));
+  if (!mainServiceName(service.category)) fields.push(w('الخدمة الرئيسية', 'Main service'));
   if (service.requiresRoom === null) fields.push(w('احتياج الغرفة', 'Room requirement'));
   if (!service.branchScope || service.branchScope === 'branch' && !service.branchKey) fields.push(w('الفرع', 'Branch'));
   if (definitionIssues(service.definition).some(issue => issue.code !== 'medical_review_required')) fields.push(w('تعريف الخدمة يحتاج تعديلًا', 'Service definition needs an edit'));
@@ -62,7 +63,6 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
  bulkFields.append(labeled(w('مدة موحدة', 'Common duration'), bulkDuration), labeled(w('سعر موحد', 'Common price'), bulkPrice), labeled(w('الخدمة الرئيسية (اتركها فارغة لإبقائها كما هي)', 'Main service (leave blank to keep existing)'), bulkChoice.node), labeled(w('الغرفة', 'Room'), bulkRoom));
  const selectionPage = el('div', 'jc-bulk-part'), valuesPage = el('div', 'jc-bulk-part');
  selectionPage.append(el('p', '', w('اختر الخدمات اللي إلها نفس التفاصيل. بنعبّي النواقص فقط.', 'Choose services that share these details. Only missing values are filled.')), selection); valuesPage.append(bulkFields); bulk.append(selectionPage, valuesPage);
- const bulkPager = setupPager(bulk, [selectionPage, valuesPage], language, 'service-bulk-detail-pages'); if (bulkPager) bulk.insertBefore(bulkPager, selectionPage);
  const renderSelection = () => {
   selection.replaceChildren(); const parts: HTMLElement[] = [];
   for (let offset = 0; offset < draft.services.length; offset += 4) {
@@ -73,9 +73,9 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
    }
    parts.push(part); selection.append(part);
   }
-  const pager = setupPager(selection, parts, language, 'service-bulk-selection-pages'); if (pager) selection.prepend(pager);
  };
  let activeKey: string | undefined = draft.services[0]?.key;
+ const collapsedGroups = new Set<string>();
  // Unnamed main services stay separate while the manager is entering their names.
  const unnamedGroups = new Map<string, string>();
  let openGroup: (key?: string) => void = () => {};
@@ -89,14 +89,15 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
    const group = el('section', 'jc-service-group'); group.dataset.testid = 'concierge-service-group'; group.dataset.groupName = groupName;
    const heading=el('div','jc-service-group-heading'),groupTitle=el('h3','',w('الخدمة الرئيسية','Main service'));
    const collapsedTitle = el('span', 'jc-service-group-name', groupName);
-   const toggle = button('', () => openGroup(group.dataset.expanded === 'true' ? undefined : services[0]!.key), 'jc-service-group-toggle', `service-group-toggle-${services[0]!.key}`);
+   const toggle = button('', () => {const key=services[0]!.key;if(collapsedGroups.has(key))collapsedGroups.delete(key);else collapsedGroups.add(key);openGroup();}, 'jc-service-group-toggle', `service-group-toggle-${services[0]!.key}`);
    const arrow = el('span', 'jc-service-group-arrow', '⌄'); arrow.setAttribute('aria-hidden', 'true');
    toggle.append(el('span', 'jc-service-main-index', String(groupNumber)), collapsedTitle, arrow);
    const main=createCategoryInput({id:`service-category-${services[0]!.key}`,value:services[0]!.category??'',language,options:categoryOptions,onChange:value=>{
-    for(const service of services){service.category=value.trim()||null;definition(service).section=value.trim()||GENERIC[ar?0:1]!;}
+    for(const service of services){service.category=mainServiceName(value);definition(service).section=service.category||GENERIC[ar?0:1]!;}
     group.dataset.groupName=value.trim();collapsedTitle.textContent=value.trim()||w('خدمة رئيسية جديدة','New main service');toggle.setAttribute('aria-label',w(`الخدمة الرئيسية ${groupNumber}: ${collapsedTitle.textContent}`,`Main service ${groupNumber}: ${collapsedTitle.textContent}`));refresh();
     for(const service of services){const row=rows.querySelector<HTMLElement>(`[data-testid="concierge-service-${service.key}"]`),done=ready(service);if(row){row.dataset.ready=String(done);const badge=row.querySelector<HTMLElement>('.jc-service-state');if(badge){badge.textContent=done?w('جاهزة','Ready'):w('تحتاج إكمال','Needs details');badge.dataset.ready=String(done);}}}
    },onCommit:name=>{rememberCategory(name);if(document.activeElement?.closest('.category-picker')===main.node&&name!==groupName)renderServices();}});
+   main.input.placeholder=w('يرجى إدخال اسم الخدمة الرئيسية.','Please enter the main service name.');
    const mainField=el('div','jc-service-main-field');mainField.append(groupTitle,main.node);
    const add=button(w('+ خدمة فرعية','+ Subservice'),()=>addService(services[0]),'jc-button',`service-sub-add-${services[0]!.key}`);
    heading.append(toggle,mainField,el('span','jc-service-child-count',w(`${services.length} خدمات فرعية`,`${services.length} subservices`)),add);group.append(heading);
@@ -142,16 +143,16 @@ export function buildServiceBatch(source: Draft, language: Language, save: (draf
   }
   if (!draft.services.length) rows.append(el('p', 'jc-room-empty', w('أضف خدمة واحدة على الأقل للمتابعة.', 'Add at least one service to continue.')));
   openGroup = key => {
-   activeKey=key;
+   if(key)activeKey=key;
+   const targetView=views.find(view=>view.services.some(service=>service.key===key));
+   if(targetView)collapsedGroups.delete(targetView.services[0]!.key);
    for(const view of views){
-    const expanded=view.services.some(service=>service.key===key);
+    const expanded=!collapsedGroups.has(view.services[0]!.key);
     view.group.dataset.expanded=String(expanded);view.toggle.setAttribute('aria-expanded',String(expanded));
     view.children.hidden=view.mainField.hidden=view.add.hidden=!expanded;view.title.hidden=expanded;
    }
-   const opened=views.find(view=>view.group.dataset.expanded==='true');
-   if(opened) rows.scrollTop+=opened.group.getBoundingClientRect().top-rows.getBoundingClientRect().top;
   };
-  openGroup(draft.services.some(service=>service.key===target)?target:draft.services[0]?.key);
+  openGroup(target);
   refresh();
  };
  const addService = (parent?: ServiceDraft) => {
