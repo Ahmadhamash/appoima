@@ -7,6 +7,7 @@ import { clinicSetupKey, SETUP_PATH } from '@/lib/clinic-setup';
 import type { Bootstrap } from './contract';
 import { ConciergeView } from './view';
 import './concierge.css';
+import './review-overview.css';
 /** Kept separate from the old read-only Staff help; scoped to authorized managers in AppShell. */
 export default function ManagerConcierge({onSignOut,onStaffHelp,onReady}:{onSignOut:()=>Promise<void>;onStaffHelp:()=>void;onReady?:()=>void}){
  const [location,navigate]=useLocation(),queryClient=useQueryClient(),{user}=useAuth(),{lang,setLang}=useI18n(),callbacks=useRef({navigate,onSignOut,onStaffHelp,location,lang,setLang}),viewRef=useRef<ConciergeView|null>(null);callbacks.current={navigate,onSignOut,onStaffHelp,location,lang,setLang};

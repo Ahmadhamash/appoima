@@ -6,38 +6,32 @@ import { normalizePhone, mainServiceName, SERVICE_TEMPLATES } from '@workspace/s
 import { phoneValidationMessage } from '../phone-input';
 import { formatClockTime } from '@/lib/time-format';
 import { scheduleFromBranchHours } from '../weekly-schedule-rules';
+import { buildIdentityCard, createReviewSections, reviewIcon } from './review-layout';
 
 type Cell = string | number | null | undefined | HTMLElement;
 export function buildReview(data:Review,language:Language,callbacks:{save:(draft:Draft)=>Promise<Review|void>;apply:(staff:Provision[])=>Promise<void>;back:()=>void;archiveBranch?:(key:string,draft:Draft)=>Promise<void>;error:(message:string)=>void},profile?:WorkspaceProfile,accessCache=new Map<string,Provision>()):HTMLElement {
- const ar=language==='ar',w=(a:string,e:string)=>ar?a:e,tr=(key:string)=>text(language,key),draft=structuredClone(data.draft),root=el('section','jc-review');root.dataset.testid='concierge-review';
+ const ar=language==='ar',w=(a:string,e:string)=>ar?a:e,tr=(key:string)=>text(language,key),draft=structuredClone(data.draft),root=el('section','jc-review jc-review-overview');root.dataset.testid='concierge-review';
  let dirty=false,busy=false;
  for(const service of draft.services){if(!service.branchScope&&service.branchKey){service.branchScope='branch';dirty=true;}else if(!service.branchScope&&draft.branches.length===1){service.branchScope='branch';service.branchKey=draft.branches[0]!.key;dirty=true;}if(service.currency!=='JOD'){service.currency='JOD';dirty=true;}}
  for(const room of draft.rooms)if(room.capacity!==1){room.capacity=1;dirty=true;}
+ const layout=createReviewSections(language,Object.fromEntries(KINDS.map(kind=>[kind,draft[kind].length])) as Record<keyof Draft,number>);
+ if(profile)root.append(buildIdentityCard(profile,language));
+ root.append(layout.card,layout.panels);
  const branchName=(key:string|null)=>[...draft.branches,...data.options.branches].find(b=>b.key===key)?.name??'—';
  const serviceNames=(keys:string[]|null)=>keys?.map(key=>[...draft.services,...data.options.services].find(s=>s.key===key)?.name??key).join('، ')||'—';
  const yes=(value:boolean|null|undefined)=>value===null||value===undefined?'—':tr(value?'yes':'no');
  function link(value:string|null|undefined){if(!value)return '—';try{if(!['http:','https:'].includes(new URL(value).protocol))return value;}catch{return value;}const a=el('a','',value);a.href=value;a.target='_blank';a.rel='noopener noreferrer';return a;}
- function table(title:string,headers:string[],rows:{key?:string;group?:string;cells:Cell[]}[]){
-  root.append(el('h3','',title));const scroll=el('div','jc-review-table-scroll'),node=el('table','jc-review-table'),caption=el('caption','sr-only',title),head=el('thead'),heading=el('tr'),body=el('tbody');
+ function table(kind:keyof Draft,title:string,headers:string[],rows:{key?:string;group?:string;cells:Cell[]}[]){
+  const host=layout.sections.get(kind)!;const scroll=el('div','jc-review-table-scroll'),node=el('table','jc-review-table'),caption=el('caption','sr-only',title),head=el('thead'),heading=el('tr'),body=el('tbody');
   for(const label of headers){const th=el('th','',label);th.scope='col';heading.append(th);}head.append(heading);
   let group:string|undefined;for(const row of rows){if(row.group&&row.group!==group){group=row.group;const line=el('tr','jc-review-service-group'),heading=el('th','',group);heading.colSpan=headers.length;heading.scope='rowgroup';line.append(heading);body.append(line);}const line=el('tr');if(row.key)line.dataset.testid=`draft-${row.key}`;for(const [index,value] of row.cells.entries()){const cell=el('td',headers[0]==='#'&&index===0?'jc-review-number':'');if(value instanceof HTMLElement)cell.append(value);else{const content=el('bdi','',value===null||value===undefined||value===''?'—':String(value));if(typeof value==='string'&&/^#[a-f0-9]{6}$/i.test(value))content.dir='ltr';cell.append(content);}line.append(cell);}body.append(line);}
   if(!rows.length){const row=el('tr'),cell=el('td','',w('لم تتم إضافة عناصر','No records added'));cell.colSpan=headers.length;row.append(cell);body.append(row);}
-  node.append(caption,head,body);scroll.append(node);root.append(scroll);
+  node.append(caption,head,body);scroll.append(node);host.append(scroll);
  }
  const dayLabels:Record<typeof DAYS[number],[string,string]>={mon:['الاثنين','Monday'],tue:['الثلاثاء','Tuesday'],wed:['الأربعاء','Wednesday'],thu:['الخميس','Thursday'],fri:['الجمعة','Friday'],sat:['السبت','Saturday'],sun:['الأحد','Sunday']};
  function hours(week:Week|null|undefined,breaks=false){const list=el('ul','jc-review-hours');for(const day of DAYS){const ranges=week?.[day]??[],line=el('li'),value=el('bdi','',ranges.length?ranges.map(r=>`${formatClockTime(r.open)} – ${formatClockTime(r.close)}`).join('، '):breaks?w('بدون استراحة','No breaks'):w('مغلق','Closed'));if(ranges.length)value.dir='ltr';line.append(el('b','',dayLabels[day][ar?0:1]+': '),value);list.append(line);}return list;}
- if(profile){const logo=profile.logoDataUrl?el('img'):null;if(logo){logo.src=profile.logoDataUrl!;logo.alt=w('شعار المركز','Clinic logo');logo.className='jc-review-logo';}
-  table(w('هوية المركز','Clinic identity'),[w('المعلومة','Field'),w('البيانات','Details'),w('المعلومة','Field'),w('البيانات','Details')],[
-   {cells:[w('الاسم بالعربية','Arabic name'),profile.nameAr,w('الاسم بالإنجليزية','English name'),profile.nameEn]},
-   {cells:[w('الوصف بالعربية','Arabic subtitle'),profile.subtitleAr,w('الوصف بالإنجليزية','English subtitle'),profile.subtitleEn]},
-   {cells:[tr('phone'),profile.phone,tr('email'),profile.email]},
-   {cells:[w('العنوان','Address'),profile.address,w('الموقع الإلكتروني','Website'),link(profile.website)]},
-   {cells:[w('اللون الرئيسي','Primary color'),profile.primaryColor,w('اللون الإضافي','Accent color'),profile.accentColor]},
-   {cells:[w('الشعار','Logo'),logo,'','']},
-  ]);
- }
  const branchRows=draft.branches.map((b,index)=>{const schedule=scheduleFromBranchHours(b.openingHours??Object.fromEntries(DAYS.map(day=>[day,[]])) as unknown as Week),box=el('div','jc-review-cell-stack');box.append(el('strong','',tr('openingHours')),hours(schedule.workingHours),el('strong','',tr('breaks')),hours(schedule.breaks,true));return{key:b.key,cells:[index+1,b.name,b.address,link(b.mapUrl),b.timeZone??'Asia/Amman',box]};});
- table(tr('branches'),['#',tr('recordName'),w('موقع الفرع','Branch address'),w('رابط الخريطة','Map link'),w('المنطقة الزمنية','Time zone'),w('الفتح والاستراحات','Opening hours and breaks')],branchRows);
+ table('branches',tr('branches'),['#',tr('recordName'),w('موقع الفرع','Branch address'),w('رابط الخريطة','Map link'),w('المنطقة الزمنية','Time zone'),w('الفتح والاستراحات','Opening hours and breaks')],branchRows);
  function serviceDetails(service:Draft['services'][number]){const box=el('div','jc-review-cell-stack'),add=(label:string,value:Cell)=>{const line=el('div');line.append(el('b','',label+': '),el('span','',value==null||value===''?'—':String(value)));box.append(line);};add(tr('requiresRoom'),yes(service.requiresRoom));add(w('متابعة / رتوش','Follow-up / Retouch'),yes(!!service.followUpEnabled));
   const definition=service.definition;if(definition){add(w('الوصف','Description'),definition.description);add(w('نوع الخدمة','Service type'),SERVICE_TEMPLATES.find(t=>t.id===definition.template)?.label[language]??definition.template);add(w('الفئة المستهدفة','Audience'),({unspecified:w('غير محدد','Unspecified'),all:w('الجميع','Everyone'),men:w('رجال','Men'),women:w('نساء','Women'),children:w('أطفال','Children')})[definition.audience]);add(w('منطقة الجسم','Body area'),definition.bodyArea);add(w('النطاق الطبي','Medical scope'),definition.medicalScope==='medical'?w('طبي','Medical'):definition.medicalScope==='needs_review'?w('بحاجة للمراجعة','Needs review'):w('خارج النطاق','Out of scope'));
    if(definition.unsupportedCapabilities.length)add(w('متطلبات غير متاحة','Unavailable requirements'),definition.unsupportedCapabilities.join('، '));
@@ -47,8 +41,8 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
   if(service.roomIds?.length)add(w('الغرف المؤهلة','Eligible rooms'),service.roomIds.map(id=>data.options.rooms?.find(r=>r.id===id)?.name??`#${id}`).join('، '));return box;
  }
  const serviceGroups=new Map<string,Draft['services']>();for(const service of draft.services){const name=mainServiceName(service.category)??w('اسم الخدمة الرئيسية مطلوب','Main service name required');serviceGroups.set(name,[...serviceGroups.get(name)??[],service]);}
- let serviceIndex=0;table(tr('services'),['#',w('الخدمة الفرعية','Subservice'),tr('branchKey'),tr('durationMinutes'),w('السعر (JOD)','Price (JOD)'),w('كل تفاصيل الخدمة','All service details')],[...serviceGroups].flatMap(([group,services])=>services.map(s=>({key:s.key,group,cells:[++serviceIndex,s.name,s.branchScope==='all'?tr('clinicWide'):branchName(s.branchKey),s.durationMinutes,s.price,serviceDetails(s)]}))));
- table(tr('rooms'),['#',tr('recordName'),tr('branchKey'),tr('capacity'),tr('serviceKeys')],draft.rooms.map((r,index)=>({key:r.key,cells:[index+1,r.name,branchName(r.branchKey),r.capacity,serviceNames(r.serviceKeys)]})));
+ let serviceIndex=0;table('services',tr('services'),['#',w('الخدمة الفرعية','Subservice'),tr('branchKey'),tr('durationMinutes'),w('السعر (JOD)','Price (JOD)'),w('كل تفاصيل الخدمة','All service details')],[...serviceGroups].flatMap(([group,services])=>services.map(s=>({key:s.key,group,cells:[++serviceIndex,s.name,s.branchScope==='all'?tr('clinicWide'):branchName(s.branchKey),s.durationMinutes,s.price,serviceDetails(s)]}))));
+ table('rooms',tr('rooms'),['#',tr('recordName'),tr('branchKey'),tr('capacity'),tr('serviceKeys')],draft.rooms.map((r,index)=>({key:r.key,cells:[index+1,r.name,branchName(r.branchKey),r.capacity,serviceNames(r.serviceKeys)]})));
  const credentials=new Map<string,{password:HTMLInputElement;checks:Map<string,HTMLInputElement>}>();
  function staffHours(person:Draft['staff'][number]){const box=el('div','jc-review-staff-hours');const shifts=person.branchSchedules?.length?person.branchSchedules:person.branchKey?[{branchKey:person.branchKey,workingHours:person.workingHours,breaks:person.breaks}]:[];
   if(!shifts.length)box.append(el('p','', '—'));
@@ -64,16 +58,22 @@ export function buildReview(data:Review,language:Language,callbacks:{save:(draft
   const access=el('div','jc-review-cell-stack');access.append(permissions,account);
   credentials.set(person.key,{password,checks});return {key:person.key,cells:[index+1,identity,contact,staffHours(person),serviceNames(person.serviceKeys),access]};
  });
- for(const [key,entry] of credentials){const cache=()=>accessCache.set(key,{key,initialPassword:entry.password.value,permissions:[...entry.checks].filter(([,input])=>input.checked).map(([permission])=>permission)});entry.password.oninput=()=>{cache();};for(const check of entry.checks.values())check.onchange=()=>{cache();};}
- table(tr('staff'),['#',w('الموظف والمسمى والدور','Staff, job title and role'),w('البريد والهاتف','Email and phone'),w('الفروع والدوام والاستراحات','Branches, working hours and breaks'),tr('serviceKeys'),w('الحساب والصلاحيات','Account and permissions')],staffRows);
+ for(const [key,entry] of credentials){const cache=()=>accessCache.set(key,{key,initialPassword:entry.password.value,permissions:[...entry.checks].filter(([,input])=>input.checked).map(([permission])=>permission)});entry.password.oninput=()=>{cache();refreshStatus();if([...credentials.values()].every(account=>account.password.value.length>=10))callbacks.error('');};for(const check of entry.checks.values())check.onchange=()=>{cache();};}
+ table('staff',tr('staff'),['#',w('الموظف والمسمى والدور','Staff, job title and role'),w('البريد والهاتف','Email and phone'),w('الفروع والدوام والاستراحات','Branches, working hours and breaks'),tr('serviceKeys'),w('الحساب والصلاحيات','Account and permissions')],staffRows);
  if(data.issues.length){const message=el('p','jc-error',w('راجع الحقول الناقصة في قسمها من شريط الخطوات قبل اعتماد الإعداد.','Review missing fields in their section using the step bar before confirming setup.'));message.setAttribute('role','alert');root.append(message);}
- const total=KINDS.reduce((n,k)=>n+draft[k].length,0),confirmation=el('label','jc-check'),confirm=el('input');confirm.type='checkbox';confirm.dataset.testid='concierge-confirm';confirmation.append(confirm,el('span','',w('راجعت البيانات وأوافق على حفظ الإعداد.','I reviewed the details and approve this setup.')));root.append(confirmation);
+ const total=KINDS.reduce((n,k)=>n+draft[k].length,0);
  const actions=el('div','jc-review-actions'),apply=button(w('اعتمد الإعداد','Confirm setup'),()=>{
-  if(busy||!confirm.checked||data.issues.length)return;
-  const badPhone=draft.staff.find(p=>p.phone&&!normalizePhone(p.phone));if(badPhone){callbacks.error(phoneValidationMessage(language));return;}
-  const provision:Provision[]=[];for(const person of draft.staff){const entry=credentials.get(person.key)!;if(entry.password.value.length<10){callbacks.error(tr('passwordRequired'));entry.password.scrollIntoView({block:'center',inline:'center'});entry.password.focus();return;}provision.push({key:person.key,initialPassword:entry.password.value,permissions:[...entry.checks].filter(([,input])=>input.checked).map(([permission])=>permission)});}
-  busy=true;disable(true);void(async()=>{if(dirty){const fresh=await callbacks.save(draft);if(!fresh||fresh.issues.length)return;}await callbacks.apply(provision);})().catch(()=>{}).finally(()=>{for(const p of provision)p.initialPassword='';busy=false;disable(false);});
+  if(busy||data.issues.length||total===0)return;
+  const badPhone=draft.staff.find(p=>p.phone&&!normalizePhone(p.phone));if(badPhone){layout.reveal('staff',true,true);callbacks.error(phoneValidationMessage(language));return;}
+  const provision:Provision[]=[];for(const person of draft.staff){const entry=credentials.get(person.key)!;if(entry.password.value.length<10){layout.reveal('staff',true);callbacks.error(tr('passwordRequired'));entry.password.scrollIntoView({block:'center',inline:'center'});entry.password.focus();return;}provision.push({key:person.key,initialPassword:entry.password.value,permissions:[...entry.checks].filter(([,input])=>input.checked).map(([permission])=>permission)});}
+  busy=true;apply.firstChild!.textContent=w('جارٍ حفظ الإعداد…','Saving setup…');disable(true);void(async()=>{if(dirty){const fresh=await callbacks.save(draft);if(!fresh||fresh.issues.length)return;}await callbacks.apply(provision);})().catch(()=>{}).finally(()=>{for(const p of provision)p.initialPassword='';busy=false;apply.firstChild!.textContent=w('اعتمد الإعداد','Confirm setup');disable(false);});
  },'jc-button jc-primary','concierge-apply');
- function disable(value:boolean){for(const control of root.querySelectorAll<HTMLInputElement|HTMLButtonElement>('input,button'))control.disabled=value;if(!value)apply.disabled=!confirm.checked||data.issues.length>0||total===0;}
- confirm.onchange=()=>disable(false);actions.append(apply);root.append(actions);disable(false);return root;
+ function refreshStatus(){
+  const pendingAccess=[...credentials.values()].some(entry=>entry.password.value.length<10),valid=!data.issues.length&&!pendingAccess;
+  layout.status.dataset.ready=String(valid);layout.status.replaceChildren(reviewIcon(valid?'check':'shield'),el('span','',data.issues.length?w('معلومات تحتاج مراجعة','Details need review'):pendingAccess?w('أكمل بيانات دخول الموظفين','Complete staff sign-in details'):w('كل الأقسام مكتملة','All sections completed')));
+  for(const kind of KINDS){const keys=draft[kind].map(row=>row.key),needsReview=data.issues.some(issue=>issue.key===kind||keys.includes(issue.key))||kind==='staff'&&pendingAccess;layout.controls.get(kind)!.dataset.needsReview=String(needsReview);}
+ }
+ function disable(value:boolean){for(const control of root.querySelectorAll<HTMLInputElement|HTMLButtonElement>('input,button'))control.disabled=value;if(!value)apply.disabled=data.issues.length>0||total===0;}
+ const note=el('div','jc-overview-confirm-note'),copy=el('div');copy.append(el('strong','',w('بقيت الخطوة الأخيرة!','Almost there!')),el('p','',w('راجع معلوماتك واعتمدها لإكمال إعداد العيادة.','Review your information and confirm to complete the clinic setup.')));note.append(reviewIcon('shield'),copy);
+ apply.append(reviewIcon('arrow'));actions.append(note,apply);root.append(actions);refreshStatus();disable(false);return root;
 }
