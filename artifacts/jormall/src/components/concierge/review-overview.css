@@ -9,7 +9,7 @@
 }
 .jc-dialog.jc-setup-mode.jc-review-mode .jc-top { height: 62px; padding: 12px 28px; }
 .jc-dialog.jc-setup-mode.jc-review-mode .jc-brand { font-size: 16px; color: #eaf3ff; }
-.jc-dialog.jc-setup-mode.jc-review-mode .jc-brand::before { width: 28px; height: 28px; border-radius: 0; background: linear-gradient(145deg, #a8e7ff, #4697de); box-shadow: none; clip-path: polygon(50% 0, 59% 24%, 85% 8%, 76% 35%, 100% 50%, 76% 59%, 92% 85%, 65% 76%, 50% 100%, 41% 76%, 15% 92%, 24% 65%, 0 50%, 24% 41%, 8% 15%, 35% 24%); }
+.jc-dialog.jc-setup-mode.jc-review-mode .jc-brand::before { width: 28px; height: 28px; flex: none; border-radius: 0; background: linear-gradient(145deg, #a8e7ff, #4697de); box-shadow: none; clip-path: polygon(50% 0, 59% 24%, 85% 8%, 76% 35%, 100% 50%, 76% 59%, 92% 85%, 65% 76%, 50% 100%, 41% 76%, 15% 92%, 24% 65%, 0 50%, 24% 41%, 8% 15%, 35% 24%); }
 .jc-dialog.jc-setup-mode.jc-review-mode .jc-back-button { background: #263f60; border-color: #4a6995; color: #eaf3ff; box-shadow: none; }
 .jc-dialog.jc-setup-mode.jc-review-mode .jc-stage { padding: 0 28px 16px; gap: 6px; }
 .jc-dialog.jc-setup-mode.jc-review-mode .jc-orb-wrap,
@@ -108,8 +108,7 @@
 }
 @media(max-width:760px) {
  .jc-dialog.jc-setup-mode.jc-review-mode .jc-top { padding-inline: 12px; }
- .jc-dialog.jc-setup-mode.jc-review-mode .jc-brand { font-size: 12px; }
- .jc-dialog.jc-setup-mode.jc-review-mode .jc-brand { font-size: 0; }
+ .jc-dialog.jc-setup-mode.jc-review-mode .jc-top .jc-brand { font-size: 0; max-width: none; flex: none; }
  .jc-dialog.jc-setup-mode.jc-review-mode .jc-brand::before { width: 20px; height: 20px; }
  .jc-dialog.jc-setup-mode.jc-review-mode .jc-brand::after { content: 'JorMall'; font-size: 12px; font-weight: 600; }
  .jc-dialog.jc-setup-mode.jc-review-mode .jc-stage { padding-inline: 10px; }
